@@ -1,8 +1,6 @@
 import oracle.apps.scm.doo.common.extensions.ValidationException;
 import oracle.apps.scm.doo.common.extensions.Message;
 
-testing;
-
 def extensionName  = context.getExtensionName();
 def varMessage = null;
 def billingTxnTypeId = null;
