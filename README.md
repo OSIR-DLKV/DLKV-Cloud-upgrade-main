@@ -1,6 +1,8 @@
 # DLKV Cloud upgrade
 OK napravio sam privatni github repozitorij za spremanje svih nadogradnji i da probamo bar nekako spriječit pregazivanje jedni drugima. Ne znam za neki besplatni SVN pa nek bude ovako. Dodavat ću stvari s vremenom.
 
+Ako ima netko iskustva s git-om nek slobodno podijeli (ispravi moje bedastoće:)) ili napravi neki crash course.
+
 Malo je drukčiji od SVN-a u smislu decentralizacije. Ako sam dobro shvatio imaš main repo kojeg mozes klonirat da dobijes codebase, a onda kad radiš radiš neki branch u kojem radiš svoje promjene i commitaš lokalno. Kad završiš šalješ svoj branch na merge u glavni.
 Nitko nam ne brani da radimo na main branchu. 
 
@@ -9,8 +11,8 @@ osnovne naredbe
 git clone pa_neki_url
 git add .  => dodaj sve fileove u repozitorij. Ovo mora ić za svaki novi file (uostalom kao za SVN)
 git commit -m 'neka poruka uz commit'
-git fetch je svn update (valjda :))
-git pull ne znam jel ovo povuče sve promjene kao SVN update ili je ovo za kreiranje brancha iz main repo :)
+git fetch => ne znam čemu služi zasad
+git pull => povuče promjene iz remote repozitorija
 git push ide kad želiš commit poslati svima na main repozitorij
 
 
