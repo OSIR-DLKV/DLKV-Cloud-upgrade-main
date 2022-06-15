@@ -24,7 +24,7 @@ git push ide kad želiš commit poslati svima na main repozitorij
 
 git clone https://KOPIRAJ_SVOJ_TOKEN_OVDJE@github.com/OSIR-DLKV/DLKV-Cloud-upgrade-main.git
 
-4. postoji github desktop aplikacija za commitanje i hendlanje repozitorija. Meni je konfuzna pa koristim git bash CLI.
+4. postoji github desktop aplikacija za commitanje i hendlanje repozitorija. Meni je u početku bila konfuzna pa sam koristio git bash CLI.
 Al evo link za one koji hoće neki client
 
 https://desktop.github.com/
