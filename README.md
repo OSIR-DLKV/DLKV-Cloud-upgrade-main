@@ -11,7 +11,7 @@ osnovne naredbe
 git clone pa_neki_url
 git add .  => dodaj sve fileove u repozitorij. Ovo mora ić za svaki novi file (uostalom kao za SVN)
 git commit -m 'neka poruka uz commit'
-git fetch => ne znam čemu služi zasad
+git fetch => ne znam čemu služi zasad, čini mi se slično kao pull, al evo ne znam :)
 git pull => povuče promjene iz remote repozitorija
 git push ide kad želiš commit poslati svima na main repozitorij
 
