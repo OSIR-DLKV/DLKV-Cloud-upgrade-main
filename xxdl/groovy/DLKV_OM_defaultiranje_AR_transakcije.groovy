@@ -13,9 +13,9 @@ ValidationException ex = new ValidationException(messages);
 //limiting extension to a specific PO number, only for testing
 //uncomment when debugging
 //def varMessage = "IN code";
-def poNumber = header.getAttribute("CustomerPONumber");
-if (poNumber==null) return;
-if (!poNumber.startsWith("TestWarning_run_extension")) return;
+//def poNumber = header.getAttribute("CustomerPONumber");
+//if (poNumber==null) return;
+//if (!poNumber.startsWith("TestWarning_run_extension")) return;
 
 //get system current time
 def varTime = context.getCurrentTime();
@@ -45,6 +45,7 @@ else
   if(billingTxnTypeName!=null)
   {
     billingTxnTypeId = getBillingTxnTypeId(billingTxnTypeName);
+
     //varMessage = "Billing Txn Type Id: " + billingTxnTypeId;
     //messages.add(new Message( Message.MessageType.ERROR, varMessage));
     if(billingTxnTypeId == null)
@@ -61,8 +62,14 @@ else
       {
         // if there are more order lines
         def line = lines.next();
+        
         //varMessage = "IN LINES - here we go";
         //messages.add(new Message( Message.MessageType.ERROR,varMessage));
+        //varMessage = "Line type: " +line.getAttribute("TransactionLineTypeCode");
+        //messages.add(new Message(Message.MessageType.ERROR,varMessage));
+        if ("ORA_RETURN" == line.getAttribute("TransactionLineTypeCode")){
+          billingTxnTypeId = getCreditMemoTxnTypeId(billingTxnTypeName);
+        }
         line.setAttribute("BillingTransactionTypeIdentifier",billingTxnTypeId);
         //varMessage = "Billing Transaction Type ID is set to: " + billingTxnTypeId;
         //messages.add(new Message( Message.MessageType.ERROR,varMessage));
@@ -181,3 +188,51 @@ String getBillingTxnTypeName(String orderLookupType,String orderTxnTypeName) {
 
   return txnTypeName;
 }
+
+//Function to get Credit Memo Transaction Type
+
+Long getCreditMemoTxnTypeId(String billingTxnTypeName) {
+  
+  //messages uncomment only for debugging
+  /*List<Message> messages = new ArrayList<Message>();
+  varMessage = "Entering getBillingTxnTypeId";
+  messages.add(new Message(Message.MessageType.ERROR,varMessage));
+  varMessage = "Billing Type passed: " + billingTxnTypeName;*/
+
+  def txnTypePVO = context.getViewObject("oracle.apps.financials.receivables.publicView.TransactionTypePVO");
+
+  //Create view criteria (where clause predicates)
+  def vc = txnTypePVO.createViewCriteria();
+  def vcrow = vc.createViewCriteriaRow();
+
+  //Only return Billing Transaction Type for the - Common Set - to be changed as required
+
+  vcrow.setAttribute("Name", billingTxnTypeName);
+  vcrow.setAttribute("SetName", "Common Set");
+
+  //Execute the view object query to find a matching row
+  def rowset = txnTypePVO.findByViewCriteriaWithBindVars(vc, 1, new String[0], new Object[0]);
+
+  //check if we have a matching row
+  def row = rowset.first();
+  
+  //if we call getAttribute when row is null, extension will throw unhandled error
+  if(row != null){
+    txnTypeId = row.getAttribute("CreditMemoTypeSeqId");
+  }
+  else
+  {
+    txnTypeId = null;
+  }
+  
+  /*varMessage = "Billing Trx Type Id => " + txnTypeId;
+  messages.add(new Message( Message.MessageType.ERROR,varMessage));
+  
+  varMessage = "EXITING Biling Trx Name ";
+  messages.add(new Message( Message.MessageType.ERROR,varMessage));
+  ex = new ValidationException(messages);
+  throw ex;*/
+
+  return txnTypeId;
+}
+
