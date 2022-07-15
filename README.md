@@ -33,4 +33,6 @@ https://desktop.github.com/
 
 https://tortoisegit.org/download/
 
+Za tortoise git skinite: https://gitforwindows.org/ 
+
 

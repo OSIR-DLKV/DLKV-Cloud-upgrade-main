@@ -122,8 +122,8 @@ end organization_code
   else 0
 end custom_sort
 from
-apps.mtl_system_items_b@EBSTEST msi
-,apps.mtl_parameters@EBSTEST mp
+apps.mtl_system_items_b@EBSPROD msi
+,apps.mtl_parameters@EBSPROD mp
 ,(select
 mic.inventory_item_id
 ,mic.organization_id
@@ -142,17 +142,17 @@ mic.inventory_item_id
 ,mcb.segment9
 ,mcb.segment10
 from
-apps.mtl_item_categories@EBSTEST mic,
-apps.mtl_category_sets_tl@EBSTEST mcst,
-apps.mtl_category_sets_b@EBSTEST mcs,
-apps.mtl_categories_b@EBSTEST mcb
+apps.mtl_item_categories@EBSPROD mic,
+apps.mtl_category_sets_tl@EBSPROD mcst,
+apps.mtl_category_sets_b@EBSPROD mcs,
+apps.mtl_categories_b@EBSPROD mcb
 where mic.category_set_id = mcs.category_set_id
 AND mcs.category_set_id = mcst.category_set_id
 AND mcst.LANGUAGE = 'HR'
 AND mic.category_id = mcb.category_id) mic
-,(select * from apps.mtl_item_templ_attributes_v@EBSTEST
+,(select * from apps.mtl_item_templ_attributes_v@EBSPROD
     where user_attribute_name = 'User Item Type') mita
-,(select * from apps.MTL_ITEM_TEMPLATES_ALL_V@EBSTEST
+,(select * from apps.MTL_ITEM_TEMPLATES_ALL_V@EBSPROD
     where template_name like 'XXDL%') mitav
 where 1=1
 and to_char(msi.segment1) like nvl(to_char(p_item_seg),'%')
@@ -171,7 +171,7 @@ and not exists (select 1 from XXDL_MTL_SYSTEM_ITEMS_MIG xx
                     where xx.inventory_item_id = msi.inventory_item_id
                     and xx.organization_id = msi.organization_id
                     and nvl(xx.process_flag,'X') in ('S',decode(p_retry_error,'Y','N','E'))) --ne zelim da ponovo pokusava errored recorde, njih treba pregledati
-and exists (select 1 from apps.mtl_material_transactions@EBSTEST mmt
+and exists (select 1 from apps.mtl_material_transactions@EBSPROD mmt
             where mmt.INVENTORY_ITEM_ID = msi.inventory_item_id
             and mmt.organization_id = msi.organization_id
             and mmt.creation_date >= to_date('01.01.'||nvl(p_year,to_char(sysdate,'YYYY')),'DD.MM.YYYY')
@@ -193,7 +193,7 @@ select
 ,msit.language
 ,msit.source_lang
 from
-apps.mtl_system_items_tl@EBSTEST msit
+apps.mtl_system_items_tl@EBSPROD msit
 where
 msit.inventory_item_id = c_item_id
 and msit.organization_id = c_org_id
@@ -235,10 +235,10 @@ mic.inventory_item_id
 ,mcb.segment9
 ,mcb.segment10
 from
-apps.mtl_item_categories@EBSTEST mic,
-apps.mtl_category_sets_tl@EBSTEST mcst,
-apps.mtl_category_sets_b@EBSTEST mcs,
-apps.mtl_categories_b@EBSTEST mcb
+apps.mtl_item_categories@EBSPROD mic,
+apps.mtl_category_sets_tl@EBSPROD mcst,
+apps.mtl_category_sets_b@EBSPROD mcs,
+apps.mtl_categories_b@EBSPROD mcb
 where mic.category_set_id = mcs.category_set_id
 AND mcs.category_set_id = mcst.category_set_id
 AND mcst.LANGUAGE = 'HR'
@@ -551,8 +551,8 @@ msi.segment1
 ,mp.organization_code
 ,mic.segment1 kat
 from
-apps.mtl_system_items_b@EBSTEST msi
-,apps.mtl_parameters@EBSTEST mp
+apps.mtl_system_items_b@EBSPROD msi
+,apps.mtl_parameters@EBSPROD mp
 ,(select
 mic.inventory_item_id
 ,mic.organization_id
@@ -571,10 +571,10 @@ mic.inventory_item_id
 ,mcb.segment9
 ,mcb.segment10
 from
-apps.mtl_item_categories@EBSTEST mic,
-apps.mtl_category_sets_tl@EBSTEST mcst,
-apps.mtl_category_sets_b@EBSTEST mcs,
-apps.mtl_categories_b@EBSTEST mcb
+apps.mtl_item_categories@EBSPROD mic,
+apps.mtl_category_sets_tl@EBSPROD mcst,
+apps.mtl_category_sets_b@EBSPROD mcs,
+apps.mtl_categories_b@EBSPROD mcb
 where mic.category_set_id = mcs.category_set_id
 AND mcs.category_set_id = mcst.category_set_id
 AND mcst.LANGUAGE = 'HR'
@@ -595,7 +595,7 @@ and not exists (select 1 from XXDL_MTL_SYSTEM_ITEMS_MIG xx
                     where xx.inventory_item_id = msi.inventory_item_id
                     and xx.organization_id = msi.organization_id
                     and nvl(xx.process_flag,'X') in ('S',decode(p_retry_error,'Y','N','E'))) --ne zelim da ponovo pokusava errored recorde, njih treba pregledati
-and exists (select 1 from apps.mtl_material_transactions@EBSTEST mmt
+and exists (select 1 from apps.mtl_material_transactions@EBSPROD mmt
             where mmt.INVENTORY_ITEM_ID = msi.inventory_item_id
             and mmt.organization_id = msi.organization_id
             and mmt.creation_date >= to_date('01.01.'||nvl(p_year,to_char(sysdate,'YYYY')),'DD.MM.YYYY')
@@ -617,7 +617,7 @@ select
 ,msit.language
 ,msit.source_lang
 from
-apps.mtl_system_items_tl@EBSTEST msit
+apps.mtl_system_items_tl@EBSPROD msit
 where
 msit.inventory_item_id = c_item_id
 and msit.organization_id = c_org_id
