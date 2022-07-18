@@ -9,6 +9,8 @@ create or replace package XXDL_INV_INTEGRATION_PKG authid definer is
   ============================================================================+*/
 
   procedure download_transactions;
+  
+  procedure process_transactions_interface(p_batch_id number);
 
 end XXDL_INV_INTEGRATION_PKG;
 /

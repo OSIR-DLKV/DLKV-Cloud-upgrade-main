@@ -70,6 +70,17 @@ create or replace package body xxdl_inv_integration_pkg is
   begin
     return cast(to_timestamp_tz(p_char, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM') as timestamp with local time zone);
   end;
+  /*===========================================================================+
+  Procedure   : xml_date_to_char
+  Description : Converts date to strings for json usage
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  function json_date_to_char(p_date date) return varchar2 as
+    l_char varchar2(100);
+  begin
+    return to_char(cast(p_date as timestamp with time zone) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM');
+  end;
 
   /*===========================================================================+
   Procedure   : download_transactions
@@ -268,6 +279,137 @@ create or replace package body xxdl_inv_integration_pkg is
   exception
     when e_processing_exception then
       xlog('e_processing_exception risen');
+  end;
+
+  /*===========================================================================+
+  Procedure   : process_transactions_interface
+  Description : Processes Transactions interface
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure process_transactions_interface(p_batch_id number) as
+  
+    cursor cur_transactions is
+      select *
+        from xxdl_inv_material_txns_int
+       where status = 'NEW'
+         and batch_id = p_batch_id;
+  
+    l_return_status       varchar2(10);
+    l_return_message      varchar2(32000);
+    l_ws_call_id          number;
+    l_rest_env_template   varchar2(2000);
+    l_rest_env            varchar2(2000);
+    l_status              varchar2(10);
+    l_fusion_interface_id number;
+  
+    l_use_current_cost_flag varchar2(10);
+    l_org                   varchar2(2000);
+  begin
+  
+    xlog('Procedure process_transactions_interface started');
+  
+    xxdl_report_pkg.create_report(p_report_type => 'Process Transactions Interface',
+                                  p_report_name => 'Process Transactions Interface',
+                                  x_report_id   => g_report_id);
+  
+    xout('*** Process Transactions Interface ***');
+    xout('Batch id: ' || p_batch_id);
+    xout('Processing transactions:');
+    xout('-----------------------');
+    --          
+    --  "OrganizationId": "300000005558843",
+  
+    l_rest_env_template := '{
+          "OrganizationName": "[OrganizationName]",
+          "ItemNumber": "[ItemNumber]",
+          "TransactionTypeName": "[TransactionTypeName]",
+          "TransactionQuantity": "[TransactionQuantity]",
+          "TransactionUnitOfMeasure": "[TransactionUnitOfMeasure]",
+          "TransactionInterfaceId": "[TransactionInterfaceId]",
+          "TransactionDate": "[TransactionDate]",
+          "TransactionHeaderId": "[TransactionHeaderId]",
+          "SubinventoryCode": "[SubinventoryCode]",
+          "AccountCombination": "[AccountCombination]",
+          "SourceCode": "[SourceCode]",
+          "SourceLineId": "[SourceLineId]",
+          "SourceHeaderId": "[SourceHeaderId]",
+          "UseCurrentCostFlag": "[UseCurrentCostFlag]",
+          "TransactionCost": "[TransactionCost]",
+          "TransactionCostIdentifier": "[TransactionCostIdentifier]",
+          "TransactionReference": "[TransactionReference]",
+          "TransactionMode": "1",
+          "costs": [
+              {
+                  "CostComponentCode": "ITEM_PRICE",
+                  "Cost": [TransactionCost]
+              }
+          ]
+      }';
+  
+    for c_trans in cur_transactions loop
+    
+      xlog('c_trans.transaction_interface_id: ' || c_trans.transaction_interface_id);
+    
+      if c_trans.use_current_cost_flag = 'Y' then
+        l_use_current_cost_flag := 'true';
+      else
+        l_use_current_cost_flag := 'false';
+      end if;
+    
+      l_fusion_interface_id := xxdl_inv_material_txns_fus_s1.nextval;
+    
+      l_rest_env := l_rest_env_template;
+      l_rest_env := replace(l_rest_env, '[OrganizationName]', apex_escape.json(c_trans.organization_name));
+      l_rest_env := replace(l_rest_env, '[ItemNumber]', apex_escape.json(c_trans.item_number));
+      l_rest_env := replace(l_rest_env, '[TransactionTypeName]', apex_escape.json(c_trans.transaction_type_name));
+      l_rest_env := replace(l_rest_env, '[TransactionQuantity]', apex_escape.json(c_trans.transaction_quantity));
+      l_rest_env := replace(l_rest_env, '[TransactionUnitOfMeasure]', apex_escape.json(c_trans.transaction_uom));
+      l_rest_env := replace(l_rest_env, '[TransactionInterfaceId]', apex_escape.json(l_fusion_interface_id));
+      l_rest_env := replace(l_rest_env, '[TransactionDate]', json_date_to_char(c_trans.transaction_date));
+      l_rest_env := replace(l_rest_env, '[TransactionHeaderId]', apex_escape.json(l_fusion_interface_id));
+      l_rest_env := replace(l_rest_env, '[SubinventoryCode]', apex_escape.json(c_trans.subinventory_code));
+      l_rest_env := replace(l_rest_env, '[AccountCombination]', apex_escape.json(c_trans.account_combination));
+      l_rest_env := replace(l_rest_env, '[SourceCode]', apex_escape.json(l_fusion_interface_id));
+      l_rest_env := replace(l_rest_env, '[SourceLineId]', apex_escape.json(l_fusion_interface_id));
+      l_rest_env := replace(l_rest_env, '[SourceHeaderId]', apex_escape.json(l_fusion_interface_id));
+      l_rest_env := replace(l_rest_env, '[UseCurrentCostFlag]', apex_escape.json(l_use_current_cost_flag));
+      l_rest_env := replace(l_rest_env, '[TransactionCost]', apex_escape.json(c_trans.transaction_cost));
+      l_rest_env := replace(l_rest_env, '[TransactionCostIdentifier]', apex_escape.json('C' || l_fusion_interface_id));
+      l_rest_env := replace(l_rest_env, '[TransactionReference]', apex_escape.json(c_trans.transaction_reference));
+    
+      xxfn_cloud_ws_pkg.ws_rest_call(p_ws_url         => xxdl_config_pkg.servicerooturl ||
+                                                         '/fscmRestApi/resources/11.13.18.05/inventoryStagedTransactions',
+                                     p_rest_env       => l_rest_env,
+                                     p_rest_act       => 'POST',
+                                     p_content_type   => 'application/json;charset="UTF-8"',
+                                     x_return_status  => l_return_status,
+                                     x_return_message => l_return_message,
+                                     x_ws_call_id     => l_ws_call_id);
+    
+      --dbms_lob.freetemporary(l_rest_env);
+      xlog('l_ws_call_id:     ' || l_ws_call_id || ' (POST inventoryStagedTransactions)');
+      xlog('l_return_status:  ' || l_return_status);
+    
+      if l_return_status != 'S' then
+        xlog('*** Error creating inventory transaction');
+        xlog('l_return_message: ' || l_return_message);
+        l_status := 'ERROR';
+      else
+        l_status := 'PROCESSED';
+      end if;
+    
+      xout(rpad(c_trans.transaction_interface_id, 10) || ' ' || rpad(c_trans.transaction_type_name, 40) || ' ' || rpad(l_status, 10));
+    
+    end loop;
+    xout('*** End of report ***');
+    xlog('Procedure process_transactions_interface ended');
+  exception
+    when others then
+      elog('*** OTHERS unhandled exception');
+      elog('SQLERRM: ' || sqlerrm);
+      elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
+      raise;
   end;
 
 end;
