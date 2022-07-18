@@ -5,7 +5,7 @@ File Name   : XXDL_LOG.sql
 Description : Log table 
 
 History     :
-v1.0 28.05.2022 - Marko Sladoljev: Initial creation	
+v1.0 28.05.2022 - Marko Sladoljev: Initial creation	2
 ============================================================================+*/
 
 WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
