@@ -1,4 +1,4 @@
-CREATE OR REPLACE PACKAGE BODY "XXFN_WS_PKG" is
+CREATE OR REPLACE PACKAGE BODY XXFN_WS_PKG is
 /* $Header $
 ============================================================================+
 File Name   : XXFN_WS_PKG.pkb
@@ -6,6 +6,7 @@ Description : Package for web service call utilities
 History     :
 v1.0 09.01.2020 - 
 v1.1 16.05.2022 - Marko Sladoljev - Handling case without <?xml ?> tag in Response (ImportBulkData case)
+v1.2 18.07.2022 - Marko Sladoljev - XXFN_WS_CALL_LOG.response_json column supported
 ============================================================================+*/
 
   g_step varchar2(200);
@@ -137,9 +138,14 @@ procedure WRITE_LOG(
             p_content_encoding  in varchar2,
             p_resp_xml          in xmltype,
             p_clob_response     in clob,
-            p_blob_response     in blob) is pragma autonomous_transaction;
+            p_blob_response     in blob,
+            p_resp_json         in clob) is pragma autonomous_transaction;
+    check_constraint_violated exception;
+    pragma exception_init(check_constraint_violated, -2290);
 begin
   g_step := 'insert into XXFN_WS_CALL_LOG';
+  
+  begin
     insert into XXFN_WS_CALL_LOG(
         ws_call_id,
         ws_call_timestamp,
@@ -167,6 +173,39 @@ begin
         p_clob_response,
         p_blob_response);
   commit;
+      exception
+      when check_constraint_violated then
+        -- insert without json response if json is not valid (in case of bad requests, etc.)
+        insert into XXFN_WS_CALL_LOG
+          (ws_call_id,
+           ws_call_timestamp,
+           ws_url,
+           ws_soap_action,
+           ws_payload,
+           ws_payload_xml,
+           response_status_code,
+           response_reason_phrase,
+           response_content_encoding,
+           response_xml,
+           response_clob,
+           response_blob,
+           response_json)
+        values
+          (g_ws_call_id,
+           systimestamp,
+           p_ws_url,
+           p_soap_act,
+           p_soap_env,
+           p_soap_xml,
+           p_status_code,
+           p_reason_phrase,
+           p_content_encoding,
+           p_resp_xml,
+           p_clob_response,
+           p_blob_response,
+           null);
+        commit;
+    end;
 
 exception when OTHERS then
     BUILD_RETURN_MESSAGE('Error writing to log table: '||SQLERRM);
@@ -533,7 +572,8 @@ begin
       p_content_encoding  => l_content_encoding,
       p_resp_xml          => l_resp_xml,
       p_clob_response     => l_clob_response_orig,
-      p_blob_response     => l_blob_response);
+      p_blob_response     => l_blob_response,
+      p_resp_json         => null);
 
   if l_blob_response is not null then
     begin
@@ -1093,7 +1133,8 @@ begin
       p_content_encoding  => l_content_encoding,
       p_resp_xml          => l_resp_xml,
       p_clob_response     => l_clob_response,
-      p_blob_response     => l_blob_response);
+      p_blob_response     => l_blob_response,
+      p_resp_json         => l_clob_response);
 
   if l_blob_response is not null then
     begin
