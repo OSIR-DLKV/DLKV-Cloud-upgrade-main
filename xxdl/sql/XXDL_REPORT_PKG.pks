@@ -15,6 +15,8 @@ create or replace package xxdl_report_pkg as
   procedure create_report(p_report_type varchar, p_report_name varchar2, x_report_id out number);
 
   procedure put_line(p_report_id number, p_line varchar2);
+  
+  procedure set_has_errors (p_report_id number);
 
 end xxdl_report_pkg;
 /

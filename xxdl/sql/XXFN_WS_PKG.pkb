@@ -7,6 +7,7 @@ History     :
 v1.0 09.01.2020 - 
 v1.1 16.05.2022 - Marko Sladoljev - Handling case without <?xml ?> tag in Response (ImportBulkData case)
 v1.2 18.07.2022 - Marko Sladoljev - XXFN_WS_CALL_LOG.response_json column supported
+v1.3 20.07.2022 - Marko Sladoljev - response_json column null bug
 ============================================================================+*/
 
   g_step varchar2(200);
@@ -158,7 +159,8 @@ begin
         response_content_encoding,
         response_xml,
         response_clob,
-        response_blob)
+        response_blob,
+        response_json)
     values (
         g_ws_call_id,
         systimestamp,
@@ -171,7 +173,8 @@ begin
         p_content_encoding,
         p_resp_xml,
         p_clob_response,
-        p_blob_response);
+        p_blob_response,
+        p_resp_json);
   commit;
       exception
       when check_constraint_violated then

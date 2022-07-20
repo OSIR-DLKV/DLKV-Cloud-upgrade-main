@@ -18,6 +18,9 @@ CREATE TABLE xxdl_inv_material_txns_int (
      transaction_uom          VARCHAR2(3) NOT NULL,
      transaction_date         DATE NOT NULL,
      subinventory_code        VARCHAR2(10) NOT NULL,
+     locator_name             VARCHAR2(255),
+     inv_project_number       VARCHAR2(255),
+     inv_task_number          VARCHAR2(255),
      account_combination      VARCHAR2(100) NOT NULL,
      source_code              VARCHAR2(30) NOT NULL,
      source_line_id           NUMBER NOT NULL,
@@ -25,9 +28,10 @@ CREATE TABLE xxdl_inv_material_txns_int (
      use_current_cost_flag    VARCHAR2(1) NOT NULL, -- Y|N
      transaction_cost         NUMBER,
      transaction_reference    VARCHAR2(240),
-     status                   VARCHAR2(10) NOT NULL, -- NEW|PROCESSED|ERROR
+     status                   VARCHAR2(15) NOT NULL, -- NEW|PROCESSED|ERROR|IN_PROGRESS
      error_message            VARCHAR2(2000),
      creation_date            DATE NOT NULL,
+     last_update_date         DATE NOT NULL,
      CONSTRAINT xxdl_inv_material_txns_int_pk PRIMARY KEY (transaction_interface_id)
   ); 
   

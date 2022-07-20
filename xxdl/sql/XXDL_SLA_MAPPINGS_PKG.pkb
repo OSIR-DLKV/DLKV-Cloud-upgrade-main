@@ -611,13 +611,6 @@ create or replace package body xxdl_sla_mappings_pkg is
         continue;
       end if;
     
-      /* 
-       if c_rec.out_value = '210000' then
-          -- TODO: Remove after testing
-          continue;
-        end if;
-      */
-    
       -- If coa is changed, new batch is created
       if l_prev_coa != c_rec.out_chart_of_accounts then
         l_batch_id := xxdl_sla_map_batch_s1.nextval;
@@ -917,11 +910,10 @@ create or replace package body xxdl_sla_mappings_pkg is
       elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
       raise;
   end;
-  
-  
-   /*===========================================================================+
-  Procedure   : test
 
+  /*===========================================================================+
+  Procedure   : test
+  
   ============================================================================+*/
   procedure test is
     l_wsdl_link    varchar2(500);
@@ -933,7 +925,7 @@ create or replace package body xxdl_sla_mappings_pkg is
     x_return_message varchar2(32000);
     l_soap_env       clob;
     l_text           varchar2(32000);
-    
+  
     x_ws_call_id number;
   
   begin
@@ -942,8 +934,8 @@ create or replace package body xxdl_sla_mappings_pkg is
   
     l_wsdl_domain := xxdl_config_pkg.servicerooturl;
   
---    l_wsdl_link := l_wsdl_domain || '/fscmService/ErpIntegrationService';
-      l_wsdl_link := l_wsdl_domain || '/hcmService/WorkerServiceV2';
+    --    l_wsdl_link := l_wsdl_domain || '/fscmService/ErpIntegrationService';
+    l_wsdl_link := l_wsdl_domain || '/hcmService/WorkerServiceV2';
   
     xlog('Preparing soap envelope');
     l_text := '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
@@ -983,7 +975,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   
     xlog('Soap envelope to clob');
     l_soap_env := to_clob(l_text);
-    
+  
     xlog('Calling xxfn_cloud_ws_pkg.ws_call...');
   
     xxfn_cloud_ws_pkg.ws_call(p_ws_url         => l_wsdl_link,
