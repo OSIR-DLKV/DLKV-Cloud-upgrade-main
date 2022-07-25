@@ -12,9 +12,9 @@ create or replace package xxdl_sla_mappings_pkg authid definer is
 
   procedure refresh_all_mapping_sets;
   
-  procedure purge_mappings_interface;
+  procedure referesh_work_orders_mappings;
   
-  procedure test;
+  procedure purge_mappings_interface;
 
 end xxdl_sla_mappings_pkg;
 /

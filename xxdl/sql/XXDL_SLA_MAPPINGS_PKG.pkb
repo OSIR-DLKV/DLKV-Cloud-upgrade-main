@@ -903,6 +903,9 @@ create or replace package body xxdl_sla_mappings_pkg is
     for c_set in cur_map_sets loop
       refresh_mapping_set(c_set.mapping_set_code);
     end loop;
+    
+    referesh_work_orders_mappings;
+    
     xlog('refresh_all_mapping_sets ended');
   exception
     when others then
@@ -912,86 +915,85 @@ create or replace package body xxdl_sla_mappings_pkg is
   end;
 
   /*===========================================================================+
-  Procedure   : test
-  
+  Procedure   : referesh_work_orders_mappings
+  Description : Refreshes mappings related to work orders
+  Usage       :
+  Arguments   : 
+  Remarks     :
   ============================================================================+*/
-  procedure test is
-    l_wsdl_link    varchar2(500);
-    l_wsdl_domain  varchar2(200);
-    l_wsdl_method  varchar2(100) := 'findWorker';
-    l_ws_http_type varchar2(100) := 'text/xml;charset=UTF-8';
+  procedure referesh_work_orders_mappings as
+    cursor cur_wo is
+      select work_order_number,
+             cost_center,
+             company
+        from xxdl_wo_cc_integration wo
+       where not exists (select 1
+                from xxdl_sync_statuses s
+               where s.entity_type = 'WORK_ORDER_CC_MAPPING'
+                 and s.id1 = wo.work_order_number
+                 and s.sync_status != 'ERROR')
+         and wo.cost_center is not null;
   
-    x_return_status  varchar2(500);
-    x_return_message varchar2(32000);
-    l_soap_env       clob;
-    l_text           varchar2(32000);
-  
-    x_ws_call_id number;
-  
+    l_int_row  xxdl_sla_mappings_interface%rowtype;
+    l_stat_row xxdl_sync_statuses%rowtype;
+    l_batch_id number;
+    l_group_id number;
+    l_count    number;
   begin
   
-    xlog('test started');
+    xlog('referesh_work_orders_mappings started');
   
-    l_wsdl_domain := xxdl_config_pkg.servicerooturl;
+    xxdl_report_pkg.create_report(p_report_type => 'Refresh Work Orders Mappings',
+                                  p_report_name => 'Refresh Work Orders Mappings',
+                                  x_report_id   => g_report_id);
   
-    --    l_wsdl_link := l_wsdl_domain || '/fscmService/ErpIntegrationService';
-    l_wsdl_link := l_wsdl_domain || '/hcmService/WorkerServiceV2';
+    xout('*** Refresh Work Orders Mappings ***');
+    xout('');
   
-    xlog('Preparing soap envelope');
-    l_text := '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
- <soap:Body>
-     <ns1:findWorker xmlns:ns1="http://xmlns.oracle.com/apps/hcm/employment/core/workerServiceV2/types/">
-         <ns1:findCriteria xmlns:ns2="http://xmlns.oracle.com/adf/svc/types/">
-             <ns2:fetchStart>0</ns2:fetchStart>
-             <ns2:fetchSize>1</ns2:fetchSize>
-             <ns2:filter>
-                 <ns2:conjunction>And</ns2:conjunction>
-                 <ns2:group>
-                     <ns2:conjunction>And</ns2:conjunction>
-                     <ns2:upperCaseCompare>false</ns2:upperCaseCompare>
-                     <ns2:item>
-                         <ns2:conjunction>And</ns2:conjunction>
-                         <ns2:upperCaseCompare>false</ns2:upperCaseCompare>
-                         <ns2:attribute>PersonNumber</ns2:attribute>
-                         <ns2:operator>=</ns2:operator>
-                         <ns2:value>114685</ns2:value>
-                     </ns2:item>
-                 </ns2:group>
-                 <ns2:nested/>
-             </ns2:filter>
-             <ns2:findAttribute>PersonId</ns2:findAttribute>
-             <ns2:excludeAttribute>false</ns2:excludeAttribute>
-             <ns2:findAttribute>EffectiveStartDate</ns2:findAttribute>
-             <ns2:excludeAttribute>false</ns2:excludeAttribute>
-             <ns2:findAttribute>EffectiveEndDate</ns2:findAttribute>
-             <ns2:excludeAttribute>false</ns2:excludeAttribute>
-         </ns1:findCriteria>
-         <ns1:findControl xmlns:ns2="http://xmlns.oracle.com/adf/svc/types/">
-             <ns2:retrieveAllTranslations/>
-         </ns1:findControl>
-     </ns1:findWorker>
- </soap:Body>
-</soap:Envelope>';
+    l_batch_id := xxdl_sla_map_batch_s1.nextval;
+    xlog('l_batch_id: ' || l_batch_id);
   
-    xlog('Soap envelope to clob');
-    l_soap_env := to_clob(l_text);
+    l_group_id := xxdl_sla_map_group_s1.nextval;
   
-    xlog('Calling xxfn_cloud_ws_pkg.ws_call...');
+    l_count := 0;
   
-    xxfn_cloud_ws_pkg.ws_call(p_ws_url         => l_wsdl_link,
-                              p_soap_env       => l_soap_env,
-                              p_soap_act       => l_wsdl_method,
-                              p_content_type   => l_ws_http_type,
-                              x_return_status  => x_return_status,
-                              x_return_message => x_return_message,
-                              x_ws_call_id     => x_ws_call_id);
+    for c_wo in cur_wo loop
+    
+      l_count := l_count + 1;
+    
+      xout(c_wo.company || ', ' || c_wo.work_order_number || ', ' || c_wo.cost_center);
+    
+      l_int_row.batch_id              := l_batch_id;
+      l_int_row.group_id              := l_group_id;
+      l_int_row.line_num              := l_count;
+      l_int_row.status                := 'NEW';
+      l_int_row.application_name      := 'Purchasing';
+      l_int_row.mapping_short_name    := 'XXDL_CC_FROM_REQ_WO';
+      l_int_row.out_chart_of_accounts := c_wo.company;
+      l_int_row.out_segment           := 'Mjesto troska';
+      l_int_row.out_value             := c_wo.cost_center;
+      l_int_row.source_value_1        := c_wo.work_order_number;
+      l_int_row.source_reference_info := 'WO: ' || c_wo.work_order_number;
+      l_int_row.creation_date         := sysdate;
+      l_int_row.last_update_date      := sysdate;
+    
+      insert into xxdl_sla_mappings_interface values l_int_row;
+    
+      l_stat_row.entity_type      := 'XXDL_CC_FROM_REQ_WO';
+      l_stat_row.id1              := c_wo.work_order_number;
+      l_stat_row.id2              := 'X';
+      l_stat_row.sync_status      := 'OK';
+      l_stat_row.creation_date    := sysdate;
+      l_stat_row.last_update_date := sysdate;
+    
+      insert into xxdl_sync_statuses values l_stat_row;
+    
+    end loop;
+    
+    -- Processing interface
+    process_interface(p_batch_id => l_batch_id, p_reprocess_flag => false, p_purge_flag => true);
   
-    dbms_lob.freetemporary(l_soap_env);
-    xlog('x_ws_call_id:' || x_ws_call_id);
-    xlog('Return status: ' || x_return_status);
-    xlog('x_return_message: ' || x_return_message);
-  
-    xlog('test ended');
+    xlog('referesh_work_orders_mappings ended');
   
   end;
 
