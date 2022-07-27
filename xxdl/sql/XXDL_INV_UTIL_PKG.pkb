@@ -68,7 +68,7 @@ END;
 --		 - p_year: year of oldest purchase order created
 --		 - p_retry_error: should we process records that ended in error
   -------------------------------------------------------------------------------*/
-  
+
 procedure migrate_items_cloud (
 p_item_seg in varchar2,
 p_rows in number,
@@ -157,7 +157,8 @@ AND mic.category_id = mcb.category_id) mic
 where 1=1
 and to_char(msi.segment1) like nvl(to_char(p_item_seg),'%')
 and msi.organization_id = mp.organization_id
-and mp.organization_code in ('DLK','I10','T01', 'I01','I02','I05','GRA','I04')
+--and mp.organization_code in ('DLK','I10','T01', 'I01','I02','I05','GRA','I04')
+and mp.organization_code in ('DLK')
 --and nvl(xx.process_flag,'X') != 'P'
 --and xx.segment1 = msi.segment1
 and msi.inventory_item_id = mic.inventory_item_id
@@ -183,7 +184,7 @@ and exists (select 1 from apps.mtl_material_transactions@EBSPROD mmt
             )
 order by custom_sort
 ;
-                    
+
 cursor c_items_lang (c_item_id in number, c_org_id in number) is
 select
 '<![CDATA['||msit.description||']]>' description_escaped
@@ -247,7 +248,7 @@ where mic.inventory_item_id = c_item_id
 and mic.organization_id =c_org_id
 ;
 
-    
+
 
     l_item_rec XXDL_MTL_SYSTEM_ITEMS_MIG%ROWTYPE;
     l_item_empty XXDL_MTL_SYSTEM_ITEMS_MIG%ROWTYPE;
@@ -260,7 +261,7 @@ and mic.organization_id =c_org_id
     x_return_message varchar2(32000);
     x_ws_call_id number;
     l_cnt number := 0;
-    
+
     l_app_url           varchar2(100);
     l_username          varchar2(100);
     l_password           varchar2(100);
@@ -291,7 +292,7 @@ end if;
 if l_password is null then
     raise XX_PASS;
 end if;
-  
+
 for c_i in c_items loop
 
     log('   Import item: '||c_i.segment1);
@@ -299,7 +300,7 @@ for c_i in c_items loop
     log('   Checking if already exists in cloud!');
 
     find_item_cloud(c_i.segment1,c_i.organization_code,l_cloud_item,l_cloud_org);
-    
+
     log('   Cloud item id:'||l_cloud_item);
 
     l_item_rec.inventory_item_id := c_i.inventory_item_id;
@@ -340,7 +341,7 @@ for c_i in c_items loop
                     if c_i_cat.orig_category_set_name = 'XXDL PLA' then
                         l_item_rec.account := c_i_cat.category_code;
                     end if;
- 
+
                     if c_i.organization_code = 'DLK_EUR' and c_i_cat.orig_category_set_name = 'XXDL kategorizacija' then
                         l_text:= l_text||'<item:ItemCategory>
                                                 <item:ItemCatalog>'||c_i_cat.category_set_name||'</item:ItemCatalog>               
@@ -355,12 +356,12 @@ for c_i in c_items loop
                                         </item:ItemCategory>';
                     end if; 
                 end loop;
-                                    
+
             /* --prijenos prijevoda u cloud zasad ne radi
             for cil in c_items_lang(c_i.inventory_item_id, c_i.organization_id) loop
-            
+
                 log('       Found translation! Lang: '||cil.language);
-            
+
                 l_text := l_text ||'<item:ItemTranslation>
                                     <item:ItemDescription>'||cil.description_escaped||'></item:ItemDescription>
                                     <item:LongDescription>'||cil.long_description_esc||'</item:LongDescription>
@@ -368,17 +369,17 @@ for c_i in c_items loop
                                     <item:SourceLanguage>US</item:SourceLanguage>
                                     </item:ItemTranslation>
                                     ';
-            
+
             end loop;
             */
             l_text := l_text||'</typ:item>
                             </typ:createItem>
                         </soapenv:Body>
                         </soapenv:Envelope>';
-                        
+
         l_soap_env := l_soap_env|| to_clob(l_text);
         l_text := '';
-        
+
         log('   Envelope built!');
 
         log('   Calling web service.');
@@ -391,28 +392,53 @@ for c_i in c_items loop
         x_return_status => x_return_status,
         x_return_message => x_return_message,
         x_ws_call_id => x_ws_call_id);
-        
+
         log('   Web service finished! ws_call_id:'||x_ws_call_id);
-        
+
     --log(l_text);
     --dbms_lob.freetemporary(l_soap_env);
         log('   ws_call_id:'||x_ws_call_id);
-       
+
         if x_return_status = 'S' then
-        
+
             log('   Item migrated!');
             l_item_rec.process_flag := x_return_status;
             
+            BEGIN
+            SELECT
+                xt.cloud_item_id,
+                xt.cloud_org_id
+            INTO
+                l_item_rec.cloud_item_id,
+                l_item_rec.cloud_org_id
+            FROM
+                xxfn_ws_call_log x,
+                XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" 
+                                            ,'http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/types/' AS "ns0"
+                                            ,'http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/types/' AS "ns2"
+                                            ,'http://xmlns.oracle.com/adf/svc/types/' AS "val"
+                                            ,'http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/' as "ns1"
+                                            ), '/env:Envelope/env:Body/ns0:createItemResponse/ns2:result/val:Value' PASSING x.response_xml COLUMNS
+                cloud_item_id VARCHAR2(4000) PATH './ns1:ItemId', cloud_org_id VARCHAR2(4000) PATH './ns1:OrganizationId' ) xt
+            WHERE
+                x.ws_call_id = x_ws_call_id;
+
+            EXCEPTION
+                WHEN no_data_found THEN
+                    l_item_rec.cloud_item_id := null;
+                    l_item_rec.cloud_org_id := null;
+            END;             
+
             update xxfn_ws_call_log xx 
             set xx.response_xml = null
             ,xx.response_clob = null
             ,xx.response_blob = null
             ,xx.ws_payload_xml = null
             where ws_call_id = x_ws_call_id;
-            
+
         else
             log('   Error! Item not migrated!');
-            
+
         BEGIN
             SELECT
                 xt.faultcode,
@@ -426,7 +452,7 @@ for c_i in c_items loop
                 faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
             WHERE
                 x.ws_call_id = x_ws_call_id;
-            
+
             EXCEPTION
                 WHEN no_data_found THEN
                     BEGIN
@@ -440,22 +466,22 @@ for c_i in c_items loop
                             xxfn_ws_call_log x
                         WHERE
                             x.ws_call_id = x_ws_call_id;
-            
+
                     EXCEPTION
                         WHEN OTHERS THEN
                             l_item_rec.error_msg := 'Cannot find env:Fault in ws call results.';
                     END;
             END;             
-            
+
             if l_fault_code is not null or l_fault_string is not null then
                 l_item_rec.error_msg := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
             end if;
             log('   '||l_item_rec.error_msg);        
         end if;
-                
+
         BEGIN
             INSERT INTO XXDL_MTL_SYSTEM_ITEMS_MIG VALUES l_item_rec;
-        
+
         EXCEPTION
             WHEN dup_val_on_index THEN
                 l_item_rec.last_update_date := SYSDATE;
@@ -465,16 +491,16 @@ for c_i in c_items loop
                 WHERE
                     xx.inventory_item_id = l_item_rec.inventory_item_id
                     AND xx.organization_id = l_item_rec.organization_id;
-        
+
         END;
-        
+
 
     else
         log('   Already exists!');
 
         BEGIN
             INSERT INTO XXDL_MTL_SYSTEM_ITEMS_MIG VALUES l_item_rec;
-        
+
         EXCEPTION
             WHEN dup_val_on_index THEN
                 l_item_rec.last_update_date := SYSDATE;
@@ -484,7 +510,7 @@ for c_i in c_items loop
                 WHERE
                     xx.inventory_item_id = l_item_rec.inventory_item_id
                     AND xx.organization_id = l_item_rec.organization_id;
-        
+
         END;
 
         update XXDL_MTL_SYSTEM_ITEMS_MIG xx
@@ -495,7 +521,7 @@ for c_i in c_items loop
         WHERE
             xx.inventory_item_id = c_i.inventory_item_id
             AND xx.organization_id = c_i.organization_id; 
-    
+
     end if;
 
     l_item_rec := l_item_empty;
@@ -531,7 +557,7 @@ end migrate_items_cloud;
 --		 - p_year: year of oldest purchase order created
 --		 - p_retry_error: should we process records that ended in error
   -------------------------------------------------------------------------------*/
-  
+
 procedure update_items_cloud (
 p_item_seg in varchar2,
 p_rows in number,
@@ -607,7 +633,7 @@ and exists (select 1 from apps.mtl_material_transactions@EBSPROD mmt
             )
 ;
 
-                    
+
 cursor c_items_lang (c_item_id in number, c_org_id in number) is
 select
 '<![CDATA['||msit.description||']]>' description_escaped
@@ -624,7 +650,7 @@ and msit.organization_id = c_org_id
 and msit.language = 'US'
 ;
 
-    
+
 
     l_item_rec XXDL_MTL_SYSTEM_ITEMS_MIG%ROWTYPE;
     l_item_empty XXDL_MTL_SYSTEM_ITEMS_MIG%ROWTYPE;
@@ -640,7 +666,7 @@ and msit.language = 'US'
     l_cnt number := 0;
     l_item_id number;
     l_organization_id number;
-    
+
     l_app_url           varchar2(100);
     l_username          varchar2(100);
     l_password           varchar2(100);
@@ -653,7 +679,7 @@ begin
 
 log('Starting to update items:');
 
-  
+
 l_app_url := get_config('ServiceRootURL');
 l_username := get_config('ServiceUsername');
 l_password := get_config('ServicePassword');
@@ -669,13 +695,13 @@ end if;
 if l_password is null then
     raise XX_PASS;
 end if;
-  
+
 for c_i in c_items loop
 
     log('   Update item: '||c_i.segment1);
-    
+
     log('   Building find item envelope!');
-    
+
     l_find_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/types/" xmlns:typ1="http://xmlns.oracle.com/adf/svc/types/">
                    <soapenv:Header/>
                    <soapenv:Body>
@@ -714,12 +740,12 @@ for c_i in c_items loop
                       </typ:findItem>
                    </soapenv:Body>
                 </soapenv:Envelope>';  
-  
+
     l_soap_env := l_soap_env|| to_clob(l_find_text);
     l_find_text := '';    
 --    l_soap_env := l_soap_env|| to_clob(l_text);
 --    l_text := '';
-    
+
     log('   Envelope built!');
 
     log('   Calling web service.');
@@ -731,11 +757,11 @@ for c_i in c_items loop
       x_return_status => x_return_status,
       x_return_message => x_return_message,
       x_ws_call_id => x_ws_call_id);
-      
+
       log(' Web service to find item finished! ws_call_id:'||x_ws_call_id);
-      
+
       log('Parsing ws_call to get item cloud id..');
-      
+
       BEGIN
         SELECT
             to_number(xt.itemid),
@@ -759,17 +785,17 @@ for c_i in c_items loop
              organizationid VARCHAR2(4000) PATH 'ns1:OrganizationId' ) xt
         WHERE
             x.ws_call_id = x_ws_call_id;
-        
+
         EXCEPTION
             WHEN no_data_found THEN
                 l_item_id :=0;
                 l_organization_id :=0;
         END;
-        
+
         log('Cloud ItemId: '||l_item_id);
         log('Cloud OrganizationId: '||l_organization_id);
-        
-      
+
+
 --log(l_text);
 --dbms_lob.freetemporary(l_soap_env);
     log(' ws_call_id:'||x_ws_call_id);
@@ -784,11 +810,11 @@ for c_i in c_items loop
     l_item_rec.cloud_item_id := l_item_id;
     l_item_rec.cloud_org_id := l_organization_id;
     l_item_rec.category := c_i.kat;
-    
+
     if x_return_status = 'S' then
-    
+
         log('   Starting  item update!');
-        
+
         l_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/types/" xmlns:item="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/" xmlns:cat="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/itemSupplier/categories/" xmlns:item1="http://xmlns.oracle.com/apps/scm/productModel/items/flex/itemRevision/" xmlns:cat1="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/itemRevision/categories/" xmlns:cat2="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/item/categories/" xmlns:item2="http://xmlns.oracle.com/apps/scm/productModel/items/flex/item/" xmlns:item3="http://xmlns.oracle.com/apps/scm/productModel/items/flex/itemGdf/" xmlns:mod="http://xmlns.oracle.com/apps/flex/fnd/applcore/attachments/model/">
                    <soapenv:Header/>
                    <soapenv:Body>
@@ -803,11 +829,11 @@ for c_i in c_items loop
                       </typ:updateItem>
                    </soapenv:Body>
                 </soapenv:Envelope>';
-        
+
         l_soap_env := l_empty_clob;
         l_soap_env := l_soap_env|| to_clob(l_text);
         l_text := '';    
-        
+
         log('   Envelope for update built!');
 
         log('   Calling web service.');
@@ -819,19 +845,19 @@ for c_i in c_items loop
           x_return_status => x_return_status,
           x_return_message => x_return_message,
           x_ws_call_id => x_ws_call_id);
-      
+
         log(' Web service finished! ws_call_id:'||x_ws_call_id);
-        
+
         if x_return_status = 'S' then
-        
-                
+
+
             update xxfn_ws_call_log xx 
             set xx.response_xml = null
             ,xx.response_clob = null
             ,xx.response_blob = null
             ,xx.ws_payload_xml = null
             where ws_call_id = x_ws_call_id;
-            
+
             if l_item_id != 0 and l_organization_id != 0 then
                 UPDATE XXDL_MTL_SYSTEM_ITEMS_MIG xx
                 SET
@@ -842,7 +868,7 @@ for c_i in c_items loop
                     xx.inventory_item_id = l_item_rec.inventory_item_id
                     AND xx.organization_id = l_item_rec.organization_id;
             end if;
-        
+
         else
             log('   Error! Item not updated!');
            BEGIN
@@ -858,7 +884,7 @@ for c_i in c_items loop
                 faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
             WHERE
                 x.ws_call_id = x_ws_call_id;
-            
+
             EXCEPTION
                 WHEN no_data_found THEN
                     BEGIN
@@ -872,19 +898,19 @@ for c_i in c_items loop
                             xxfn_ws_call_log x
                         WHERE
                             x.ws_call_id = x_ws_call_id;
-            
+
                     EXCEPTION
                         WHEN OTHERS THEN
                             l_item_rec.error_msg := 'Cannot find env:Fault in ws call results.';
                     END;
             END;             
-            
+
             l_item_rec.error_msg := substr( 'Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
             log('   '||l_item_rec.error_msg); 
-        
+
         end if;
 
-           
+
     else
         log('   Error! Item not updated!');
        BEGIN
@@ -900,7 +926,7 @@ for c_i in c_items loop
             faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
         WHERE
             x.ws_call_id = x_ws_call_id;
-        
+
         EXCEPTION
             WHEN no_data_found THEN
                 BEGIN
@@ -914,17 +940,17 @@ for c_i in c_items loop
                         xxfn_ws_call_log x
                     WHERE
                         x.ws_call_id = x_ws_call_id;
-        
+
                 EXCEPTION
                     WHEN OTHERS THEN
                         l_item_rec.error_msg := 'Cannot find env:Fault in ws call results.';
                 END;
         END;             
-        
+
         l_item_rec.error_msg := substr( 'Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
         log('   '||l_item_rec.error_msg);        
     end if;
-            
+
     BEGIN
            if l_item_id != 0 and l_organization_id != 0 then
             UPDATE XXDL_MTL_SYSTEM_ITEMS_MIG xx
@@ -936,7 +962,7 @@ for c_i in c_items loop
                     xx.inventory_item_id = l_item_rec.inventory_item_id
                     AND xx.organization_id = l_item_rec.organization_id;
             end if;
-    
+
     EXCEPTION
         WHEN dup_val_on_index THEN
             l_item_rec.last_update_date := SYSDATE;
@@ -946,9 +972,9 @@ for c_i in c_items loop
             WHERE
                 xx.inventory_item_id = l_item_rec.inventory_item_id
                 AND xx.organization_id = l_item_rec.organization_id;
-    
+
     END;
-    
+
     l_item_rec := l_item_empty;
     l_soap_env := l_empty_clob;
     l_cnt := l_cnt + 1;
@@ -1002,12 +1028,12 @@ procedure find_item_cloud (
     l_organization_id number;     
 l_app_url varchar2(300);
 begin
-  
-  
+
+
 l_app_url := get_config('ServiceRootURL');
 
     log('   Building find item envelope!');
-    
+
     l_find_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/types/" xmlns:typ1="http://xmlns.oracle.com/adf/svc/types/">
                    <soapenv:Header/>
                    <soapenv:Body>
@@ -1056,12 +1082,12 @@ l_app_url := get_config('ServiceRootURL');
                       </typ:findItem>
                    </soapenv:Body>
                 </soapenv:Envelope>';  
-  
+
     l_soap_env := l_soap_env|| to_clob(l_find_text);
     l_find_text := '';    
 --    l_soap_env := l_soap_env|| to_clob(l_text);
 --    l_text := '';
-    
+
     log('   Envelope built!');
 
     log('   Calling web service.');
@@ -1073,11 +1099,11 @@ l_app_url := get_config('ServiceRootURL');
       x_return_status => x_return_status,
       x_return_message => x_return_message,
       x_ws_call_id => x_ws_call_id);
-      
+
       log(' Web service to find item finished! ws_call_id:'||x_ws_call_id);
-      
+
       log('Parsing ws_call to get item cloud id..');
-      
+
       BEGIN
         SELECT
             to_number(xt.itemid),
@@ -1101,13 +1127,13 @@ l_app_url := get_config('ServiceRootURL');
              organizationid VARCHAR2(4000) PATH 'ns1:OrganizationId' ) xt
         WHERE
             x.ws_call_id = x_ws_call_id;
-        
+
         EXCEPTION
             WHEN no_data_found THEN
                 p_cloud_item :=0;
                 p_cloud_org :=0;
         END;
-        
+
         log('Cloud ItemId: '||p_cloud_item);
         log('Cloud OrganizationId: '||p_cloud_org);
 
@@ -1127,9 +1153,9 @@ function parse_cs_response(p_ws_call_id in number) return varchar2 is
   l_msg_body VARCHAR2(32767);
 begin
 
- 
+
     --get header error
-    
+
       FOR cur_rec IN (  select xt.code,
              substr(xt.message,instr(xt.message,'<',1,1), length(xt.message)) message
       from   xxfn_ws_call_log x,
@@ -1144,7 +1170,7 @@ begin
                ) xt
       where x.ws_call_id = p_ws_call_id)
       LOOP
-      
+
         select code,text into l_head_code,l_head_error from XMLTABLE('/MESSAGE' 
             passing (cur_rec.message)
             columns
@@ -1156,9 +1182,9 @@ begin
             l_msg_body := 'Tekst:'||l_head_error||CHR(10);
         end if;
     end loop;
-    
+
     --get lines error
-    
+
       FOR cur_rec IN (  select xt.code,
              substr(xt.message,instr(xt.message,'<',1,1), length(xt.message)) message
       from   xxfn_ws_call_log x,
@@ -1174,7 +1200,7 @@ begin
       where x.ws_call_id = p_ws_call_id)
       LOOP
 
-                
+
         if nvl(l_line_error,'X') != 'X' then 
             l_msg_body := 'Greska na linijama RFQ-a'||CHR(10);
             l_msg_body := 'Kod:'||l_line_code||CHR(10);
