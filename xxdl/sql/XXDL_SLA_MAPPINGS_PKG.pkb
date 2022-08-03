@@ -903,9 +903,9 @@ create or replace package body xxdl_sla_mappings_pkg is
     for c_set in cur_map_sets loop
       refresh_mapping_set(c_set.mapping_set_code);
     end loop;
-    
+  
     referesh_work_orders_mappings;
-    
+  
     xlog('refresh_all_mapping_sets ended');
   exception
     when others then
@@ -931,7 +931,7 @@ create or replace package body xxdl_sla_mappings_pkg is
                 from xxdl_sync_statuses s
                where s.entity_type = 'WORK_ORDER_CC_MAPPING'
                  and s.id1 = wo.work_order_number
-                 and s.sync_status != 'ERROR')
+                 and s.sync_status = 'OK')
          and wo.cost_center is not null;
   
     l_int_row  xxdl_sla_mappings_interface%rowtype;
@@ -986,10 +986,17 @@ create or replace package body xxdl_sla_mappings_pkg is
       l_stat_row.creation_date    := sysdate;
       l_stat_row.last_update_date := sysdate;
     
+      --delete errored record if exists
+      delete from xxdl_sync_statuses
+       where entity_type = 'XXDL_CC_FROM_REQ_WO'
+         and id1 = c_wo.work_order_number
+         and id2 = 'X';
+    
+      -- Insert ok record
       insert into xxdl_sync_statuses values l_stat_row;
     
     end loop;
-    
+  
     -- Processing interface
     process_interface(p_batch_id => l_batch_id, p_reprocess_flag => false, p_purge_flag => true);
   
