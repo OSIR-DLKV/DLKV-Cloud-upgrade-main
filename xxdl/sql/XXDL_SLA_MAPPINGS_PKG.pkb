@@ -743,7 +743,7 @@ create or replace package body xxdl_sla_mappings_pkg is
     exception
       when no_data_found then
         xlog('There is no records to process in batch');
-        raise e_processing_exception;
+        return;
     end;
   
     xlog('Creating the file');
@@ -929,7 +929,7 @@ create or replace package body xxdl_sla_mappings_pkg is
         from xxdl_wo_cc_integration wo
        where not exists (select 1
                 from xxdl_sync_statuses s
-               where s.entity_type = 'WORK_ORDER_CC_MAPPING'
+               where s.entity_type = 'XXDL_CC_FROM_REQ_WO'
                  and s.id1 = wo.work_order_number
                  and s.sync_status = 'OK')
          and wo.cost_center is not null;
@@ -997,8 +997,12 @@ create or replace package body xxdl_sla_mappings_pkg is
     
     end loop;
   
-    -- Processing interface
-    process_interface(p_batch_id => l_batch_id, p_reprocess_flag => false, p_purge_flag => true);
+    if l_count > 0 then    
+      -- Processing interface
+      process_interface(p_batch_id => l_batch_id, p_reprocess_flag => false, p_purge_flag => true);
+    else
+      xout('There is no XXDL_CC_FROM_REQ_WO to process');
+    end if;
   
     xlog('referesh_work_orders_mappings ended');
   
