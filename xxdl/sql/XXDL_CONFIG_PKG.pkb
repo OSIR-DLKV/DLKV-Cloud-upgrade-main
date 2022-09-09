@@ -8,6 +8,8 @@ create or replace package body xxdl_config_pkg is
   v1.0 16.05.2022 Marko Sladoljev: Inicijalna verzija
   ============================================================================+*/
 
+  c_prefix constant varchar2(30) := 'EwhaTest';
+
   function get_value(p_name varchar2) return varchar2 as
     l_value varchar2(250);
   begin
@@ -22,19 +24,19 @@ create or replace package body xxdl_config_pkg is
 
   function serviceusername return varchar2 as
   begin
-    return get_value('ServiceUsername');
+    return get_value(c_prefix || 'ServiceUsername');
   end;
   function servicepassword return varchar2 as
   begin
-    return get_value('ServicePassword');
+    return get_value(c_prefix || 'ServicePassword');
   end;
   function servicerooturl return varchar2 as
   begin
-    return get_value('ServiceRootURL');
+    return get_value(c_prefix || 'ServiceRootURL');
   end;
   function soapurl return varchar2 as
   begin
-    return get_value('SoapUrl');
+    return get_value(c_prefix || 'SoapUrl');
   end;
 
 end;

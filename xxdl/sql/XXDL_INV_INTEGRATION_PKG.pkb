@@ -232,6 +232,9 @@ create or replace package body xxdl_inv_integration_pkg is
                                   transaction_uom varchar2(3) path 'TRANSACTION_UOM',
                                   primary_quantity number path 'PRIMARY_QUANTITY',
                                   transaction_date varchar2(100) path 'TRANSACTION_DATE',
+                                  shipment_number varchar2(100) path 'SHIPMENT_NUMBER',
+                                  receipt_num varchar2(100) path 'RECEIPT_NUM',
+                                  transfer_organization_id number path 'TRANSFER_ORGANIZATION_ID',
                                   po_number varchar2(100) path 'PO_NUMBER',
                                   po_approved_date varchar2(100) path 'PO_APPROVED_DATE',
                                   po_unit_price number path 'PO_UNIT_PRICE',
@@ -259,6 +262,9 @@ create or replace package body xxdl_inv_integration_pkg is
       l_row.transaction_uom            := c_rec.transaction_uom;
       l_row.primary_quantity           := c_rec.primary_quantity;
       l_row.transaction_date           := xml_char_to_date(c_rec.transaction_date);
+      l_row.shipment_number            := c_rec.shipment_number;
+      l_row.receipt_num                := c_rec.receipt_num;
+      l_row.transfer_organization_id   := c_rec.transfer_organization_id;
       l_row.po_number                  := c_rec.po_number;
       l_row.po_approved_date           := xml_char_to_date(c_rec.po_approved_date);
       l_row.po_unit_price              := c_rec.po_unit_price;
