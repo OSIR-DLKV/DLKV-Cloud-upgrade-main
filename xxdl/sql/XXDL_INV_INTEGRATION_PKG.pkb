@@ -83,6 +83,186 @@ create or replace package body xxdl_inv_integration_pkg is
   end;
 
   /*===========================================================================+
+  Procedure   : download_avg_item_cst
+  Description : Downloads items average cost from Fusion to XE database
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure download_avg_item_cst is
+  
+    l_body           varchar2(30000);
+    l_result         varchar2(500);
+    l_result_clob    clob;
+    l_return_status  varchar2(500);
+    l_return_message varchar2(32000);
+    l_soap_env       clob;
+    l_text           varchar2(32000);
+    l_ws_call_id     number;
+  
+    l_resp_xml           xmltype;
+    l_resp_xml_id        xmltype;
+    l_result_nr_id       varchar2(500);
+    l_result_varchar     varchar2(32000);
+    l_result_clob_decode clob;
+  
+    l_row xxdl_avg_item_cost%rowtype;
+  
+    l_count number;
+  
+    l_last_update_date date;
+  
+  begin
+  
+    xlog('Procedure download_avg_item_cst started');
+  
+    xxdl_report_pkg.create_report(p_report_type => 'Download Fusion Table',
+                                  p_report_name => 'Download Average Items Costs',
+                                  x_report_id   => g_report_id);
+  
+    xout('*** Download Average Items Costs ***');
+    xout('');
+  
+    --execute immediate 'alter session set NLS_TIMESTAMP_TZ_FORMAT= ''YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM''';
+  
+    xlog('Getting last update date');
+    select max(last_update_date) into l_last_update_date from xxdl_avg_item_cost;
+  
+    if l_last_update_date is null then
+      l_last_update_date := to_date('1-1-1900', 'dd-mm-yyyy');
+    end if;
+  
+    l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
+            <soap:Header/>
+            <soap:Body>
+                <pub:runReport>
+                    <pub:reportRequest>
+                        <pub:attributeFormat>xml</pub:attributeFormat>
+                        <pub:attributeLocale></pub:attributeLocale>
+                        <pub:attributeTemplate></pub:attributeTemplate>
+                        <pub:parameterNameValues>
+                            <pub:item>
+                                <pub:name>p_last_update_date</pub:name>
+                                <pub:values>
+                                    <pub:item>[P_LAST_UPDATE_DATE]</pub:item>
+                                </pub:values>
+                            </pub:item>
+                        </pub:parameterNameValues>
+                        <pub:reportAbsolutePath>Custom/XXDL_INV_Integration/XXDL_AVG_ITEM_COST_REP.xdo</pub:reportAbsolutePath>
+                        <pub:sizeOfDataChunkDownload>-1</pub:sizeOfDataChunkDownload>
+                    </pub:reportRequest>
+                    <pub:appParams></pub:appParams>
+                </pub:runReport>
+            </soap:Body>
+        </soap:Envelope>';
+  
+    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', to_char(l_last_update_date, 'dd.mm.yyyy hh24:mi:ss'));
+  
+    l_soap_env := to_clob(l_text);
+  
+    l_count := 0;
+  
+    xlog('Calling ws_call to get the report');
+    xlog('xxdl_config_pkg.servicerooturl: ' || xxdl_config_pkg.servicerooturl);
+    xxfn_cloud_ws_pkg.ws_call(p_ws_url         => xxdl_config_pkg.servicerooturl || '/xmlpserver/services/ExternalReportWSSService?WSDL',
+                              p_soap_env       => l_soap_env,
+                              p_soap_act       => 'runReport',
+                              p_content_type   => 'application/soap+xml;charset="UTF-8"',
+                              x_return_status  => l_return_status,
+                              x_return_message => l_return_message,
+                              x_ws_call_id     => l_ws_call_id);
+  
+    dbms_lob.freetemporary(l_soap_env);
+  
+    xlog('x_return_status: ' || l_return_status);
+    if (l_return_status != 'S') then
+      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('l_return_message: ' || l_return_message);
+      raise e_processing_exception;
+    end if;
+  
+    xlog('Extracting xml response');
+  
+    begin
+      select response_xml into l_resp_xml from xxfn_ws_call_log_v where ws_call_id = l_ws_call_id;
+    exception
+      when no_data_found then
+        xlog('Error extracting xml from the response');
+        raise e_processing_exception;
+    end;
+  
+    begin
+      select xml.vals
+        into l_result_clob
+        from xxfn_ws_call_log_v a,
+             xmltable(xmlnamespaces('http://xmlns.oracle.com/oxp/service/PublicReportService' as "ns2",
+                                    'http://www.w3.org/2003/05/soap-envelope' as "env"),
+                      '/env:Envelope/env:Body/ns2:runReportResponse/ns2:runReportReturn' passing a.response_xml columns vals clob path
+                      './ns2:reportBytes') xml
+       where a.ws_call_id = l_ws_call_id
+         and xml.vals is not null;
+    exception
+      when no_data_found then
+        elog('Error getting l_result_clob from xml response');
+        raise e_processing_exception;
+    end;
+  
+    l_result_clob_decode := xxfn_cloud_ws_pkg.decodebase64(l_result_clob);
+  
+    xlog(to_char(dbms_lob.substr(l_result_clob_decode, 1000, 1)));
+  
+    l_resp_xml_id := xmltype.createxml(l_result_clob_decode);
+  
+    xlog('Looping thru the  values');
+  
+    -- Loop thru the records
+    xout(' ');
+    for c_rec in (select xt.*
+                    from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns cost_org varchar2(100) path 'COST_ORG',
+                                  inventory_item_id number path 'INVENTORY_ITEM_ID',
+                                  item_number varchar2(100) path 'ITEM_NUMBER',
+                                  val_unit_code varchar2(100) path 'VAL_UNIT_CODE',
+                                  unit_cost_average number path 'UNIT_COST_AVERAGE',
+                                  quantity_onhand number path 'QUANTITY_ONHAND',
+                                  uom_code varchar2(30) path 'UOM_CODE',
+                                  last_update_date varchar2(100) path 'LAST_UPDATE_DATE') xt) loop
+    
+      l_count := l_count + 1;
+    
+      xout(c_rec.item_number || ', ' || c_rec.unit_cost_average);
+    
+      l_row.cost_org          := c_rec.cost_org;
+      l_row.inventory_item_id := c_rec.inventory_item_id;
+      l_row.item_number       := c_rec.item_number;
+      l_row.val_unit_code     := c_rec.val_unit_code;
+      l_row.unit_cost_average := c_rec.unit_cost_average;
+      l_row.quantity_onhand   := c_rec.quantity_onhand;
+      l_row.uom_code          := c_rec.uom_code;
+      l_row.last_update_date  := xml_char_to_date(c_rec.last_update_date);
+    
+      l_row.downloaded_date := sysdate;
+    
+      insert into xxdl_avg_item_cost values l_row;
+    
+    end loop;
+  
+    xout('Item costs downloaded: ' || l_count);
+    xout('*** End of report ***');
+  
+    xlog('Procedure download_avg_item_cst ended');
+  
+  exception
+    when e_processing_exception then
+      xlog('e_processing_exception risen');
+      xxdl_report_pkg.set_has_errors(g_report_id);
+    
+    when others then
+      xxdl_report_pkg.set_has_errors(g_report_id);
+      elog('SQLERRM: ' || sqlerrm);
+      elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
+      raise;
+  end;
+
+  /*===========================================================================+
   Procedure   : download_transactions
   Description : Downloads inventory transactions from Fusion to XE database
   Usage       : 
@@ -444,17 +624,6 @@ create or replace package body xxdl_inv_integration_pkg is
         end if;
       
         xlog('Checking for errors in REST response');
-        /*
-                select j.error_code,
-                       j.error_explanation
-                  from xxun_ws_call_log wc,
-                       json_table(wc.response_json,
-                                  '$' columns(error_code varchar2(250) path '$.ErrorCode', error_explanation number path '$.ErrorExplanation')) j
-                 where wc.ws_call_id = l_ws_call_id;
-                
-               
-              
-        */
       
         select json_value(wc.response_json, '$.ErrorCode'),
                json_value(wc.response_json, '$.ErrorExplanation')

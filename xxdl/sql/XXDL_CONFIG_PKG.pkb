@@ -8,7 +8,7 @@ create or replace package body xxdl_config_pkg is
   v1.0 16.05.2022 Marko Sladoljev: Inicijalna verzija
   ============================================================================+*/
 
-  c_prefix constant varchar2(30) := 'EwhaTest';
+  c_prefix constant varchar2(30) := '';
 
   function get_value(p_name varchar2) return varchar2 as
     l_value varchar2(250);
