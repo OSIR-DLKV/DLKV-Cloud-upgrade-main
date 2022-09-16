@@ -122,8 +122,6 @@ create or replace package body xxdl_inv_integration_pkg is
     xout('*** Download Average Items Costs ***');
     xout('');
   
-    --execute immediate 'alter session set NLS_TIMESTAMP_TZ_FORMAT= ''YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM''';
-  
     xlog('Getting last update date');
     select max(last_update_date) into l_last_update_date from xxdl_avg_item_cost;
   
@@ -155,7 +153,7 @@ create or replace package body xxdl_inv_integration_pkg is
             </soap:Body>
         </soap:Envelope>';
   
-    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', to_char(l_last_update_date, 'dd.mm.yyyy hh24:mi:ss'));
+    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', json_date_to_char(l_last_update_date));
   
     l_soap_env := to_clob(l_text);
   
@@ -175,7 +173,7 @@ create or replace package body xxdl_inv_integration_pkg is
   
     xlog('x_return_status: ' || l_return_status);
     if (l_return_status != 'S') then
-      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('Error getting data from BI report for Average Items Costs');
       xlog('l_return_message: ' || l_return_message);
       raise e_processing_exception;
     end if;
@@ -301,8 +299,6 @@ create or replace package body xxdl_inv_integration_pkg is
   
     xout('*** Download Material Transactions ***');
     xout('');
-  
-    --execute immediate 'alter session set NLS_TIMESTAMP_TZ_FORMAT= ''YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM''';
   
     xlog('Getting last transaction_id');
     select max(transaction_id) into l_last_transaction_id from xxdl_inv_material_txns;
@@ -461,6 +457,361 @@ create or replace package body xxdl_inv_integration_pkg is
     xout('*** End of report ***');
   
     xlog('Procedure download_transactions ended');
+  
+  exception
+    when e_processing_exception then
+      xlog('e_processing_exception risen');
+      xxdl_report_pkg.set_has_errors(g_report_id);
+    
+    when others then
+      xxdl_report_pkg.set_has_errors(g_report_id);
+      elog('SQLERRM: ' || sqlerrm);
+      elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
+      raise;
+  end;
+
+  /*===========================================================================+
+  Procedure   : download_inv_orgs
+  Description : Downloads inventory organizations
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure download_inv_orgs is
+  
+    l_body           varchar2(30000);
+    l_result         varchar2(500);
+    l_result_clob    clob;
+    l_return_status  varchar2(500);
+    l_return_message varchar2(32000);
+    l_soap_env       clob;
+    l_text           varchar2(32000);
+    l_ws_call_id     number;
+  
+    l_resp_xml           xmltype;
+    l_resp_xml_id        xmltype;
+    l_result_nr_id       varchar2(500);
+    l_result_varchar     varchar2(32000);
+    l_result_clob_decode clob;
+  
+    l_row xxdl_inv_organizations%rowtype;
+  
+    l_count number;
+  
+    l_last_update_date date;
+  
+  begin
+  
+    xlog('Procedure download_inv_orgs started');
+  
+    xxdl_report_pkg.create_report(p_report_type => 'Download Fusion Table',
+                                  p_report_name => 'Download Inventory Organizations',
+                                  x_report_id   => g_report_id);
+  
+    xout('*** Download Inventory Organizations ***');
+    xout('');
+  
+    xlog('Getting last update date');
+    select max(last_update_date) into l_last_update_date from xxdl_inv_organizations;
+    xlog('last_update_date:' || l_last_update_date);
+  
+    if l_last_update_date is null then
+      l_last_update_date := to_date('1-1-1900', 'dd-mm-yyyy');
+    end if;
+  
+    l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
+            <soap:Header/>
+            <soap:Body>
+                <pub:runReport>
+                    <pub:reportRequest>
+                        <pub:attributeFormat>xml</pub:attributeFormat>
+                        <pub:attributeLocale></pub:attributeLocale>
+                        <pub:attributeTemplate></pub:attributeTemplate>
+                        <pub:parameterNameValues>
+                            <pub:item>
+                                <pub:name>p_last_update_date</pub:name>
+                                <pub:values>
+                                    <pub:item>[P_LAST_UPDATE_DATE]</pub:item>
+                                </pub:values>
+                            </pub:item>
+                        </pub:parameterNameValues>
+                        <pub:reportAbsolutePath>Custom/XXDL_INV_Integration/XXDL_INV_ORGANIZATIONS_REP.xdo</pub:reportAbsolutePath>
+                        <pub:sizeOfDataChunkDownload>-1</pub:sizeOfDataChunkDownload>
+                    </pub:reportRequest>
+                    <pub:appParams></pub:appParams>
+                </pub:runReport>
+            </soap:Body>
+        </soap:Envelope>';
+  
+    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', json_date_to_char(l_last_update_date));
+  
+    l_soap_env := to_clob(l_text);
+  
+    l_count := 0;
+  
+    xlog('Calling ws_call to get the report');
+    xlog('xxdl_config_pkg.servicerooturl: ' || xxdl_config_pkg.servicerooturl);
+    xxfn_cloud_ws_pkg.ws_call(p_ws_url         => xxdl_config_pkg.servicerooturl || '/xmlpserver/services/ExternalReportWSSService?WSDL',
+                              p_soap_env       => l_soap_env,
+                              p_soap_act       => 'runReport',
+                              p_content_type   => 'application/soap+xml;charset="UTF-8"',
+                              x_return_status  => l_return_status,
+                              x_return_message => l_return_message,
+                              x_ws_call_id     => l_ws_call_id);
+  
+    dbms_lob.freetemporary(l_soap_env);
+  
+    xlog('x_return_status: ' || l_return_status);
+    if (l_return_status != 'S') then
+      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('l_return_message: ' || l_return_message);
+      raise e_processing_exception;
+    end if;
+  
+    xlog('Extracting xml response');
+  
+    begin
+      select response_xml into l_resp_xml from xxfn_ws_call_log_v where ws_call_id = l_ws_call_id;
+    exception
+      when no_data_found then
+        xlog('Error extracting xml from the response');
+        raise e_processing_exception;
+    end;
+  
+    begin
+      select xml.vals
+        into l_result_clob
+        from xxfn_ws_call_log_v a,
+             xmltable(xmlnamespaces('http://xmlns.oracle.com/oxp/service/PublicReportService' as "ns2",
+                                    'http://www.w3.org/2003/05/soap-envelope' as "env"),
+                      '/env:Envelope/env:Body/ns2:runReportResponse/ns2:runReportReturn' passing a.response_xml columns vals clob path
+                      './ns2:reportBytes') xml
+       where a.ws_call_id = l_ws_call_id
+         and xml.vals is not null;
+    exception
+      when no_data_found then
+        elog('Error getting l_result_clob from xml response');
+        raise e_processing_exception;
+    end;
+  
+    l_result_clob_decode := xxfn_cloud_ws_pkg.decodebase64(l_result_clob);
+  
+    xlog(to_char(dbms_lob.substr(l_result_clob_decode, 1000, 1)));
+  
+    l_resp_xml_id := xmltype.createxml(l_result_clob_decode);
+  
+    xlog('Looping thru the  values');
+  
+    -- Loop thru the records
+    xout(' ');
+    for c_rec in (select xt.*
+                    from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns organization_id number path 'ORGANIZATION_ID',
+                                  organization_code varchar2(30) path 'ORGANIZATION_CODE',
+                                  name varchar2(100) path 'NAME',
+                                  last_update_date varchar2(100) path 'LAST_UPDATE_DATE') xt) loop
+    
+      l_count := l_count + 1;
+    
+      xout(c_rec.organization_id || ', ' || c_rec.organization_code || ', ' || c_rec. last_update_date);
+    
+      l_row.organization_id   := c_rec.organization_id;
+      l_row.organization_code := c_rec.organization_code;
+      l_row.name              := c_rec.name;
+      l_row.last_update_date  := xml_char_to_date(c_rec.last_update_date);
+    
+      l_row.downloaded_date := sysdate;
+    
+      delete from xxdl_inv_organizations where organization_id = c_rec.organization_id;
+    
+      insert into xxdl_inv_organizations values l_row;
+    
+    end loop;
+  
+    xout('Organizations downloaded: ' || l_count);
+    xout('*** End of report ***');
+  
+    xlog('Procedure download_inv_orgs ended');
+  
+  exception
+    when e_processing_exception then
+      xlog('e_processing_exception risen');
+      xxdl_report_pkg.set_has_errors(g_report_id);
+    
+    when others then
+      xxdl_report_pkg.set_has_errors(g_report_id);
+      elog('SQLERRM: ' || sqlerrm);
+      elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
+      raise;
+  end;
+
+  /*===========================================================================+
+  Procedure   : download_items
+  Description : Downloads  items from Fusion 
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure download_items is
+  
+    l_body           varchar2(30000);
+    l_result         varchar2(500);
+    l_result_clob    clob;
+    l_return_status  varchar2(500);
+    l_return_message varchar2(32000);
+    l_soap_env       clob;
+    l_text           varchar2(32000);
+    l_ws_call_id     number;
+  
+    l_resp_xml           xmltype;
+    l_resp_xml_id        xmltype;
+    l_result_nr_id       varchar2(500);
+    l_result_varchar     varchar2(32000);
+    l_result_clob_decode clob;
+  
+    l_row xxdl_egp_system_items%rowtype;
+  
+    l_count number;
+  
+    l_last_update_date date;
+  
+  begin
+  
+    xlog('Procedure download_items started');
+  
+    xxdl_report_pkg.create_report(p_report_type => 'Download Fusion Table', p_report_name => 'Download Items', x_report_id => g_report_id);
+  
+    xout('*** Download Items ***');
+    xout('');
+  
+    xlog('Getting last update date');
+    select max(last_update_date) into l_last_update_date from xxdl_egp_system_items;
+    xlog('last_update_date:' || l_last_update_date);
+  
+    if l_last_update_date is null then
+      l_last_update_date := to_date('1-1-1900', 'dd-mm-yyyy');
+    end if;
+  
+    l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
+            <soap:Header/>
+            <soap:Body>
+                <pub:runReport>
+                    <pub:reportRequest>
+                        <pub:attributeFormat>xml</pub:attributeFormat>
+                        <pub:attributeLocale></pub:attributeLocale>
+                        <pub:attributeTemplate></pub:attributeTemplate>
+                        <pub:parameterNameValues>
+                            <pub:item>
+                                <pub:name>p_last_update_date</pub:name>
+                                <pub:values>
+                                    <pub:item>[P_LAST_UPDATE_DATE]</pub:item>
+                                </pub:values>
+                            </pub:item>
+                        </pub:parameterNameValues>
+                        <pub:reportAbsolutePath>Custom/XXDL_INV_Integration/XXDL_EGP_SYSTEM_ITEMS_REP.xdo</pub:reportAbsolutePath>
+                        <pub:sizeOfDataChunkDownload>-1</pub:sizeOfDataChunkDownload>
+                    </pub:reportRequest>
+                    <pub:appParams></pub:appParams>
+                </pub:runReport>
+            </soap:Body>
+        </soap:Envelope>';
+  
+    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', json_date_to_char(l_last_update_date));
+  
+    l_soap_env := to_clob(l_text);
+  
+    l_count := 0;
+  
+    xlog('Calling ws_call to get the report');
+    xlog('xxdl_config_pkg.servicerooturl: ' || xxdl_config_pkg.servicerooturl);
+    xxfn_cloud_ws_pkg.ws_call(p_ws_url         => xxdl_config_pkg.servicerooturl || '/xmlpserver/services/ExternalReportWSSService?WSDL',
+                              p_soap_env       => l_soap_env,
+                              p_soap_act       => 'runReport',
+                              p_content_type   => 'application/soap+xml;charset="UTF-8"',
+                              x_return_status  => l_return_status,
+                              x_return_message => l_return_message,
+                              x_ws_call_id     => l_ws_call_id);
+  
+    dbms_lob.freetemporary(l_soap_env);
+  
+    xlog('x_return_status: ' || l_return_status);
+    if (l_return_status != 'S') then
+      xlog('Error getting data from BI report for Items');
+      xlog('l_return_message: ' || l_return_message);
+      raise e_processing_exception;
+    end if;
+  
+    xlog('Extracting xml response');
+  
+    begin
+      select response_xml into l_resp_xml from xxfn_ws_call_log_v where ws_call_id = l_ws_call_id;
+    exception
+      when no_data_found then
+        xlog('Error extracting xml from the response');
+        raise e_processing_exception;
+    end;
+  
+    begin
+      select xml.vals
+        into l_result_clob
+        from xxfn_ws_call_log_v a,
+             xmltable(xmlnamespaces('http://xmlns.oracle.com/oxp/service/PublicReportService' as "ns2",
+                                    'http://www.w3.org/2003/05/soap-envelope' as "env"),
+                      '/env:Envelope/env:Body/ns2:runReportResponse/ns2:runReportReturn' passing a.response_xml columns vals clob path
+                      './ns2:reportBytes') xml
+       where a.ws_call_id = l_ws_call_id
+         and xml.vals is not null;
+    exception
+      when no_data_found then
+        elog('Error getting l_result_clob from xml response');
+        raise e_processing_exception;
+    end;
+  
+    l_result_clob_decode := xxfn_cloud_ws_pkg.decodebase64(l_result_clob);
+  
+    xlog(to_char(dbms_lob.substr(l_result_clob_decode, 1000, 1)));
+  
+    l_resp_xml_id := xmltype.createxml(l_result_clob_decode);
+  
+    xlog('Looping thru the values');
+  
+    -- Loop thru the records
+    xout(' ');
+    for c_rec in (select xt.*
+                    from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns
+                                  
+                                  organization_id number path 'ORGANIZATION_ID',
+                                  inventory_item_id number path 'INVENTORY_ITEM_ID',
+                                  item_number varchar2(100) path 'ITEM_NUMBER',
+                                  description varchar2(500) path 'DESCRIPTION',
+                                  primary_uom_code varchar2(100) path 'PRIMARY_UOM_CODE',
+                                  inventory_item_flag varchar2(1) path 'INVENTORY_ITEM_FLAG',
+                                  cost_category_code varchar2(30) path 'COST_CATEGORY_CODE',
+                                  last_update_date varchar2(100) path 'LAST_UPDATE_DATE') xt) loop
+    
+      l_count := l_count + 1;
+    
+      xout(c_rec.item_number || ', ' || c_rec.organization_id);
+    
+      l_row.organization_id     := c_rec.organization_id;
+      l_row.inventory_item_id   := c_rec.inventory_item_id;
+      l_row.item_number         := c_rec.item_number;
+      l_row.description         := c_rec.description;
+      l_row.primary_uom_code    := c_rec.primary_uom_code;
+      l_row.inventory_item_flag := c_rec.inventory_item_flag;
+      l_row.cost_category_code  := c_rec.cost_category_code;
+      l_row.last_update_date    := xml_char_to_date(c_rec.last_update_date);
+      l_row.downloaded_date     := sysdate;
+    
+      delete from xxdl_egp_system_items
+       where organization_id = c_rec.organization_id
+         and inventory_item_id = c_rec.inventory_item_id;
+    
+      insert into xxdl_egp_system_items values l_row;
+    
+    end loop;
+  
+    xout('Items downloaded: ' || l_count);
+    xout('*** End of report ***');
+  
+    xlog('Procedure download_items ended');
   
   exception
     when e_processing_exception then

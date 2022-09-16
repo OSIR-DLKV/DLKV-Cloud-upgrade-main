@@ -10,7 +10,6 @@ create or replace view  XXDL_AVG_ITEM_COST_V as
 select c.cost_org,
        c.inventory_item_id,
        c.item_number,
-       c.val_unit_code,
        case
          when sum(c.quantity_onhand) = 0 then
           avg(c.unit_cost_average)
@@ -23,7 +22,6 @@ select c.cost_org,
  group by c.cost_org,
           c.inventory_item_id,
           c.item_number,
-          c.val_unit_code,
           c.uom_code;
 
   
