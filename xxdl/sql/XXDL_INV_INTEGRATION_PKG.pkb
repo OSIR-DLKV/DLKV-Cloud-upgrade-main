@@ -9,7 +9,7 @@ create or replace package body xxdl_inv_integration_pkg is
   ============================================================================+*/
 
   -- Log variables
-  c_module constant varchar2(100) := 'XXDL_INV_INTEGRATION_PKG ';
+  c_module constant varchar2(100) := 'XXDL_INV_INTEGRATION_PKG';
   g_log_level varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
   --g_log_level    varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
   g_last_message varchar2(2000);
@@ -70,16 +70,40 @@ create or replace package body xxdl_inv_integration_pkg is
   begin
     return cast(to_timestamp_tz(p_char, 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM') as timestamp with local time zone);
   end;
+
   /*===========================================================================+
   Procedure   : xml_date_to_char
   Description : Converts date to strings for json usage
   Usage       : 
   Arguments   : 
   ============================================================================+*/
-  function json_date_to_char(p_date date) return varchar2 as
+  function xml_date_to_char(p_date date) return varchar2 as
     l_char varchar2(100);
   begin
     return to_char(cast(p_date as timestamp with time zone) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM');
+  end;
+
+  /*===========================================================================+
+  Procedure   : timestamp_to_char
+  Description : Converts timestamp to string
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  function timestamp_to_char(p_date timestamp) return varchar2 as
+    l_char varchar2(100);
+  begin
+    return to_char(p_date, 'DD-MM-YYYY HH24:MI:SSxFF');
+  end;
+  /*===========================================================================+
+  Procedure   : timestamp_to_char
+  Description : Converts timestamp to string
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  function char_to_timestamp(p_date varchar2) return timestamp as
+    l_char varchar2(100);
+  begin
+    return to_timestamp(p_date, 'DD-MM-YYYY HH24:MI:SSxFF');
   end;
 
   /*===========================================================================+
@@ -109,7 +133,7 @@ create or replace package body xxdl_inv_integration_pkg is
   
     l_count number;
   
-    l_last_update_date date;
+    l_last_update_date timestamp;
   
   begin
   
@@ -126,7 +150,7 @@ create or replace package body xxdl_inv_integration_pkg is
     select max(last_update_date) into l_last_update_date from xxdl_avg_item_cost;
   
     if l_last_update_date is null then
-      l_last_update_date := to_date('1-1-1900', 'dd-mm-yyyy');
+      l_last_update_date := to_timestamp('1-1-1900', 'dd-mm-yyyy');
     end if;
   
     l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
@@ -153,7 +177,7 @@ create or replace package body xxdl_inv_integration_pkg is
             </soap:Body>
         </soap:Envelope>';
   
-    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', json_date_to_char(l_last_update_date));
+    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', timestamp_to_char(l_last_update_date));
   
     l_soap_env := to_clob(l_text);
   
@@ -215,29 +239,39 @@ create or replace package body xxdl_inv_integration_pkg is
     -- Loop thru the records
     xout(' ');
     for c_rec in (select xt.*
-                    from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns cost_org varchar2(100) path 'COST_ORG',
+                    from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns
+                                  
                                   inventory_item_id number path 'INVENTORY_ITEM_ID',
-                                  item_number varchar2(100) path 'ITEM_NUMBER',
                                   val_unit_code varchar2(100) path 'VAL_UNIT_CODE',
+                                  inv_organization_id number path 'INV_ORGANIZATION_ID',
+                                  cost_org_code varchar2(100) path 'COST_ORG_CODE',
+                                  inv_org_code varchar2(100) path 'INV_ORG_CODE',
+                                  project_number varchar2(100) path 'PROJECT_NUMBER',
                                   unit_cost_average number path 'UNIT_COST_AVERAGE',
                                   quantity_onhand number path 'QUANTITY_ONHAND',
                                   uom_code varchar2(30) path 'UOM_CODE',
-                                  last_update_date varchar2(100) path 'LAST_UPDATE_DATE') xt) loop
+                                  last_update_date_char varchar2(100) path 'LAST_UPDATE_DATE_CHAR') xt) loop
     
       l_count := l_count + 1;
     
-      xout(c_rec.item_number || ', ' || c_rec.unit_cost_average);
+      xout(c_rec.inventory_item_id || ', ' || c_rec.val_unit_code);
     
-      l_row.cost_org          := c_rec.cost_org;
-      l_row.inventory_item_id := c_rec.inventory_item_id;
-      l_row.item_number       := c_rec.item_number;
-      l_row.val_unit_code     := c_rec.val_unit_code;
-      l_row.unit_cost_average := c_rec.unit_cost_average;
-      l_row.quantity_onhand   := c_rec.quantity_onhand;
-      l_row.uom_code          := c_rec.uom_code;
-      l_row.last_update_date  := xml_char_to_date(c_rec.last_update_date);
+      l_row.inventory_item_id   := c_rec.inventory_item_id;
+      l_row.val_unit_code       := c_rec.val_unit_code;
+      l_row.inv_organization_id := c_rec.inv_organization_id;
+      l_row.cost_org_code       := c_rec.cost_org_code;
+      l_row.inv_org_code        := c_rec.inv_org_code;
+      l_row.project_number      := c_rec.project_number;
+      l_row.unit_cost_average   := c_rec.unit_cost_average;
+      l_row.quantity_onhand     := c_rec.quantity_onhand;
+      l_row.uom_code            := c_rec.uom_code;
+      l_row.last_update_date    := char_to_timestamp(c_rec.last_update_date_char);
     
       l_row.downloaded_date := sysdate;
+    
+      delete from xxdl_avg_item_cost
+       where inventory_item_id = c_rec.inventory_item_id
+         and val_unit_code = c_rec.val_unit_code;
     
       insert into xxdl_avg_item_cost values l_row;
     
@@ -415,7 +449,7 @@ create or replace package body xxdl_inv_integration_pkg is
                                   po_approved_date varchar2(100) path 'PO_APPROVED_DATE',
                                   po_unit_price number path 'PO_UNIT_PRICE',
                                   po_party_site_number varchar2(100) path 'PO_PARTY_SITE_NUMBER',
-                                  creation_date varchar2(100) path 'CREATION_DATE',
+                                  creation_date_char varchar2(100) path 'CREATION_DATE_CHAR',
                                   created_by varchar2(64) path 'CREATED_BY') xt
                    order by transaction_id) loop
     
@@ -445,7 +479,7 @@ create or replace package body xxdl_inv_integration_pkg is
       l_row.po_approved_date           := xml_char_to_date(c_rec.po_approved_date);
       l_row.po_unit_price              := c_rec.po_unit_price;
       l_row.po_party_site_number       := c_rec.po_party_site_number;
-      l_row.creation_date              := xml_char_to_date(c_rec.creation_date);
+      l_row.creation_date              := char_to_timestamp(c_rec.creation_date_char);
       l_row.created_by                 := c_rec.created_by;
       l_row.downloaded_date            := sysdate;
     
@@ -497,7 +531,7 @@ create or replace package body xxdl_inv_integration_pkg is
   
     l_count number;
   
-    l_last_update_date date;
+    l_last_update_date timestamp;
   
   begin
   
@@ -512,11 +546,11 @@ create or replace package body xxdl_inv_integration_pkg is
   
     xlog('Getting last update date');
     select max(last_update_date) into l_last_update_date from xxdl_inv_organizations;
-    xlog('last_update_date:' || l_last_update_date);
   
     if l_last_update_date is null then
-      l_last_update_date := to_date('1-1-1900', 'dd-mm-yyyy');
+      l_last_update_date := to_timestamp('01-01-1900', 'DD-MM-RRRR');
     end if;
+    xlog('last_update_date:' || l_last_update_date);
   
     l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
             <soap:Header/>
@@ -542,7 +576,7 @@ create or replace package body xxdl_inv_integration_pkg is
             </soap:Body>
         </soap:Envelope>';
   
-    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', json_date_to_char(l_last_update_date));
+    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', timestamp_to_char(l_last_update_date));
   
     l_soap_env := to_clob(l_text);
   
@@ -607,16 +641,16 @@ create or replace package body xxdl_inv_integration_pkg is
                     from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns organization_id number path 'ORGANIZATION_ID',
                                   organization_code varchar2(30) path 'ORGANIZATION_CODE',
                                   name varchar2(100) path 'NAME',
-                                  last_update_date varchar2(100) path 'LAST_UPDATE_DATE') xt) loop
+                                  last_update_date_char varchar2(100) path 'LAST_UPDATE_DATE_CHAR') xt) loop
     
       l_count := l_count + 1;
     
-      xout(c_rec.organization_id || ', ' || c_rec.organization_code || ', ' || c_rec. last_update_date);
+      xout(c_rec.organization_id || ', ' || c_rec.organization_code);
     
       l_row.organization_id   := c_rec.organization_id;
       l_row.organization_code := c_rec.organization_code;
       l_row.name              := c_rec.name;
-      l_row.last_update_date  := xml_char_to_date(c_rec.last_update_date);
+      l_row.last_update_date  := char_to_timestamp(c_rec.last_update_date_char);
     
       l_row.downloaded_date := sysdate;
     
@@ -670,7 +704,7 @@ create or replace package body xxdl_inv_integration_pkg is
   
     l_count number;
   
-    l_last_update_date date;
+    l_last_update_date timestamp;
   
   begin
   
@@ -683,11 +717,11 @@ create or replace package body xxdl_inv_integration_pkg is
   
     xlog('Getting last update date');
     select max(last_update_date) into l_last_update_date from xxdl_egp_system_items;
-    xlog('last_update_date:' || l_last_update_date);
   
     if l_last_update_date is null then
-      l_last_update_date := to_date('1-1-1900', 'dd-mm-yyyy');
+      l_last_update_date := to_timestamp('01-01-1900', 'DD-MM-RRRR');
     end if;
+    xlog('last_update_date:' || l_last_update_date);
   
     l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
             <soap:Header/>
@@ -713,7 +747,7 @@ create or replace package body xxdl_inv_integration_pkg is
             </soap:Body>
         </soap:Envelope>';
   
-    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', json_date_to_char(l_last_update_date));
+    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', timestamp_to_char(l_last_update_date));
   
     l_soap_env := to_clob(l_text);
   
@@ -784,7 +818,7 @@ create or replace package body xxdl_inv_integration_pkg is
                                   primary_uom_code varchar2(100) path 'PRIMARY_UOM_CODE',
                                   inventory_item_flag varchar2(1) path 'INVENTORY_ITEM_FLAG',
                                   cost_category_code varchar2(30) path 'COST_CATEGORY_CODE',
-                                  last_update_date varchar2(100) path 'LAST_UPDATE_DATE') xt) loop
+                                  last_update_date_char varchar2(100) path 'LAST_UPDATE_DATE_CHAR') xt) loop
     
       l_count := l_count + 1;
     
@@ -797,7 +831,7 @@ create or replace package body xxdl_inv_integration_pkg is
       l_row.primary_uom_code    := c_rec.primary_uom_code;
       l_row.inventory_item_flag := c_rec.inventory_item_flag;
       l_row.cost_category_code  := c_rec.cost_category_code;
-      l_row.last_update_date    := xml_char_to_date(c_rec.last_update_date);
+      l_row.last_update_date    := char_to_timestamp(c_rec.last_update_date_char);
       l_row.downloaded_date     := sysdate;
     
       delete from xxdl_egp_system_items
@@ -933,7 +967,7 @@ create or replace package body xxdl_inv_integration_pkg is
         l_rest_env := replace(l_rest_env, '[TransactionQuantity]', apex_escape.json(c_trans.transaction_quantity));
         l_rest_env := replace(l_rest_env, '[TransactionUnitOfMeasure]', apex_escape.json(c_trans.transaction_uom));
         l_rest_env := replace(l_rest_env, '[TransactionInterfaceId]', apex_escape.json(l_fusion_interface_id));
-        l_rest_env := replace(l_rest_env, '[TransactionDate]', json_date_to_char(c_trans.transaction_date));
+        l_rest_env := replace(l_rest_env, '[TransactionDate]', xml_date_to_char(c_trans.transaction_date));
         l_rest_env := replace(l_rest_env, '[TransactionHeaderId]', apex_escape.json(l_fusion_interface_id));
         l_rest_env := replace(l_rest_env, '[SubinventoryCode]', apex_escape.json(c_trans.subinventory_code));
         l_rest_env := replace(l_rest_env, '[LocatorName]', apex_escape.json(c_trans.locator_name));
@@ -1028,6 +1062,205 @@ create or replace package body xxdl_inv_integration_pkg is
       elog('SQLERRM: ' || sqlerrm);
       elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
       raise;
+  end;
+
+  /*===========================================================================+
+  Procedure   : download_transaction_types
+  Description : Downloads inventory transaction types from Fusion to XE
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure download_transaction_types is
+  
+    l_body           varchar2(30000);
+    l_result         varchar2(500);
+    l_result_clob    clob;
+    l_return_status  varchar2(500);
+    l_return_message varchar2(32000);
+    l_soap_env       clob;
+    l_text           varchar2(32000);
+    l_ws_call_id     number;
+  
+    l_resp_xml           xmltype;
+    l_resp_xml_id        xmltype;
+    l_result_nr_id       varchar2(500);
+    l_result_varchar     varchar2(32000);
+    l_result_clob_decode clob;
+  
+    l_row xxdl_inv_transaction_types%rowtype;
+  
+    l_count number;
+  
+    l_last_update_date timestamp;
+  
+  begin
+  
+    xlog('Procedure download_inv_orgs started');
+  
+    xxdl_report_pkg.create_report(p_report_type => 'Download Fusion Table',
+                                  p_report_name => 'Download Transaction Types',
+                                  x_report_id   => g_report_id);
+  
+    xout('*** Download Inventory Transaction Types ***');
+    xout('');
+  
+    xlog('Getting last update date');
+    select max(last_update_date) into l_last_update_date from xxdl_inv_transaction_types;
+  
+    if l_last_update_date is null then
+      l_last_update_date := to_timestamp('01-01-1900', 'DD-MM-RRRR');
+    end if;
+    xlog('last_update_date:' || l_last_update_date);
+  
+    l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
+            <soap:Header/>
+            <soap:Body>
+                <pub:runReport>
+                    <pub:reportRequest>
+                        <pub:attributeFormat>xml</pub:attributeFormat>
+                        <pub:attributeLocale></pub:attributeLocale>
+                        <pub:attributeTemplate></pub:attributeTemplate>
+                        <pub:parameterNameValues>
+                            <pub:item>
+                                <pub:name>p_last_update_date</pub:name>
+                                <pub:values>
+                                    <pub:item>[P_LAST_UPDATE_DATE]</pub:item>
+                                </pub:values>
+                            </pub:item>
+                        </pub:parameterNameValues>
+                        <pub:reportAbsolutePath>Custom/XXDL_INV_Integration/XXDL_INV_TRANSACTION_TYPES_REP.xdo</pub:reportAbsolutePath>
+                        <pub:sizeOfDataChunkDownload>-1</pub:sizeOfDataChunkDownload>
+                    </pub:reportRequest>
+                    <pub:appParams></pub:appParams>
+                </pub:runReport>
+            </soap:Body>
+        </soap:Envelope>';
+  
+    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', timestamp_to_char(l_last_update_date));
+  
+    l_soap_env := to_clob(l_text);
+  
+    l_count := 0;
+  
+    xlog('Calling ws_call to get the report');
+    xlog('xxdl_config_pkg.servicerooturl: ' || xxdl_config_pkg.servicerooturl);
+    xxfn_cloud_ws_pkg.ws_call(p_ws_url         => xxdl_config_pkg.servicerooturl || '/xmlpserver/services/ExternalReportWSSService?WSDL',
+                              p_soap_env       => l_soap_env,
+                              p_soap_act       => 'runReport',
+                              p_content_type   => 'application/soap+xml;charset="UTF-8"',
+                              x_return_status  => l_return_status,
+                              x_return_message => l_return_message,
+                              x_ws_call_id     => l_ws_call_id);
+  
+    dbms_lob.freetemporary(l_soap_env);
+  
+    xlog('x_return_status: ' || l_return_status);
+    if (l_return_status != 'S') then
+      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('l_return_message: ' || l_return_message);
+      raise e_processing_exception;
+    end if;
+  
+    xlog('Extracting xml response');
+  
+    begin
+      select response_xml into l_resp_xml from xxfn_ws_call_log_v where ws_call_id = l_ws_call_id;
+    exception
+      when no_data_found then
+        xlog('Error extracting xml from the response');
+        raise e_processing_exception;
+    end;
+  
+    begin
+      select xml.vals
+        into l_result_clob
+        from xxfn_ws_call_log_v a,
+             xmltable(xmlnamespaces('http://xmlns.oracle.com/oxp/service/PublicReportService' as "ns2",
+                                    'http://www.w3.org/2003/05/soap-envelope' as "env"),
+                      '/env:Envelope/env:Body/ns2:runReportResponse/ns2:runReportReturn' passing a.response_xml columns vals clob path
+                      './ns2:reportBytes') xml
+       where a.ws_call_id = l_ws_call_id
+         and xml.vals is not null;
+    exception
+      when no_data_found then
+        elog('Error getting l_result_clob from xml response');
+        raise e_processing_exception;
+    end;
+  
+    l_result_clob_decode := xxfn_cloud_ws_pkg.decodebase64(l_result_clob);
+  
+    xlog(to_char(dbms_lob.substr(l_result_clob_decode, 1000, 1)));
+  
+    l_resp_xml_id := xmltype.createxml(l_result_clob_decode);
+  
+    xlog('Looping thru the  values');
+  
+    -- Loop thru the records
+    xout(' ');
+    for c_rec in (select xt.*
+                    from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns
+                                  
+                                  transaction_type_id number path 'TRANSACTION_TYPE_ID',
+                                  transaction_type_name_hr varchar2(80) path 'TRANSACTION_TYPE_NAME_HR',
+                                  transaction_type_name_us varchar2(80) path 'TRANSACTION_TYPE_NAME_US',
+                                  trans_type_code varchar2(240) path 'TRANS_TYPE_CODE',
+                                  dlkv_code varchar2(240) path 'DLKV_CODE',
+                                  last_update_date_char varchar2(100) path 'LAST_UPDATE_DATE_CHAR') xt) loop
+    
+      l_count := l_count + 1;
+    
+      xout(c_rec.transaction_type_id || ', ' || c_rec.transaction_type_name_hr);
+    
+      l_row.transaction_type_id      := c_rec.transaction_type_id;
+      l_row.transaction_type_name_hr := c_rec.transaction_type_name_hr;
+      l_row.transaction_type_name_us := c_rec.transaction_type_name_us;
+      l_row.trans_type_code          := c_rec.trans_type_code;
+      l_row.dlkv_code                := c_rec.dlkv_code;
+      l_row.last_update_date         := char_to_timestamp(c_rec.last_update_date_char);
+      l_row.downloaded_date          := sysdate;
+    
+      delete from xxdl_inv_transaction_types where transaction_type_id = c_rec.transaction_type_id;
+    
+      insert into xxdl_inv_transaction_types values l_row;
+    
+    end loop;
+  
+    xout('Transaction types downloaded: ' || l_count);
+    xout('*** End of report ***');
+  
+    xlog('Procedure download_inv_orgs ended');
+  
+  exception
+    when e_processing_exception then
+      xlog('e_processing_exception risen');
+      xxdl_report_pkg.set_has_errors(g_report_id);
+    
+    when others then
+      xxdl_report_pkg.set_has_errors(g_report_id);
+      elog('SQLERRM: ' || sqlerrm);
+      elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
+      raise;
+  end;
+
+  /*===========================================================================+
+  Procedure   : download_all_inv_tables
+  Description : Downloads all Inventory tables from Fusion to XE
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure download_all_inv_tables as
+  begin
+  
+    download_inv_orgs;
+  
+    download_transaction_types;
+  
+    download_items;
+  
+    download_transactions;
+  
+    download_avg_item_cst;
+  
   end;
 
 end;

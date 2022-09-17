@@ -7,9 +7,10 @@
   v1.0 12.09.2022 Marko Sladoljev: Inicijalna verzija
   ============================================================================+*/
 create or replace view  XXDL_AVG_ITEM_COST_V as
-select c.cost_org,
-       c.inventory_item_id,
-       c.item_number,
+select c.inventory_item_id,
+       c.inv_organization_id,
+       c.cost_org_code,
+       c.inv_org_code,
        case
          when sum(c.quantity_onhand) = 0 then
           avg(c.unit_cost_average)
@@ -19,9 +20,10 @@ select c.cost_org,
        sum(c.quantity_onhand) quantity_onhand,
        c.uom_code
   from xxdl_avg_item_cost c
- group by c.cost_org,
-          c.inventory_item_id,
-          c.item_number,
+ group by c.inventory_item_id,
+          c.inv_organization_id,
+          c.cost_org_code,
+          c.inv_org_code,
           c.uom_code;
 
   

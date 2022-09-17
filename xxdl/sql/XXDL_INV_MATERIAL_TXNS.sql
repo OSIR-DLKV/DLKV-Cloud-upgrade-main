@@ -33,7 +33,7 @@ CREATE TABLE xxdl_inv_material_txns(
      po_approved_date           DATE,
      po_unit_price              NUMBER,
      po_party_site_number       VARCHAR2(100),
-     creation_date              DATE NOT NULL,
+     creation_date              TIMESTAMP,
      created_by                 VARCHAR2(64) NOT NULL,
      downloaded_date            DATE NOT NULL,
      CONSTRAINT XXDL_INV_MATERIAL_TXNS_PK PRIMARY KEY (TRANSACTION_ID) 

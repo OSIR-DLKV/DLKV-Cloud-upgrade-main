@@ -13,7 +13,7 @@ CREATE TABLE XXDL_INV_ORGANIZATIONS (
      organization_id    NUMBER  NOT NULL,
      organization_code  VARCHAR2(30) NOT NULL,
      name               VARCHAR2(100) NOT NULL,
-     last_update_date   DATE NOT NULL,
+     last_update_date   TIMESTAMP NOT NULL,
      downloaded_date    DATE NOT NULL,
 	 CONSTRAINT XXDL_INV_ORGANIZATIONS_PK PRIMARY KEY (organization_id)
   ); 
