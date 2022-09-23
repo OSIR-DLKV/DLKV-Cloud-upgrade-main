@@ -16,7 +16,9 @@ CREATE TABLE XXDL_EGP_SYSTEM_ITEMS (
     description         VARCHAR2(500) NOT NULL,  
     primary_uom_code    VARCHAR2(100) NOT NULL, 
     inventory_item_flag VARCHAR2(1) NOT NULL,   
+    quality_code        VARCHAR2(100),
     cost_category_code  VARCHAR2(30) NOT NULL,   
+    unit_weight         NUMBER,   
     last_update_date    TIMESTAMP NOT NULL,
     downloaded_date     DATE NOT NULL,
     CONSTRAINT XXDL_EGP_SYSTEM_ITEMS_PK PRIMARY KEY (organization_id, inventory_item_id)

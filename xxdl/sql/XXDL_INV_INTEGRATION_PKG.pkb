@@ -429,12 +429,9 @@ create or replace package body xxdl_inv_integration_pkg is
     for c_rec in (select xt.*
                     from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns transaction_id number path 'TRANSACTION_ID',
                                   inventory_item_id number path 'INVENTORY_ITEM_ID',
-                                  item_number varchar2(300) path 'ITEM_NUMBER',
                                   organization_id number path 'ORGANIZATION_ID',
-                                  organization_name varchar2(300) path 'ORGANIZATION_NAME',
                                   subinventory_code varchar2(10) path 'SUBINVENTORY_CODE',
                                   transaction_type_id number path 'TRANSACTION_TYPE_ID',
-                                  transaction_type_name varchar2(80) path 'TRANSACTION_TYPE_NAME',
                                   transaction_action_id number path 'TRANSACTION_ACTION_ID',
                                   transaction_source_type_id number path 'TRANSACTION_SOURCE_TYPE_ID',
                                   transaction_source_id number path 'TRANSACTION_SOURCE_ID',
@@ -455,16 +452,13 @@ create or replace package body xxdl_inv_integration_pkg is
     
       l_count := l_count + 1;
     
-      xout(c_rec.transaction_id || ', ' || c_rec.organization_name);
+      xout(c_rec.transaction_id || ', ' || c_rec.transaction_quantity || ' ' || c_rec.transaction_uom);
     
       l_row.transaction_id             := c_rec.transaction_id;
       l_row.inventory_item_id          := c_rec.inventory_item_id;
-      l_row.item_number                := c_rec.item_number;
       l_row.organization_id            := c_rec.organization_id;
-      l_row.organization_name          := c_rec.organization_name;
       l_row.subinventory_code          := c_rec.subinventory_code;
       l_row.transaction_type_id        := c_rec.transaction_type_id;
-      l_row.transaction_type_name      := c_rec.transaction_type_name;
       l_row.transaction_action_id      := c_rec.transaction_action_id;
       l_row.transaction_source_type_id := c_rec.transaction_source_type_id;
       l_row.transaction_source_id      := c_rec.transaction_source_id;
@@ -818,6 +812,8 @@ create or replace package body xxdl_inv_integration_pkg is
                                   primary_uom_code varchar2(100) path 'PRIMARY_UOM_CODE',
                                   inventory_item_flag varchar2(1) path 'INVENTORY_ITEM_FLAG',
                                   cost_category_code varchar2(30) path 'COST_CATEGORY_CODE',
+                                  quality_code varchar2(100) path 'QUALITY_CODE',
+                                  unit_weight varchar2(100) path 'UNIT_WEIGHT',
                                   last_update_date_char varchar2(100) path 'LAST_UPDATE_DATE_CHAR') xt) loop
     
       l_count := l_count + 1;
@@ -831,6 +827,8 @@ create or replace package body xxdl_inv_integration_pkg is
       l_row.primary_uom_code    := c_rec.primary_uom_code;
       l_row.inventory_item_flag := c_rec.inventory_item_flag;
       l_row.cost_category_code  := c_rec.cost_category_code;
+      l_row.quality_code        := c_rec.quality_code;
+      l_row.unit_weight         := c_rec.unit_weight;
       l_row.last_update_date    := char_to_timestamp(c_rec.last_update_date_char);
       l_row.downloaded_date     := sysdate;
     
@@ -1243,6 +1241,190 @@ create or replace package body xxdl_inv_integration_pkg is
   end;
 
   /*===========================================================================+
+  Procedure   : download_item_relations
+  Description : Downloads inventory item relationships from Fusion to XE
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure download_item_relations is
+  
+    l_body           varchar2(30000);
+    l_result         varchar2(500);
+    l_result_clob    clob;
+    l_return_status  varchar2(500);
+    l_return_message varchar2(32000);
+    l_soap_env       clob;
+    l_text           varchar2(32000);
+    l_ws_call_id     number;
+  
+    l_resp_xml           xmltype;
+    l_resp_xml_id        xmltype;
+    l_result_nr_id       varchar2(500);
+    l_result_varchar     varchar2(32000);
+    l_result_clob_decode clob;
+  
+    l_row xxdl_egp_item_relations%rowtype;
+  
+    l_count number;
+  
+    l_last_update_date timestamp;
+  
+  begin
+  
+    xlog('Procedure download_item_relations started');
+  
+    xxdl_report_pkg.create_report(p_report_type => 'Download Fusion Table',
+                                  p_report_name => 'Download Item Relationships',
+                                  x_report_id   => g_report_id);
+  
+    xout('*** Download Item Relationships ***');
+    xout('');
+  
+    xlog('Getting last update date');
+    select max(last_update_date) into l_last_update_date from xxdl_egp_item_relations;
+  
+    if l_last_update_date is null then
+      l_last_update_date := to_timestamp('01-01-1900', 'DD-MM-RRRR');
+    end if;
+    xlog('last_update_date:' || l_last_update_date);
+  
+    l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
+            <soap:Header/>
+            <soap:Body>
+                <pub:runReport>
+                    <pub:reportRequest>
+                        <pub:attributeFormat>xml</pub:attributeFormat>
+                        <pub:attributeLocale></pub:attributeLocale>
+                        <pub:attributeTemplate></pub:attributeTemplate>
+                        <pub:parameterNameValues>
+                            <pub:item>
+                                <pub:name>p_last_update_date</pub:name>
+                                <pub:values>
+                                    <pub:item>[P_LAST_UPDATE_DATE]</pub:item>
+                                </pub:values>
+                            </pub:item>
+                        </pub:parameterNameValues>
+                        <pub:reportAbsolutePath>Custom/XXDL_INV_Integration/XXDL_EGP_ITEM_RELATIONS_REP.xdo</pub:reportAbsolutePath>
+                        <pub:sizeOfDataChunkDownload>-1</pub:sizeOfDataChunkDownload>
+                    </pub:reportRequest>
+                    <pub:appParams></pub:appParams>
+                </pub:runReport>
+            </soap:Body>
+        </soap:Envelope>';
+  
+    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', timestamp_to_char(l_last_update_date));
+  
+    l_soap_env := to_clob(l_text);
+  
+    l_count := 0;
+  
+    xlog('Calling ws_call to get the report');
+    xlog('xxdl_config_pkg.servicerooturl: ' || xxdl_config_pkg.servicerooturl);
+    xxfn_cloud_ws_pkg.ws_call(p_ws_url         => xxdl_config_pkg.servicerooturl || '/xmlpserver/services/ExternalReportWSSService?WSDL',
+                              p_soap_env       => l_soap_env,
+                              p_soap_act       => 'runReport',
+                              p_content_type   => 'application/soap+xml;charset="UTF-8"',
+                              x_return_status  => l_return_status,
+                              x_return_message => l_return_message,
+                              x_ws_call_id     => l_ws_call_id);
+  
+    dbms_lob.freetemporary(l_soap_env);
+  
+    xlog('x_return_status: ' || l_return_status);
+    if (l_return_status != 'S') then
+      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('l_return_message: ' || l_return_message);
+      raise e_processing_exception;
+    end if;
+  
+    xlog('Extracting xml response');
+  
+    begin
+      select response_xml into l_resp_xml from xxfn_ws_call_log_v where ws_call_id = l_ws_call_id;
+    exception
+      when no_data_found then
+        xlog('Error extracting xml from the response');
+        raise e_processing_exception;
+    end;
+  
+    begin
+      select xml.vals
+        into l_result_clob
+        from xxfn_ws_call_log_v a,
+             xmltable(xmlnamespaces('http://xmlns.oracle.com/oxp/service/PublicReportService' as "ns2",
+                                    'http://www.w3.org/2003/05/soap-envelope' as "env"),
+                      '/env:Envelope/env:Body/ns2:runReportResponse/ns2:runReportReturn' passing a.response_xml columns vals clob path
+                      './ns2:reportBytes') xml
+       where a.ws_call_id = l_ws_call_id
+         and xml.vals is not null;
+    exception
+      when no_data_found then
+        elog('Error getting l_result_clob from xml response');
+        raise e_processing_exception;
+    end;
+  
+    l_result_clob_decode := xxfn_cloud_ws_pkg.decodebase64(l_result_clob);
+  
+    xlog(to_char(dbms_lob.substr(l_result_clob_decode, 1000, 1)));
+  
+    l_resp_xml_id := xmltype.createxml(l_result_clob_decode);
+  
+    xlog('Looping thru the  values');
+  
+    -- Loop thru the records
+    xout(' ');
+    for c_rec in (select xt.*
+                    from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns
+                                  
+                                  item_relationship_id number path 'ITEM_RELATIONSHIP_ID',
+                                  item_relationship_type varchar2(100) path 'ITEM_RELATIONSHIP_TYPE',
+                                  inventory_item_id number path 'INVENTORY_ITEM_ID',
+                                  organization_id number path 'ORGANIZATION_ID',
+                                  sub_type varchar2(100) path 'SUB_TYPE',
+                                  cross_reference varchar2(250) path 'CROSS_REFERENCE',
+                                  master_organization_id number path 'MASTER_ORGANIZATION_ID',
+                                  last_update_date_char varchar2(100) path 'LAST_UPDATE_DATE_CHAR'
+                                  
+                                  ) xt) loop
+    
+      l_count := l_count + 1;
+    
+      xout(c_rec.item_relationship_id || ', ' || c_rec.cross_reference);
+    
+      l_row.item_relationship_id   := c_rec.item_relationship_id;
+      l_row.item_relationship_type := c_rec.item_relationship_type;
+      l_row.inventory_item_id      := c_rec.inventory_item_id;
+      l_row.organization_id        := c_rec.organization_id;
+      l_row.sub_type               := c_rec.sub_type;
+      l_row.cross_reference        := c_rec.cross_reference;
+      l_row.master_organization_id := c_rec.master_organization_id;
+      l_row.last_update_date       := char_to_timestamp(c_rec.last_update_date_char);
+      l_row.downloaded_date        := sysdate;
+    
+      delete from xxdl_egp_item_relations where item_relationship_id = c_rec.item_relationship_id;
+    
+      insert into xxdl_egp_item_relations values l_row;
+    
+    end loop;
+  
+    xout('Item relations downloaded: ' || l_count);
+    xout('*** End of report ***');
+  
+    xlog('Procedure download_item_relations ended');
+  
+  exception
+    when e_processing_exception then
+      xlog('e_processing_exception risen');
+      xxdl_report_pkg.set_has_errors(g_report_id);
+    
+    when others then
+      xxdl_report_pkg.set_has_errors(g_report_id);
+      elog('SQLERRM: ' || sqlerrm);
+      elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
+      raise;
+  end;
+
+  /*===========================================================================+
   Procedure   : download_all_inv_tables
   Description : Downloads all Inventory tables from Fusion to XE
   Usage       : 
@@ -1256,6 +1438,8 @@ create or replace package body xxdl_inv_integration_pkg is
     download_transaction_types;
   
     download_items;
+  
+    download_item_relations;
   
     download_transactions;
   
