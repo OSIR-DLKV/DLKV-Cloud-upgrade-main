@@ -1425,6 +1425,218 @@ create or replace package body xxdl_inv_integration_pkg is
   end;
 
   /*===========================================================================+
+  Procedure   : download_cst_accounting
+  Description : Downloads material cost accounting from Fusion to XE
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure download_cst_accounting is
+  
+    l_body           varchar2(30000);
+    l_result         varchar2(500);
+    l_result_clob    clob;
+    l_return_status  varchar2(500);
+    l_return_message varchar2(32000);
+    l_soap_env       clob;
+    l_text           varchar2(32000);
+    l_ws_call_id     number;
+  
+    l_resp_xml           xmltype;
+    l_resp_xml_id        xmltype;
+    l_result_nr_id       varchar2(500);
+    l_result_varchar     varchar2(32000);
+    l_result_clob_decode clob;
+  
+    l_row xxdl_cst_accounting%rowtype;
+  
+    l_count number;
+  
+    l_last_update_date timestamp;
+  
+  begin
+  
+    xlog('Procedure download_cst_accounting started');
+  
+    xxdl_report_pkg.create_report(p_report_type => 'Download Fusion Table', p_report_name => 'Download Cost Accouning', x_report_id => g_report_id);
+  
+    xout('*** Download Cost Accounting ***');
+    xout('');
+  
+    xlog('Getting last update date');
+    select max(last_update_date) into l_last_update_date from xxdl_cst_accounting;
+  
+    if l_last_update_date is null then
+      l_last_update_date := to_timestamp('01-01-1900', 'DD-MM-RRRR');
+    end if;
+    xlog('last_update_date:' || l_last_update_date);
+  
+    l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
+            <soap:Header/>
+            <soap:Body>
+                <pub:runReport>
+                    <pub:reportRequest>
+                        <pub:attributeFormat>xml</pub:attributeFormat>
+                        <pub:attributeLocale></pub:attributeLocale>
+                        <pub:attributeTemplate></pub:attributeTemplate>
+                        <pub:parameterNameValues>
+                            <pub:item>
+                                <pub:name>p_last_update_date</pub:name>
+                                <pub:values>
+                                    <pub:item>[P_LAST_UPDATE_DATE]</pub:item>
+                                </pub:values>
+                            </pub:item>
+                        </pub:parameterNameValues>
+                        <pub:reportAbsolutePath>Custom/XXDL_INV_Integration/XXDL_CST_ACCOUNTING_REP.xdo</pub:reportAbsolutePath>
+                        <pub:sizeOfDataChunkDownload>-1</pub:sizeOfDataChunkDownload>
+                    </pub:reportRequest>
+                    <pub:appParams></pub:appParams>
+                </pub:runReport>
+            </soap:Body>
+        </soap:Envelope>';
+  
+    l_text := replace(l_text, '[P_LAST_UPDATE_DATE]', timestamp_to_char(l_last_update_date));
+  
+    l_soap_env := to_clob(l_text);
+  
+    l_count := 0;
+  
+    xlog('Calling ws_call to get the report');
+    xlog('xxdl_config_pkg.servicerooturl: ' || xxdl_config_pkg.servicerooturl);
+    xxfn_cloud_ws_pkg.ws_call(p_ws_url         => xxdl_config_pkg.servicerooturl || '/xmlpserver/services/ExternalReportWSSService?WSDL',
+                              p_soap_env       => l_soap_env,
+                              p_soap_act       => 'runReport',
+                              p_content_type   => 'application/soap+xml;charset="UTF-8"',
+                              x_return_status  => l_return_status,
+                              x_return_message => l_return_message,
+                              x_ws_call_id     => l_ws_call_id);
+  
+    dbms_lob.freetemporary(l_soap_env);
+  
+    xlog('x_return_status: ' || l_return_status);
+    if (l_return_status != 'S') then
+      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('l_return_message: ' || l_return_message);
+      raise e_processing_exception;
+    end if;
+  
+    xlog('Extracting xml response');
+  
+    begin
+      select response_xml into l_resp_xml from xxfn_ws_call_log_v where ws_call_id = l_ws_call_id;
+    exception
+      when no_data_found then
+        xlog('Error extracting xml from the response');
+        raise e_processing_exception;
+    end;
+  
+    begin
+      select xml.vals
+        into l_result_clob
+        from xxfn_ws_call_log_v a,
+             xmltable(xmlnamespaces('http://xmlns.oracle.com/oxp/service/PublicReportService' as "ns2",
+                                    'http://www.w3.org/2003/05/soap-envelope' as "env"),
+                      '/env:Envelope/env:Body/ns2:runReportResponse/ns2:runReportReturn' passing a.response_xml columns vals clob path
+                      './ns2:reportBytes') xml
+       where a.ws_call_id = l_ws_call_id
+         and xml.vals is not null;
+    exception
+      when no_data_found then
+        elog('Error getting l_result_clob from xml response');
+        raise e_processing_exception;
+    end;
+  
+    l_result_clob_decode := xxfn_cloud_ws_pkg.decodebase64(l_result_clob);
+  
+    xlog(to_char(dbms_lob.substr(l_result_clob_decode, 1000, 1)));
+  
+    l_resp_xml_id := xmltype.createxml(l_result_clob_decode);
+  
+    xlog('Looping thru the  values');
+  
+    -- Loop thru the records
+    xout(' ');
+    for c_rec in (select xt.*
+                    from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns
+                                  
+                                  ae_header_id number path 'AE_HEADER_ID',
+                                  ae_line_num number path 'AE_LINE_NUM',
+                                  inv_transaction_id number path 'INV_TRANSACTION_ID',
+                                  cst_transaction_id number path 'CST_TRANSACTION_ID',
+                                  inventory_item_id number path 'INVENTORY_ITEM_ID',
+                                  inventory_org_id number path 'INVENTORY_ORG_ID',
+                                  unit_cost number path 'UNIT_COST',
+                                  seg1_company varchar2(30) path 'SEG1_COMPANY',
+                                  seg2_account varchar2(30) path 'SEG2_ACCOUNT',
+                                  seg3_cost_center varchar2(30) path 'SEG3_COST_CENTER',
+                                  seg4_project varchar2(30) path 'SEG4_PROJECT',
+                                  seg5_work_order varchar2(30) path 'SEG5_WORK_ORDER',
+                                  seg6_sub_account varchar2(30) path 'SEG6_SUB_ACCOUNT',
+                                  seg7_sales_order varchar2(30) path 'SEG7_SALES_ORDER',
+                                  seg8_rel_company varchar2(30) path 'SEG8_REL_COMPANY',
+                                  accounting_date varchar2(100) path 'ACCOUNTING_DATE',
+                                  accounting_line_type varchar2(100) path 'ACCOUNTING_LINE_TYPE',
+                                  cost_transaction_type varchar2(100) path 'COST_TRANSACTION_TYPE',
+                                  ledger_amount number path 'LEDGER_AMOUNT',
+                                  accounted_dr number path 'ACCOUNTED_DR',
+                                  accounted_cr number path 'ACCOUNTED_CR',
+                                  last_update_date_char varchar2(100) path 'LAST_UPDATE_DATE_CHAR'
+                                  
+                                  ) xt) loop
+    
+      l_count := l_count + 1;
+    
+      xout(c_rec.ae_header_id || ', ' || c_rec.ae_line_num);
+    
+      l_row.ae_header_id          := c_rec.ae_header_id;
+      l_row.ae_line_num           := c_rec.ae_line_num;
+      l_row.inv_transaction_id    := c_rec.inv_transaction_id;
+      l_row.cst_transaction_id    := c_rec.cst_transaction_id;
+      l_row.inventory_item_id     := c_rec.inventory_item_id;
+      l_row.inventory_org_id      := c_rec.inventory_org_id;
+      l_row.unit_cost             := c_rec.unit_cost;
+      l_row.seg1_company          := c_rec.seg1_company;
+      l_row.seg2_account          := c_rec.seg2_account;
+      l_row.seg3_cost_center      := c_rec.seg3_cost_center;
+      l_row.seg4_project          := c_rec.seg4_project;
+      l_row.seg5_work_order       := c_rec.seg5_work_order;
+      l_row.seg6_sub_account      := c_rec.seg6_sub_account;
+      l_row.seg7_sales_order      := c_rec.seg7_sales_order;
+      l_row.seg8_rel_company      := c_rec.seg8_rel_company;
+      l_row.accounting_date       := xml_char_to_date(c_rec.accounting_date);
+      l_row.accounting_line_type  := c_rec.accounting_line_type;
+      l_row.cost_transaction_type := c_rec.cost_transaction_type;
+      l_row.ledger_amount         := c_rec.ledger_amount;
+      l_row.accounted_dr          := c_rec.accounted_dr;
+      l_row.accounted_cr          := c_rec.accounted_cr;
+      l_row.last_update_date      := char_to_timestamp(c_rec.last_update_date_char);
+      l_row.downloaded_date       := sysdate;
+    
+      delete from xxdl_cst_accounting
+       where ae_header_id = c_rec.ae_header_id
+         and ae_line_num = c_rec.ae_line_num;
+    
+      insert into xxdl_cst_accounting values l_row;
+    
+    end loop;
+  
+    xout('Cost accounting lines downloaded: ' || l_count);
+    xout('*** End of report ***');
+  
+    xlog('Procedure download_cst_accounting ended');
+  
+  exception
+    when e_processing_exception then
+      xlog('e_processing_exception risen');
+      xxdl_report_pkg.set_has_errors(g_report_id);
+    
+    when others then
+      xxdl_report_pkg.set_has_errors(g_report_id);
+      elog('SQLERRM: ' || sqlerrm);
+      elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
+      raise;
+  end;
+
+  /*===========================================================================+
   Procedure   : download_all_inv_tables
   Description : Downloads all Inventory tables from Fusion to XE
   Usage       : 
@@ -1444,6 +1656,8 @@ create or replace package body xxdl_inv_integration_pkg is
     download_transactions;
   
     download_avg_item_cst;
+    
+    download_cst_accounting;
   
   end;
 
