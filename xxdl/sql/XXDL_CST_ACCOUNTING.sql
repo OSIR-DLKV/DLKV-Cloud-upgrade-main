@@ -37,3 +37,7 @@ CREATE TABLE xxdl_cst_accounting(
   ); 
 
 CREATE INDEX xxdl_cst_accounting_n1 ON xxdl_cst_accounting(last_update_date);
+
+CREATE INDEX xxdl_cst_accounting_n2 ON xxdl_cst_accounting(inv_transaction_id);
+
+
