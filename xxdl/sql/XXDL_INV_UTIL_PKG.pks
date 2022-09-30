@@ -1,7 +1,3 @@
-SET DEFINE OFF;
-SET VERIFY OFF;
-WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
-WHENEVER OSERROR EXIT FAILURE ROLLBACK;
 create or replace package XXDL_INV_UTIL_PKG as
   /*$Header: $
   =============================================================================
@@ -39,6 +35,21 @@ procedure migrate_items_cloud (
       p_retry_error in varchar2);
       
   --/*-----------------------------------------------------------------------------
+  -- Name    : migrate_items_cloud
+  -- Desc    : Procedure for migrating EBS items to cloud
+  -- Usage   : 
+  -- Parameters
+  --     - errbuff: Concurrent program message status
+  --     - retcode: Concurrent execution status
+  -------------------------------------------------------------------------------*/
+procedure migrate_items_cloud_ewha_test (
+      p_item_seg in varchar2,
+      p_rows in number,
+      p_year in varchar2,
+      p_retry_error in varchar2);
+
+
+  --/*-----------------------------------------------------------------------------
   -- Name    : update_items_cloud
   -- Desc    : Procedure for migrating EBS items to cloud
   -- Usage   : 
@@ -65,10 +76,36 @@ procedure find_item_cloud (
       p_org in varchar2,
       p_cloud_item out number,
       p_cloud_org out number);
+      
+  --/*-----------------------------------------------------------------------------
+  -- Name    : update_items_cloud
+  -- Desc    : Procedure for migrating EBS items to cloud
+  -- Usage   : 
+  -- Parameters
+  --     - errbuff: Concurrent program message status
+  --     - retcode: Concurrent execution status
+  --------------------------------------------------------------------------------*/
+procedure update_items_cloud_ewha_test  (
+      p_item_seg in varchar2,
+      p_rows in number,
+      p_year in varchar2,
+      p_retry_error in varchar2);
+
+ --/*-----------------------------------------------------------------------------
+  -- Name    : find_item_cloud
+  -- Desc    : Procedzure to find item in cloud
+  -- Usage   : 
+  -- Parameters
+  --     p_item in varchar2,
+  --    p_org in varchar
+  -------------------------------------------------------------------------------*/
+procedure find_item_cloud_ewha_test  (
+      p_item in varchar2,
+      p_org in varchar2,
+      p_cloud_item out number,
+      p_cloud_org out number);
 
 function parse_cs_response(p_ws_call_id in number) return varchar2;
 
 
 end XXDL_INV_UTIL_PKG;
-/
-exit;
