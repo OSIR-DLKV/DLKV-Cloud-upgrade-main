@@ -820,6 +820,8 @@ create or replace package body xxdl_inv_integration_pkg is
     
       xout(c_rec.item_number || ', ' || c_rec.organization_id);
     
+      xlog('c_rec.last_update_date_char: ' || c_rec.last_update_date_char);
+    
       l_row.organization_id     := c_rec.organization_id;
       l_row.inventory_item_id   := c_rec.inventory_item_id;
       l_row.item_number         := c_rec.item_number;
@@ -1656,8 +1658,23 @@ create or replace package body xxdl_inv_integration_pkg is
     download_transactions;
   
     download_avg_item_cst;
-    
+  
     download_cst_accounting;
+  
+  end;
+
+  /*===========================================================================+
+  Procedure   : download_items_schedule
+  Description : Downloads items and relations, used in job schedule
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure download_items_schedule as
+  begin
+  
+    download_items;
+  
+    download_item_relations;
   
   end;
 
