@@ -13,7 +13,7 @@ CREATE TABLE xxdl_egp_item_relations (
      item_relationship_id   NUMBER NOT NULL,
      item_relationship_type VARCHAR2(100) NOT NULL,
      inventory_item_id      NUMBER NOT NULL,
-     organization_id        NUMBER NOT NULL,
+     organization_id        NUMBER,
      sub_type               VARCHAR2(100),
      cross_reference        VARCHAR2(250) NOT NULL,
      master_organization_id NUMBER,

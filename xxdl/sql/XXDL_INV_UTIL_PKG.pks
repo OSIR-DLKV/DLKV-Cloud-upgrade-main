@@ -46,7 +46,8 @@ procedure migrate_items_cloud_ewha_test (
       p_item_seg in varchar2,
       p_rows in number,
       p_year in varchar2,
-      p_retry_error in varchar2);
+      p_retry_error in varchar2,
+      p_suffix in varchar2);
 
 
   --/*-----------------------------------------------------------------------------
@@ -109,3 +110,4 @@ function parse_cs_response(p_ws_call_id in number) return varchar2;
 
 
 end XXDL_INV_UTIL_PKG;
+/

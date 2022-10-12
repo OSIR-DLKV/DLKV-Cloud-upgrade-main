@@ -14,6 +14,15 @@ CREATE TABLE XXDL_SLA_MAP_SET_DEFINITION (
   CONSTRAINT XXDL_SLA_MAP_SET_DEFINITION_PK PRIMARY KEY (mapping_set_code)
 );
 
-
+insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled)
+values ('XXDL_CC_FROM_PROJECT_TASK', 'Cost Management', 'Mjesto troska', 'Y');
+insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled)
+values ('XXDL_CC_FROM_REQ_PROJ_TASK', 'Purchasing', 'Mjesto troska', 'Y');
+insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled)
+values ('XXDL_CC_FROM_SALES_ORDER', 'Cost Management', 'Mjesto troska', 'Y');
+insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled)
+values ('XXDL_CC_FROM_AR_INVOICE_PROJ', 'Receivables', 'Mjesto troska', 'Y');
+insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled)
+values ('XXDL_CC_FROM_SO_NUMBER', 'Purchasing', 'Mjesto troska', 'Y');
 
 
