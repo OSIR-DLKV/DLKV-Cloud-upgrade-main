@@ -182,8 +182,10 @@ String getBillingTxnTypeName(String orderLookupType,String orderTxnTypeName) {
   
   varMessage = "EXITING Biling Trx Name ";
   messages.add(new Message( Message.MessageType.ERROR,varMessage));
-  ex = new ValidationException(messages);
-  throw ex;
+  // this throw ex empties previous message so remove after you confirm that every thing up
+  //to the call of this function is OK.
+  //ex = new ValidationException(messages);
+  //throw ex;
 */
 
   return txnTypeName;
@@ -208,7 +210,7 @@ Long getCreditMemoTxnTypeId(String billingTxnTypeName) {
   //Only return Billing Transaction Type for the - Common Set - to be changed as required
 
   vcrow.setAttribute("Name", billingTxnTypeName);
-  vcrow.setAttribute("SetName", "Common Set");
+  //vcrow.setAttribute("SetName", "Common Set"); //this currently causes a problem when we switch language
 
   //Execute the view object query to find a matching row
   def rowset = txnTypePVO.findByViewCriteriaWithBindVars(vc, 1, new String[0], new Object[0]);
@@ -230,8 +232,11 @@ Long getCreditMemoTxnTypeId(String billingTxnTypeName) {
   
   varMessage = "EXITING Biling Trx Name ";
   messages.add(new Message( Message.MessageType.ERROR,varMessage));
-  ex = new ValidationException(messages);
-  throw ex;*/
+  // this throw ex empties previous message so remove after you confirm that every thing up
+  //to the call of this function is OK.
+  //ex = new ValidationException(messages);
+  //throw ex;
+  */
 
   return txnTypeId;
 }
