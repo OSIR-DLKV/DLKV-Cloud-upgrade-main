@@ -51,7 +51,8 @@ CREATE
     BANK_BRANCH_ID NUMBER,
     CLOUD_BANK_ID NUMBER,
     CLOUD_BRANCH_ID NUMBER,
-    cloud_payment_instrument_id number
+    cloud_payment_instrument_id number,
+    PRIMARY_FLAG VARCHAR2(1)
    );
   
   

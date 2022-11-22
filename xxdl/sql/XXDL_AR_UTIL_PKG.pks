@@ -82,7 +82,8 @@ procedure find_address_cloud(
   -- Parameters
 ============================================================================+*/
 procedure update_cust_site_tax_ref(
-      p_party_number in varchar2);
+      p_party_id in varchar2
+      ,p_party_site_id in varchar2);
       
 
   /*===========================================================================+
