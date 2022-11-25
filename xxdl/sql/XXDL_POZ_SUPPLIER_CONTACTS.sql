@@ -1,0 +1,43 @@
+/* $Header:  $
+============================================================================+
+
+File Name   : XXDL_POZ_SUPPLIER_CONTACTS.sql
+Description : Table creation script 
+
+
+History     :
+V1.0 12.03.2019 - Zoran Kovac - initial creation
+============================================================================+*/
+
+WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
+
+PROMPT XXDL_POZ_SUPPLIER_CONTACTS;
+--drop index XXDL_POZ_SUPPLIER_CONTACTS_U1;
+--drop table XXDL_POZ_SUPPLIER_CONTACTS;
+
+CREATE
+  TABLE "XXDL_POZ_SUPPLIER_CONTACTS"
+  (
+    "VENDOR_CONTACT_ID"    NUMBER NOT NULL,
+	  "VENDOR_ID"			   NUMBER,
+    "PER_PARTY_ID"         NUMBER,
+    "PARTY_SITE_ID"        NUMBER,
+    "PERSON_FIRST_NAME"    VARCHAR2(600 BYTE),
+    "PERSON_LAST_NAME"     VARCHAR2(600 BYTE),
+    "EMAIL_ADDRESS"        VARCHAR2(1280 BYTE),
+    "CREATION_DATE"        DATE,
+    "LAST_UPDATE_DATE"     DATE,
+    "TRANSF_CREATION_DATE" DATE,
+    "TRANSF_LAST_UPDATE"   DATE,
+    "INACTIVE_DATE"        DATE,
+    "CLOUD_IMPORTED" VARCHAR2(1),
+    "CLOUD_IMPORT_MESSAGE" VARCHAR2(4000),
+    "CLOUD_ADDRESS_ASSIGN" VARCHAR2(1)
+   );
+  
+  CREATE UNIQUE INDEX "XXDL_POZ_SUPPLIER_CONTACTS_U1" ON "XXDL_POZ_SUPPLIER_CONTACTS" ("PARTY_SITE_ID","VENDOR_CONTACT_ID") 
+  PCTFREE 10 INITRANS 2 MAXTRANS 255 COMPUTE STATISTICS 
+  TABLESPACE "USERS" ;
+
+EXIT;
+/

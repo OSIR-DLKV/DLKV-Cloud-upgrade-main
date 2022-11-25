@@ -82,8 +82,55 @@ procedure find_address_cloud(
   -- Parameters
 ============================================================================+*/
 procedure update_cust_site_tax_ref(
-      p_party_number in varchar2);
+      p_party_id in varchar2
+      ,p_party_site_id in varchar2);
+      
 
+  /*===========================================================================+
+  -- Name    : update_cust_acc_profile
+  -- Desc    : Update customer acct profile
+  -- Usage   : 
+  -- Parameters
+============================================================================+*/
+procedure update_cust_acc_profile(
+    p_party_number in varchar2);
+
+/*===========================================================================+
+  Function   : DecodeBASE64
+  Description : Decodes BASE64
+  Usage       : 
+  Arguments   : 
+  Returns     :
+============================================================================+*/
+FUNCTION DecodeBASE64(InBase64Char IN OUT NOCOPY CLOB) RETURN CLOB;
+
+/*===========================================================================+
+Function   : get_suppliers
+Description : Download suppliers, addresses, sites and contacts from cloud to EBS. Update existing records if there were changes after max(transfer creation_date)
+Usage       :
+Arguments   : p_entity - name of the entity we download, SUPPLIER,SUPPLIER_SITES, SUPPLIER_ADDRESSES, SUPPLIER_CONTACTS
+              p_date - entities max date of creation of last_update_date
+Remarks     :
+============================================================================+*/
+function get_suppliers(p_entity in varchar2,p_date in varchar2) return varchar2;
+
+/*===========================================================================+
+Function   : get_supplier_info
+Description : retrieves all supplier (supplier, site, address, contact) info to a local EBS custom table
+Usage       : Callin from DB scheduled job
+Arguments   :
+Remarks     :
+============================================================================+*/
+procedure get_supplier_info (errbuf out varchar2, retcode out varchar2);
+
+/*===========================================================================+
+  -- Name    : migrate_suppliers_cloud
+  -- Desc    : Migrate supppliers based on imported customers
+  -- Usage   : 
+  -- Parameters
+============================================================================+*/
+procedure migrate_suppliers_cloud(
+      p_party_number in varchar2);
       
 function parse_cs_response(p_ws_call_id in number) return varchar2;
 
