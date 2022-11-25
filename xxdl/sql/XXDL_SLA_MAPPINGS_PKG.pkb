@@ -611,13 +611,6 @@ create or replace package body xxdl_sla_mappings_pkg is
         continue;
       end if;
     
-      /* 
-       if c_rec.out_value = '210000' then
-          -- TODO: Remove after testing
-          continue;
-        end if;
-      */
-    
       -- If coa is changed, new batch is created
       if l_prev_coa != c_rec.out_chart_of_accounts then
         l_batch_id := xxdl_sla_map_batch_s1.nextval;
@@ -750,7 +743,7 @@ create or replace package body xxdl_sla_mappings_pkg is
     exception
       when no_data_found then
         xlog('There is no records to process in batch');
-        raise e_processing_exception;
+        return;
     end;
   
     xlog('Creating the file');
@@ -840,6 +833,35 @@ create or replace package body xxdl_sla_mappings_pkg is
     xlog('Procedure process_interface ended');
   
   end;
+  /*===========================================================================+
+  Procedure   : process_interface_group
+  Description : Calls process_interface for every batch in the group
+  Usage       :
+  Arguments   :
+  Remarks     :
+  ============================================================================+*/
+  procedure process_interface_group(p_group_id number, p_reprocess_flag boolean, p_purge_flag boolean) as
+  
+    cursor cur_batches is
+      select batch_id,
+             count(1) records_count
+        from xxdl_sla_mappings_interface
+       where group_id = p_group_id
+       group by batch_id;
+  
+  begin
+  
+    xlog('Procedure process_interface_group started');
+  
+    for c_batch in cur_batches loop
+      xout('Processing batch : ' || c_batch.batch_id);
+      xlog('Number of records: ' || c_batch.records_count);
+      xlog('Processing all interface values');
+      process_interface(p_batch_id => c_batch.batch_id, p_reprocess_flag => p_reprocess_flag, p_purge_flag => p_purge_flag);
+    end loop;
+    xlog('Procedure process_interface_group ended');
+  
+  end;
 
   /*===========================================================================+
   Procedure   : refresh_mapping_set
@@ -851,13 +873,6 @@ create or replace package body xxdl_sla_mappings_pkg is
   procedure refresh_mapping_set(p_mapping_set_code varchar2) is
   
     l_group_id number;
-  
-    cursor cur_batches(cp_group_id number) is
-      select batch_id,
-             count(1) records_count
-        from xxdl_sla_mappings_interface
-       where group_id = cp_group_id
-       group by batch_id;
   
   begin
     xlog('refresh_mapping_set started');
@@ -875,12 +890,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   
     xout('Group id: ' || l_group_id);
   
-    for c_batch in cur_batches(l_group_id) loop
-      xout('Processing batch : ' || c_batch.batch_id);
-      xlog('Number of records: ' || c_batch.records_count);
-      xlog('Processing all interface values');
-      process_interface(p_batch_id => c_batch.batch_id, p_reprocess_flag => true, p_purge_flag => true);
-    end loop;
+    process_interface_group(p_group_id => l_group_id, p_reprocess_flag => true, p_purge_flag => true);
   
     xout('*** End of report ***');
   
@@ -910,6 +920,9 @@ create or replace package body xxdl_sla_mappings_pkg is
     for c_set in cur_map_sets loop
       refresh_mapping_set(c_set.mapping_set_code);
     end loop;
+  
+    referesh_work_orders_mappings;
+  
     xlog('refresh_all_mapping_sets ended');
   exception
     when others then
@@ -917,89 +930,229 @@ create or replace package body xxdl_sla_mappings_pkg is
       elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
       raise;
   end;
-  
-  
-   /*===========================================================================+
-  Procedure   : test
 
+  /*===========================================================================+
+  Procedure   : referesh_so_from_wo_mapping
+  Description : Refreshes sales order from Work order mapping
+  Usage       :
+  Arguments   : 
+  Remarks     :
   ============================================================================+*/
-  procedure test is
-    l_wsdl_link    varchar2(500);
-    l_wsdl_domain  varchar2(200);
-    l_wsdl_method  varchar2(100) := 'findWorker';
-    l_ws_http_type varchar2(100) := 'text/xml;charset=UTF-8';
+  procedure referesh_so_from_wo_mapping as
+    cursor cur_wo is
+      select work_order_number,
+             sales_order,
+             company
+        from xxdl_wo_cc_integration wo
+       where not exists (select 1
+                from xxdl_sync_statuses s
+               where s.entity_type = 'XXDL_SO_FROM_REQ_WO'
+                 and s.id1 = wo.work_order_number
+                 and s.sync_status = 'OK')
+         and wo.sales_order is not null
+         and wo.status = 'S'
+       order by company,
+                sales_order;
   
-    x_return_status  varchar2(500);
-    x_return_message varchar2(32000);
-    l_soap_env       clob;
-    l_text           varchar2(32000);
-    
-    x_ws_call_id number;
-  
+    l_int_row  xxdl_sla_mappings_interface%rowtype;
+    l_stat_row xxdl_sync_statuses%rowtype;
+    l_batch_id number;
+    l_group_id number;
+    l_count    number;
+    l_prev_coa varchar2(100);
   begin
   
-    xlog('test started');
+    xlog('referesh_so_from_wo_mapping started');
   
-    l_wsdl_domain := xxdl_config_pkg.servicerooturl;
+    xxdl_report_pkg.create_report(p_report_type => 'Refresh Work Orders Mappings',
+                                  p_report_name => 'Refresh XXDL_SO_FROM_REQ_WO',
+                                  x_report_id   => g_report_id);
   
---    l_wsdl_link := l_wsdl_domain || '/fscmService/ErpIntegrationService';
-      l_wsdl_link := l_wsdl_domain || '/hcmService/WorkerServiceV2';
+    xout('*** Refresh Work Orders Mappings: XXDL_SO_FROM_REQ_WO ***');
+    xout('');
   
-    xlog('Preparing soap envelope');
-    l_text := '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
- <soap:Body>
-     <ns1:findWorker xmlns:ns1="http://xmlns.oracle.com/apps/hcm/employment/core/workerServiceV2/types/">
-         <ns1:findCriteria xmlns:ns2="http://xmlns.oracle.com/adf/svc/types/">
-             <ns2:fetchStart>0</ns2:fetchStart>
-             <ns2:fetchSize>1</ns2:fetchSize>
-             <ns2:filter>
-                 <ns2:conjunction>And</ns2:conjunction>
-                 <ns2:group>
-                     <ns2:conjunction>And</ns2:conjunction>
-                     <ns2:upperCaseCompare>false</ns2:upperCaseCompare>
-                     <ns2:item>
-                         <ns2:conjunction>And</ns2:conjunction>
-                         <ns2:upperCaseCompare>false</ns2:upperCaseCompare>
-                         <ns2:attribute>PersonNumber</ns2:attribute>
-                         <ns2:operator>=</ns2:operator>
-                         <ns2:value>114685</ns2:value>
-                     </ns2:item>
-                 </ns2:group>
-                 <ns2:nested/>
-             </ns2:filter>
-             <ns2:findAttribute>PersonId</ns2:findAttribute>
-             <ns2:excludeAttribute>false</ns2:excludeAttribute>
-             <ns2:findAttribute>EffectiveStartDate</ns2:findAttribute>
-             <ns2:excludeAttribute>false</ns2:excludeAttribute>
-             <ns2:findAttribute>EffectiveEndDate</ns2:findAttribute>
-             <ns2:excludeAttribute>false</ns2:excludeAttribute>
-         </ns1:findCriteria>
-         <ns1:findControl xmlns:ns2="http://xmlns.oracle.com/adf/svc/types/">
-             <ns2:retrieveAllTranslations/>
-         </ns1:findControl>
-     </ns1:findWorker>
- </soap:Body>
-</soap:Envelope>';
+    l_prev_coa := 'XX';
+    l_batch_id := 0;
   
-    xlog('Soap envelope to clob');
-    l_soap_env := to_clob(l_text);
+    l_group_id := xxdl_sla_map_group_s1.nextval;
+  
+    for c_wo in cur_wo loop
     
-    xlog('Calling xxfn_cloud_ws_pkg.ws_call...');
+      -- If coa is changed, new batch is created
+      if l_prev_coa != c_wo.company then
+        l_batch_id := xxdl_sla_map_batch_s1.nextval;
+        xlog('New batch id: ' || l_batch_id);
+        l_count := 0;
+      end if;
+    
+      l_count := l_count + 1;
+    
+      l_prev_coa := c_wo.company;
+    
+      xout(c_wo.company || ', ' || c_wo.work_order_number || ', ' || c_wo.sales_order);
+    
+      l_int_row.batch_id              := l_batch_id;
+      l_int_row.group_id              := l_group_id;
+      l_int_row.line_num              := l_count;
+      l_int_row.status                := 'NEW';
+      l_int_row.application_name      := 'Purchasing';
+      l_int_row.mapping_short_name    := 'XXDL_SO_FROM_REQ_WO';
+      l_int_row.out_chart_of_accounts := c_wo.company;
+      l_int_row.out_segment           := 'Nalog prodaje';
+      l_int_row.out_value             := c_wo.sales_order;
+      l_int_row.source_value_1        := c_wo.work_order_number;
+      l_int_row.source_reference_info := 'WO: ' || c_wo.work_order_number;
+      l_int_row.creation_date         := sysdate;
+      l_int_row.last_update_date      := sysdate;
+    
+      insert into xxdl_sla_mappings_interface values l_int_row;
+    
+      l_stat_row.entity_type      := 'XXDL_SO_FROM_REQ_WO';
+      l_stat_row.id1              := c_wo.work_order_number;
+      l_stat_row.id2              := 'X';
+      l_stat_row.sync_status      := 'OK';
+      l_stat_row.creation_date    := sysdate;
+      l_stat_row.last_update_date := sysdate;
+    
+      --delete errored record if exists
+      delete from xxdl_sync_statuses
+       where entity_type = 'XXDL_SO_FROM_REQ_WO'
+         and id1 = c_wo.work_order_number
+         and id2 = 'X';
+    
+      -- Insert ok record
+      insert into xxdl_sync_statuses values l_stat_row;
+    
+    end loop;
   
-    xxfn_cloud_ws_pkg.ws_call(p_ws_url         => l_wsdl_link,
-                              p_soap_env       => l_soap_env,
-                              p_soap_act       => l_wsdl_method,
-                              p_content_type   => l_ws_http_type,
-                              x_return_status  => x_return_status,
-                              x_return_message => x_return_message,
-                              x_ws_call_id     => x_ws_call_id);
+    if l_count > 0 then
+      -- Processing interface
+      process_interface_group(p_group_id => l_group_id, p_reprocess_flag => false, p_purge_flag => true);
+    else
+      xout('There is no XXDL_SO_FROM_REQ_WO to process');
+    end if;
   
-    dbms_lob.freetemporary(l_soap_env);
-    xlog('x_ws_call_id:' || x_ws_call_id);
-    xlog('Return status: ' || x_return_status);
-    xlog('x_return_message: ' || x_return_message);
+    xlog('referesh_so_from_wo_mapping ended');
   
-    xlog('test ended');
+  end;
+
+  /*===========================================================================+
+  Procedure   : referesh_cc_from_wo_mapping
+  Description : Refreshes XXDL_CC_FROM_REQ_WO mapping
+  Usage       :
+  Arguments   : 
+  Remarks     :
+  ============================================================================+*/
+  procedure referesh_cc_from_wo_mapping as
+    cursor cur_wo is
+      select work_order_number,
+             cost_center,
+             company
+        from xxdl_wo_cc_integration wo
+       where not exists (select 1
+                from xxdl_sync_statuses s
+               where s.entity_type = 'XXDL_CC_FROM_REQ_WO'
+                 and s.id1 = wo.work_order_number
+                 and s.sync_status = 'OK')
+         and wo.cost_center is not null
+         and wo.status = 'S'
+       order by company,
+                work_order_number;
+  
+    l_int_row  xxdl_sla_mappings_interface%rowtype;
+    l_stat_row xxdl_sync_statuses%rowtype;
+    l_batch_id number;
+    l_group_id number;
+    l_count    number;
+    l_prev_coa varchar2(100);
+  begin
+  
+    xlog('referesh_cc_from_wo_mapping started');
+  
+    xxdl_report_pkg.create_report(p_report_type => 'Refresh Work Orders Mappings',
+                                  p_report_name => 'Refresh XXDL_CC_FROM_REQ_WO',
+                                  x_report_id   => g_report_id);
+  
+    xout('*** Refresh Work Orders Mappings: XXDL_CC_FROM_REQ_WO ***');
+    xout('');
+  
+    l_prev_coa := 'XX';
+    l_batch_id := 0;
+  
+    l_group_id := xxdl_sla_map_group_s1.nextval;
+  
+    l_count := 0;
+  
+    for c_wo in cur_wo loop
+    
+      -- If coa is changed, new batch is created
+      if l_prev_coa != c_wo.company then
+        l_batch_id := xxdl_sla_map_batch_s1.nextval;
+        xlog('New batch id: ' || l_batch_id);
+        l_count := 0;
+      end if;
+    
+      l_count := l_count + 1;
+    
+      xout(c_wo.company || ', ' || c_wo.work_order_number || ', ' || c_wo.cost_center);
+    
+      l_int_row.batch_id              := l_batch_id;
+      l_int_row.group_id              := l_group_id;
+      l_int_row.line_num              := l_count;
+      l_int_row.status                := 'NEW';
+      l_int_row.application_name      := 'Purchasing';
+      l_int_row.mapping_short_name    := 'XXDL_CC_FROM_REQ_WO';
+      l_int_row.out_chart_of_accounts := c_wo.company;
+      l_int_row.out_segment           := 'Mjesto troska';
+      l_int_row.out_value             := c_wo.cost_center;
+      l_int_row.source_value_1        := c_wo.work_order_number;
+      l_int_row.source_reference_info := 'WO: ' || c_wo.work_order_number;
+      l_int_row.creation_date         := sysdate;
+      l_int_row.last_update_date      := sysdate;
+    
+      insert into xxdl_sla_mappings_interface values l_int_row;
+    
+      l_stat_row.entity_type      := 'XXDL_CC_FROM_REQ_WO';
+      l_stat_row.id1              := c_wo.work_order_number;
+      l_stat_row.id2              := 'X';
+      l_stat_row.sync_status      := 'OK';
+      l_stat_row.creation_date    := sysdate;
+      l_stat_row.last_update_date := sysdate;
+    
+      --delete errored record if exists
+      delete from xxdl_sync_statuses
+       where entity_type = 'XXDL_CC_FROM_REQ_WO'
+         and id1 = c_wo.work_order_number
+         and id2 = 'X';
+    
+      -- Insert ok record
+      insert into xxdl_sync_statuses values l_stat_row;
+    
+    end loop;
+  
+    if l_count > 0 then
+      -- Processing interface
+      process_interface_group(p_group_id => l_group_id, p_reprocess_flag => false, p_purge_flag => true);
+    else
+      xout('There is no XXDL_CC_FROM_REQ_WO to process');
+    end if;
+  
+    xlog('referesh_cc_from_wo_mapping ended');
+  
+  end;
+
+  /*===========================================================================+
+  Procedure   : referesh_work_orders_mappings
+  Description : Refreshes mappings related to work orders from xxdl_wo_cc_integration table
+  Usage       :
+  Arguments   : 
+  Remarks     :
+  ============================================================================+*/
+  procedure referesh_work_orders_mappings as
+  begin
+  
+    referesh_so_from_wo_mapping;
+    referesh_cc_from_wo_mapping;
   
   end;
 

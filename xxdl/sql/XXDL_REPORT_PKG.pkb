@@ -39,5 +39,18 @@ create or replace package body xxdl_report_pkg as
     commit;
   end;
 
+  /*===========================================================================+
+  Procedure   : set_has_errors
+  Description : Marks report as errored
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure set_has_errors(p_report_id number) as
+    pragma autonomous_transaction;
+  begin
+    update xxdl_report_headers r set r.has_errors_flag = 'Y' where report_id = p_report_id;
+    commit;
+  end;
+
 end xxdl_report_pkg;
 /

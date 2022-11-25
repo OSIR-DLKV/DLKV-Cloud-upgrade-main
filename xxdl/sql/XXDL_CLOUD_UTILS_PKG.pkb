@@ -36,12 +36,6 @@ create or replace package body xxdl_cloud_utils_pkg is
     end if;
   end;
 
-  procedure submit_ess_create_accounting as
-  begin
-    null;
-  
-  end;
-
   /*===========================================================================+
   Function   : parse_params
   Description : Exploder params sent as a string
@@ -155,6 +149,10 @@ create or replace package body xxdl_cloud_utils_pkg is
   
   begin
   
+    if p_job_req_id is null then
+      return;
+    end if;
+  
     --xlog('Procedure get_ess_job_status p_job_req_id: ' || p_job_req_id);
   
     l_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/financials/commonModules/shared/model/erpIntegrationService/types/">
@@ -207,6 +205,10 @@ create or replace package body xxdl_cloud_utils_pkg is
   begin
     -- xlog('Procedure wait_for_ess_job started');
     x_job_status := null;
+  
+    if p_ess_req_id is null then
+      return;    
+    end if;
   
     l_started_time := sysdate;
     l_time_elapsed := 0;
