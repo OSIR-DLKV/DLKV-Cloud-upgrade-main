@@ -28,13 +28,11 @@ create or replace package xxdl_inv_integration_pkg authid definer is
 
   procedure download_all_inv_tables;
 
-  procedure download_items_schedule;
+  procedure download_freq1_schedule;
 
   -- Other procedures
 
   procedure process_transactions_interface(p_batch_id number);
-  
-  function get_organization_id(p_organization_code varchar2) return number;
 
 end xxdl_inv_integration_pkg;
 /

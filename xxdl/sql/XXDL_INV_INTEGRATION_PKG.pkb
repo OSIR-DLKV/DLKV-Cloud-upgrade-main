@@ -45,6 +45,15 @@ create or replace package body xxdl_inv_integration_pkg is
   end;
 
   /*===========================================================================+
+      Procedure   : format_number
+      Description : formats number for XML/SJON
+  ============================================================================+*/
+  function format_number(p_number number) return varchar2 is
+  begin
+    return to_char(p_number, 'FM999999999999999999990.0999999999999');
+  end;
+
+  /*===========================================================================+
   Procedure   : elog
   Description : Log an error level message 
   Usage       : 
@@ -321,7 +330,9 @@ create or replace package body xxdl_inv_integration_pkg is
   
     l_count number;
   
-    l_last_transaction_id number;
+    -- l_last_transaction_id number;
+  
+    l_last_creation_date timestamp;
   
   begin
   
@@ -335,11 +346,14 @@ create or replace package body xxdl_inv_integration_pkg is
     xout('');
   
     xlog('Getting last transaction_id');
-    select max(transaction_id) into l_last_transaction_id from xxdl_inv_material_txns;
+    select max(creation_date) into l_last_creation_date from xxdl_inv_material_txns;
   
-    if l_last_transaction_id is null then
-      l_last_transaction_id := -1;
+    if l_last_creation_date is null then
+      l_last_creation_date := to_timestamp('1-1-1900', 'dd-mm-yyyy');
     end if;
+    
+    -- To force dowbnloading all transactions
+    --l_last_creation_date := to_timestamp('1-1-1900', 'dd-mm-yyyy');
   
     l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
             <soap:Header/>
@@ -351,9 +365,9 @@ create or replace package body xxdl_inv_integration_pkg is
                         <pub:attributeTemplate></pub:attributeTemplate>
                         <pub:parameterNameValues>
                             <pub:item>
-                                <pub:name>p_last_transaction_id</pub:name>
+                                <pub:name>p_creation_date</pub:name>
                                 <pub:values>
-                                    <pub:item>[P_LAST_TRANSACTION_ID]</pub:item>
+                                    <pub:item>[P_CREATION_DATE]</pub:item>
                                 </pub:values>
                             </pub:item>
                         </pub:parameterNameValues>
@@ -365,7 +379,7 @@ create or replace package body xxdl_inv_integration_pkg is
             </soap:Body>
         </soap:Envelope>';
   
-    l_text := replace(l_text, '[P_LAST_TRANSACTION_ID]', l_last_transaction_id);
+    l_text := replace(l_text, '[P_CREATION_DATE]', timestamp_to_char(l_last_creation_date));
   
     l_soap_env := to_clob(l_text);
   
@@ -439,9 +453,13 @@ create or replace package body xxdl_inv_integration_pkg is
                                   transaction_uom varchar2(3) path 'TRANSACTION_UOM',
                                   primary_quantity number path 'PRIMARY_QUANTITY',
                                   transaction_date varchar2(100) path 'TRANSACTION_DATE',
+                                  transaction_reference varchar2(240) path 'TRANSACTION_REFERENCE',
                                   shipment_number varchar2(100) path 'SHIPMENT_NUMBER',
                                   receipt_num varchar2(100) path 'RECEIPT_NUM',
                                   transfer_organization_id number path 'TRANSFER_ORGANIZATION_ID',
+                                  transfer_transaction_id number path 'TRANSFER_TRANSACTION_ID',
+                                  rcv_transaction_id number path 'RCV_TRANSACTION_ID',
+                                  parent_transaction_id number path 'PARENT_TRANSACTION_ID',
                                   po_number varchar2(100) path 'PO_NUMBER',
                                   po_approved_date varchar2(100) path 'PO_APPROVED_DATE',
                                   po_unit_price number path 'PO_UNIT_PRICE',
@@ -466,9 +484,13 @@ create or replace package body xxdl_inv_integration_pkg is
       l_row.transaction_uom            := c_rec.transaction_uom;
       l_row.primary_quantity           := c_rec.primary_quantity;
       l_row.transaction_date           := xml_char_to_date(c_rec.transaction_date);
+      l_row.transaction_reference      := c_rec.transaction_reference;
       l_row.shipment_number            := c_rec.shipment_number;
       l_row.receipt_num                := c_rec.receipt_num;
       l_row.transfer_organization_id   := c_rec.transfer_organization_id;
+      l_row.transfer_transaction_id    := c_rec.transfer_transaction_id;
+      l_row.rcv_transaction_id         := c_rec.rcv_transaction_id;
+      l_row.parent_transaction_id      := c_rec.parent_transaction_id;
       l_row.po_number                  := c_rec.po_number;
       l_row.po_approved_date           := xml_char_to_date(c_rec.po_approved_date);
       l_row.po_unit_price              := c_rec.po_unit_price;
@@ -477,7 +499,11 @@ create or replace package body xxdl_inv_integration_pkg is
       l_row.created_by                 := c_rec.created_by;
       l_row.downloaded_date            := sysdate;
     
-      insert into xxdl_inv_material_txns values l_row;
+      select count(1) into l_count from xxdl_inv_material_txns where transaction_id = l_row.transaction_id;
+    
+      if l_count = 0 then
+        insert into xxdl_inv_material_txns values l_row;
+      end if;
     
     end loop;
   
@@ -877,6 +903,7 @@ create or replace package body xxdl_inv_integration_pkg is
     l_return_message      varchar2(32000);
     l_ws_call_id          number;
     l_rest_env_template   varchar2(2000);
+    l_rest_cost_template  varchar2(2000);
     l_rest_env            varchar2(2000);
     l_status              varchar2(10);
     l_fusion_interface_id number;
@@ -888,6 +915,8 @@ create or replace package body xxdl_inv_integration_pkg is
     l_trans_status        varchar2(10);
     l_error_code          varchar2(100);
     l_error_explanation   varchar2(2000);
+  
+    l_response_clob clob;
   begin
   
     xlog('Procedure process_transactions_interface started');
@@ -921,17 +950,19 @@ create or replace package body xxdl_inv_integration_pkg is
           "SourceLineId": "[SourceLineId]",
           "SourceHeaderId": "[SourceHeaderId]",
           "UseCurrentCostFlag": "[UseCurrentCostFlag]",
+          "TransactionReference": "[TransactionReference]",
+          "TransactionMode": "1"[COST_TEMPLATE]         
+      }';
+  
+    l_rest_cost_template := ',
           "TransactionCost": "[TransactionCost]",
           "TransactionCostIdentifier": "[TransactionCostIdentifier]",
-          "TransactionReference": "[TransactionReference]",
-          "TransactionMode": "1",
           "costs": [
               {
                   "CostComponentCode": "ITEM_PRICE",
                   "Cost": [TransactionCost]
               }
-          ]
-      }';
+          ]';
   
     xout(rpad('Trans. id', 10) || ' ' || rpad('Transaction type', 40) || ' ' || rpad('Status', 10) || 'Error message');
     xout(rpad('--------------', 10) || ' ' || rpad('----------------', 40) || ' ' || rpad('------', 10) || '-------------');
@@ -958,13 +989,32 @@ create or replace package body xxdl_inv_integration_pkg is
           l_use_current_cost_flag := 'false';
         end if;
       
+        ------------------------
+        -- Custom validations --
+        ------------------------
+      
+        -- Locatator specified?
+        if c_trans.locator_name is null then
+          elog('*** Locator is null');
+          l_trans_status        := 'ERROR';
+          l_trans_error_message := 'Please specify locator';
+          raise e_processing_exception;
+        end if;
+      
         l_fusion_interface_id := xxdl_inv_material_txns_fus_s1.nextval;
       
         l_rest_env := l_rest_env_template;
+      
+        if c_trans.use_current_cost_flag = 'N' then
+          l_rest_env := replace(l_rest_env, '[COST_TEMPLATE]', l_rest_cost_template);
+        else
+          l_rest_env := replace(l_rest_env, '[COST_TEMPLATE]', '');
+        end if;
+      
         l_rest_env := replace(l_rest_env, '[OrganizationName]', apex_escape.json(c_trans.organization_name));
         l_rest_env := replace(l_rest_env, '[ItemNumber]', apex_escape.json(c_trans.item_number));
         l_rest_env := replace(l_rest_env, '[TransactionTypeName]', apex_escape.json(c_trans.transaction_type_name));
-        l_rest_env := replace(l_rest_env, '[TransactionQuantity]', apex_escape.json(c_trans.transaction_quantity));
+        l_rest_env := replace(l_rest_env, '[TransactionQuantity]', format_number(c_trans.transaction_quantity));
         l_rest_env := replace(l_rest_env, '[TransactionUnitOfMeasure]', apex_escape.json(c_trans.transaction_uom));
         l_rest_env := replace(l_rest_env, '[TransactionInterfaceId]', apex_escape.json(l_fusion_interface_id));
         l_rest_env := replace(l_rest_env, '[TransactionDate]', xml_date_to_char(c_trans.transaction_date));
@@ -978,7 +1028,7 @@ create or replace package body xxdl_inv_integration_pkg is
         l_rest_env := replace(l_rest_env, '[SourceLineId]', apex_escape.json(l_fusion_interface_id));
         l_rest_env := replace(l_rest_env, '[SourceHeaderId]', apex_escape.json(l_fusion_interface_id));
         l_rest_env := replace(l_rest_env, '[UseCurrentCostFlag]', apex_escape.json(l_use_current_cost_flag));
-        l_rest_env := replace(l_rest_env, '[TransactionCost]', apex_escape.json(c_trans.transaction_cost));
+        l_rest_env := replace(l_rest_env, '[TransactionCost]', format_number(c_trans.transaction_cost));
         l_rest_env := replace(l_rest_env, '[TransactionCostIdentifier]', apex_escape.json('C' || l_fusion_interface_id));
         l_rest_env := replace(l_rest_env, '[TransactionReference]', apex_escape.json(c_trans.transaction_reference));
       
@@ -1000,9 +1050,11 @@ create or replace package body xxdl_inv_integration_pkg is
           elog('l_return_message: ' || l_return_message);
           elog('l_ws_call_id: ' || l_ws_call_id);
         
+          select response_clob into l_response_clob from xxfn_ws_call_log wc where wc.ws_call_id = l_ws_call_id;
+        
           l_trans_status        := 'ERROR';
-          l_trans_error_message := 'Error during REST API Call. l_ws_call_id: ' || l_ws_call_id || ' l_return_message: ' ||
-                                   substr(l_return_message, 1, 1800);
+          l_trans_error_message := to_char(dbms_lob.substr(l_response_clob, 2000, 1));
+          l_trans_error_message := l_trans_error_message || ' (ws_call_id: ' || l_ws_call_id || ')';
         
           raise e_processing_exception;
         
@@ -1560,8 +1612,7 @@ create or replace package body xxdl_inv_integration_pkg is
     for c_rec in (select xt.*
                     from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns
                                   
-                                  ae_header_id number path 'AE_HEADER_ID',
-                                  ae_line_num number path 'AE_LINE_NUM',
+                                  distribution_line_id number path 'DISTRIBUTION_LINE_ID',
                                   inv_transaction_id number path 'INV_TRANSACTION_ID',
                                   cst_transaction_id number path 'CST_TRANSACTION_ID',
                                   inventory_item_id number path 'INVENTORY_ITEM_ID',
@@ -1587,10 +1638,9 @@ create or replace package body xxdl_inv_integration_pkg is
     
       l_count := l_count + 1;
     
-      xout(c_rec.ae_header_id || ', ' || c_rec.ae_line_num);
+      xout(c_rec.distribution_line_id || ', ' || c_rec.distribution_line_id);
     
-      l_row.ae_header_id          := c_rec.ae_header_id;
-      l_row.ae_line_num           := c_rec.ae_line_num;
+      l_row.distribution_line_id  := c_rec.distribution_line_id;
       l_row.inv_transaction_id    := c_rec.inv_transaction_id;
       l_row.cst_transaction_id    := c_rec.cst_transaction_id;
       l_row.inventory_item_id     := c_rec.inventory_item_id;
@@ -1613,10 +1663,10 @@ create or replace package body xxdl_inv_integration_pkg is
       l_row.last_update_date      := char_to_timestamp(c_rec.last_update_date_char);
       l_row.downloaded_date       := sysdate;
     
-      delete from xxdl_cst_accounting
-       where ae_header_id = c_rec.ae_header_id
-         and ae_line_num = c_rec.ae_line_num;
+      xlog('Deleting from xxdl_cst_accounting...');
+      delete from xxdl_cst_accounting where distribution_line_id = c_rec.distribution_line_id;
     
+      xlog('Inserting into xxdl_cst_accounting...');
       insert into xxdl_cst_accounting values l_row;
     
     end loop;
@@ -1664,17 +1714,19 @@ create or replace package body xxdl_inv_integration_pkg is
   end;
 
   /*===========================================================================+
-  Procedure   : download_items_schedule
-  Description : Downloads items and relations, used in job schedule
+  Procedure   : download_freq1_schedule
+  Description : Entities to be downloaded frequently
   Usage       : 
   Arguments   : 
   ============================================================================+*/
-  procedure download_items_schedule as
+  procedure download_freq1_schedule as
   begin
   
     download_items;
   
     download_item_relations;
+  
+    download_transactions;
   
   end;
 

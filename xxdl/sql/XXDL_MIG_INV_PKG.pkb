@@ -16,17 +16,16 @@ create or replace package body xxdl_mig_inv_pkg as
   -- Constants
   g_account               constant varchar2(100) := '590310'; --- konto
   g_subinventory_code     constant varchar2(100) := 'Zalihe'; -- sve ide na isti subinventory
-  g_locator               constant varchar2(100) := '00-00-00-00';
+  g_locator               constant varchar2(100) := '00-00-00-00-00';
   g_transaction_date      constant date := to_date('1-JUL-2022', 'DD-MON-YYYY');
   g_transaction_type_name constant varchar2(250) := unistr('Migracija po\010Detnih stanja ulaz');
+  c_eur_rate              constant number := 7.5345;
 
   g_last_message varchar2(2000);
   g_report_id    number := -1;
 
   e_processing_exception exception;
   g_error_message        varchar2(2000);
-
-  c_eur_rate constant number := 7.5345;
 
   /*===========================================================================+
   Procedure   : xlog
@@ -51,59 +50,92 @@ create or replace package body xxdl_mig_inv_pkg as
   function get_company_segment1(p_org_code varchar2) return varchar2 as
     l_seg1 varchar2(250);
   begin
-    select decode(p_org_code,
-                  'I10',
-                  '01',
-                  'GDP',
-                  '02',
-                  'I04',
-                  '01',
-                  'R01',
-                  '01',
-                  'I02',
-                  '01',
-                  'I05',
-                  '01',
-                  'NUF',
-                  '11',
-                  'X04',
-                  '01',
-                  'I04',
-                  '01',
-                  'T01',
-                  '01',
-                  'T01',
-                  '01',
-                  'X01',
-                  '01',
-                  'I01',
-                  '01',
-                  'NU1',
-                  '11',
-                  'MS1',
-                  '02',
-                  'MP1',
-                  '02',
-                  'SO1',
-                  '02',
-                  'MPR',
-                  '02',
-                  'OA3',
-                  '02',
-                  'SO2',
-                  '02',
-                  'SS1',
-                  '13',
-                  'SWE',
-                  '11',
-                  'MT1',
-                  '02',
-                  null)
-      into l_seg1
-      from dual;
-  
+    -- Dalekovod   
+    if p_org_code in ('DLK', 'I10', 'GRA', 'I01', 'I02', 'I04', 'I05', 'T01') then
+      l_seg1 := '01';
+      -- Proizvodnja MK
+    elsif p_org_code in ('MK1', 'MP1', 'MS1', 'SO1', 'MTR', 'OA3', 'MT1', 'MPR', 'GDP', 'PMK') then
+      l_seg1 := '02';
+    elsif p_org_code in ('PRO') then
+      -- Dalekovod Projekt
+      l_seg1 := '04';
+      -- Dalekovod EMU
+    elsif p_org_code in ('EMU', 'ES1', 'ET1') then
+      l_seg1 := '06';
+      -- Dalekovod NUF
+    elsif p_org_code in ('NUF', 'GDN') then
+      l_seg1 := '11';
+      -- Proizvodnja OSO
+    elsif p_org_code in ('AO1', 'AO2', 'AO3', 'KO1', 'OO1', 'OO2', 'POS', 'SP1', 'SPR', 'SS1', 'ST1', 'STR') then
+      l_seg1 := '13';
+    else
+      -- Not mapped
+      l_seg1 := null;
+    end if;
+    /*
+      select decode(p_org_code,
+                    'I10',
+                    '01',
+                    'GDP',
+                    '02',
+                    'I04',
+                    '01',
+                    'R01',
+                    '01',
+                    'I02',
+                    '01',
+                    'I05',
+                    '01',
+                    'NUF',
+                    '11',
+                    'X04',
+                    '01',
+                    'I04',
+                    '01',
+                    'T01',
+                    '01',
+                    'T01',
+                    '01',
+                    'X01',
+                    '01',
+                    'I01',
+                    '01',
+                    'NU1',
+                    '11',
+                    'MS1',
+                    '02',
+                    'MP1',
+                    '02',
+                    'SO1',
+                    '02',
+                    'MPR',
+                    '02',
+                    'OA3',
+                    '02',
+                    'SO2',
+                    '02',
+                    'SS1',
+                    '13',
+                    'AO3',
+                    '13',
+                    'SWE',
+                    '11',
+                    'MT1',
+                    '02',
+                    'SP1',
+                    '13',
+    
+                    --Dalekovod EMU 06
+                    'ET1',
+                    '06',
+                    'ES1',
+                    '06',
+                    null)
+        into l_seg1
+        from dual;
+    */
     if l_seg1 is null then
-      g_error_message := 'Org code ' || p_org_code || 'Not mapped to seg1';
+      g_error_message := 'Org code ' || p_org_code || ' not mapped to company segment 1';
       raise e_processing_exception;
     end if;
   
@@ -121,71 +153,14 @@ create or replace package body xxdl_mig_inv_pkg as
     l_name varchar2(250);
   begin
   
-    -- Ime je dobiveno  asciistr(ou.name) iz BI Inventory orgs
-    select decode(p_org_code,
-                  'I10',
-                  'I10 - Skladi\0161te rez. dije. za strojeve i vozila, gorivo',
-                  'GDP',
-                  'GDP - Gradili\0161te DLKV Proizvodnje',
-                  'I04',
-                  --'I04 - Skladi\0161te elektromaterijala i opreme', -- prod
-                  'I-04 - Skladi\0161te elektromaterijala i opreme', -- stari test
-                  'R01',
-                  'R01-Skladi\0161te-Reexport Dalekovod d.d.',
-                  'I02',
-                  'I02 - Skladi\0161te SI i HTZ',
-                  'I05',
-                  'I05 - Skladi\0161te proizvoda izgradnje (NN ormari\0107i) i IKT opreme',
-                  'NUF',
-                  'Dalekovod NUF',
-                  'DLK',
-                  'DLK',
-                  'X04',
-                  'X04 - Skladi\0161te elektromaterijala i opreme',
-                  'T01',
-                  --'T01 - Skladi\0161te trgova\010Dke robe', --stari test, -- prod
-                  'T-01 - Skladi\0161te trgova\010Dke robe', --stari test
-                  'GDN',
-                  'GDN - Gradili\0161te Dalekovod NUF',
-                  'X01',
-                  'X01-Skladi\0161te trgova\010Dke robe',
-                  'GRA',
-                  'GRA-Gradili\0161te',
-                  'I01',
-                  'I01 - Skladi\0161te potro\0161nog materijala',
-                  'NU1',
-                  'NU1 - Skladi\0161te podru\017Enice Dalekovod NUF',
-                  'MS1',
-                  'MS1 - Skladi\0161te sirovina MK',
-                  'MP1',
-                  'MP1 - Skladi\0161te poluproizvoda i proizvoda MK',
-                  'SO1',
-                  'SO1 - Skladi\0161te odr\017Eavanja-materijali',
-                  'MPR',
-                  'MPR - Skladi\0161te prodaje MK',
-                  'OA3',
-                  'OA3 - Skladi\0161te alata, SI i HTZ opreme',
-                  'GDS',
-                  'GDS - Gradiliste Dalekovod Svedska',
-                  'SO2',
-                  'SO2 - Skladi\0161te odr\017Eavanja i energetike',
-                  'SS1',
-                  'SS1- Skladi\0161te sirovina OSO',
-                  'SWE',
-                  'Svedska',
-                  'MT1',
-                  'MT1 - Skladi\0161te trgova\010Dke robe MK',
-                  null)
-      into l_name
-      from dual;
+    select name into l_name from xxdl_inv_organizations where organization_code = p_org_code;
   
-    if l_name is null then
-      g_error_message := 'Org code ' || p_org_code || ' not mapped to Org name';
+    return l_name;
+  
+  exception
+    when no_data_found then
+      g_error_message := 'Org code ' || p_org_code || ' not found in xxdl_inv_organizations';
       raise e_processing_exception;
-    end if;
-  
-    return unistr(l_name);
-  
   end;
 
   /*===========================================================================+
@@ -203,7 +178,7 @@ create or replace package body xxdl_mig_inv_pkg as
          and x.status in ('NEW', 'ERROR');
   
     l_status        varchar2(10);
-    l_error_message varchar2(10);
+    l_error_message varchar2(2000);
   
     l_batch_id number;
   
@@ -213,8 +188,12 @@ create or replace package body xxdl_mig_inv_pkg as
   
   begin
   
+    xlog('Procedure migrate_onhand started');
+  
     for c_exp in cur_exp loop
       begin
+      
+        xlog('Inserting into xxdl_inv_material_txns_int l_batch_id: ' || l_batch_id);
       
         l_batch_id := xxdl_inv_material_txns_bat_s1.nextval;
       
@@ -232,7 +211,7 @@ create or replace package body xxdl_mig_inv_pkg as
         l_row.locator_name             := g_locator;
         l_row.inv_project_number       := c_exp.project_number;
         l_row.inv_task_number          := c_exp.task_number;
-        l_row.account_combination      := l_seg1 || '.' || g_account || '.000000.000000.000000.0000000.000000.00.000000.000000';
+        l_row.account_combination      := l_seg1 || '.' || g_account || '.000000.000000.000000.0000000.000000.0.000000.000000';
         l_row.source_code              := 'DLKV';
         l_row.source_line_id           := 1;
         l_row.source_header_id         := 1;
@@ -260,7 +239,7 @@ create or replace package body xxdl_mig_inv_pkg as
       
       exception
         when e_processing_exception then
-          l_status        := 'ERORR';
+          l_status        := 'ERROR';
           l_error_message := g_error_message;
         
       end;
@@ -269,6 +248,8 @@ create or replace package body xxdl_mig_inv_pkg as
       commit;
     
     end loop;
+  
+    xlog('Procedure migrate_onhand ended');
   
   end;
   /*===========================================================================+
@@ -280,14 +261,13 @@ create or replace package body xxdl_mig_inv_pkg as
   procedure export_onhand(p_org_code varchar2 default null, p_item varchar2 default null) as
   
     cursor cur_onh is
-      select mtp.organization_code organization_code_ebs,
-             
+      select mtp.organization_code            organization_code_ebs,
              msi.segment1                     item,
              onh.subinventory_code,
              p.segment1                       project_number,
              t.task_number,
              onh.primary_transaction_quantity,
-             msi.primary_uom_code,
+             uom.unit_of_measure_tl           uom,
              msi.inventory_item_id,
              onh.locator_id,
              onh.organization_id,
@@ -323,7 +303,8 @@ create or replace package body xxdl_mig_inv_pkg as
              apps.mtl_item_locations@ebsprod loc,
              apps.cst_quantity_layers@ebsprod clay,
              apps.pa_projects_all@ebsprod p,
-             apps.pa_tasks@ebsprod t
+             apps.pa_tasks@ebsprod t,
+             apps.mtl_units_of_measure_tl@ebsprod uom
        where onh.organization_id = mtp.organization_id
          and onh.inventory_item_id = msi.inventory_item_id
          and onh.organization_id = msi.organization_id
@@ -333,12 +314,14 @@ create or replace package body xxdl_mig_inv_pkg as
          and clay.organization_id(+) = onh.organization_id
          and onh.project_id = p.project_id(+)
          and onh.task_id = t.task_id(+)
+         and uom.language = 'US'
+         and uom.uom_code = msi.primary_uom_code
          and onh.subinventory_code in ('Zalihe', 'Projekt')
          and mtp.organization_code in ('AO3',
                                        'I04',
                                        'SS1',
                                        'OA3',
-                                       'NU1',
+                                       --'NU1', -- poslan mail 25.10 Marijani da se izbacije iz migracije zaliha
                                        'AO2',
                                        'T01',
                                        'I10',
@@ -380,7 +363,7 @@ create or replace package body xxdl_mig_inv_pkg as
       l_row.project_number               := c_onh.project_number;
       l_row.task_number                  := c_onh.task_number;
       l_row.primary_transaction_quantity := c_onh.primary_transaction_quantity;
-      l_row.primary_uom_code             := c_onh.primary_uom_code;
+      l_row.primary_uom_code             := c_onh.uom;
       l_row.inventory_item_id            := c_onh.inventory_item_id;
       l_row.locator_id                   := c_onh.locator_id;
       l_row.organization_id              := c_onh.organization_id;
