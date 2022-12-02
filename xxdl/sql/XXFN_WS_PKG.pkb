@@ -8,6 +8,7 @@ v1.0 09.01.2020 -
 v1.1 16.05.2022 - Marko Sladoljev - Handling case without <?xml ?> tag in Response (ImportBulkData case)
 v1.2 18.07.2022 - Marko Sladoljev - XXFN_WS_CALL_LOG.response_json column supported
 v1.3 20.07.2022 - Marko Sladoljev - response_json column null bug
+v1.4 25.11.2022 - Marko Sladoljev - DELETE_LOBS_FROM_LOG: response_json set to null
 ============================================================================+*/
 
   g_step varchar2(200);
@@ -272,7 +273,6 @@ begin
     end;
   end if;
 
-  utl_http.set_wallet('file:/opt/oracle/product/18c/dbhomeXE/data/wallet', 'Welcome123##');
   UTL_HTTP.set_wallet('file:' || 'D:\oracle\admin\XE\wallet', 'welcome123');																			
   utl_http.set_response_error_check(false);
   utl_http.set_detailed_excp_support(false);
@@ -784,7 +784,6 @@ begin
 
   --dbms_output.put_line('XXWS:4');
 
-  utl_http.set_wallet('file:/opt/oracle/product/18c/dbhomeXE/data/wallet', 'Welcome123##');  
   UTL_HTTP.set_wallet('file:' || 'D:\oracle\admin\XE\wallet', 'welcome123');																		   
   utl_http.set_response_error_check(false);
   utl_http.set_detailed_excp_support(false);
@@ -1261,7 +1260,8 @@ begin
       wcl.ws_payload_xml = null,
       wcl.response_xml = null,
       wcl.response_clob = null,
-      wcl.response_blob = null
+      wcl.response_blob = null,
+      wcl.response_json = null
   where wcl.ws_call_id = p_ws_call_id;
   commit;
 end;

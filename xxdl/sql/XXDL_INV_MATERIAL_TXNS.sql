@@ -6,6 +6,7 @@
   History     :
   v1.0 15.07.2022 Marko Sladoljev: Inicijalna verzija
   v1.1 02.09.2022 Marko Sladoljev: New columns
+  v1.2 03.11.2022 Marko Sladoljev: New columns
   ============================================================================+*/
 
 drop table xxdl_inv_material_txns;
@@ -26,6 +27,10 @@ CREATE TABLE xxdl_inv_material_txns(
      shipment_number            VARCHAR2(100),
      receipt_num                VARCHAR2(100),
      transfer_organization_id   NUMBER,
+     transfer_transaction_id    NUMBER,
+     rcv_transaction_id         NUMBER,
+     parent_transaction_id      NUMBER,
+     transaction_reference      VARCHAR2(240),
      po_number                  VARCHAR2(100),
      po_approved_date           DATE,
      po_unit_price              NUMBER,

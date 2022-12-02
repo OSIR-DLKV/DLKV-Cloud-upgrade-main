@@ -16,6 +16,8 @@ create or replace package xxdl_mig_inv_pkg as
   procedure export_onhand(p_org_code varchar2 default null, p_item varchar2 default null);
   
   function get_org_name(p_org_code varchar2) return varchar2;
+  
+  function get_company_segment1(p_org_code varchar2) return varchar2;
 
 end xxdl_mig_inv_pkg;
 /
