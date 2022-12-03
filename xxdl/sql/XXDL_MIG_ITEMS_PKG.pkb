@@ -1064,8 +1064,6 @@ create or replace package body xxdl_mig_items_pkg as
                                     x_return_message => l_return_message,
                                     x_ws_call_id     => l_ws_call_id);
         
-          --log(l_text);
-          --dbms_lob.freetemporary(l_soap_env);
           xlog('   ws_call_id (Create Item):' || l_ws_call_id);
         
           if l_return_status = 'S' then

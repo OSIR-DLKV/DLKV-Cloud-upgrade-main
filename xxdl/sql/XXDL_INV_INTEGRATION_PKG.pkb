@@ -10,8 +10,8 @@ create or replace package body xxdl_inv_integration_pkg is
 
   -- Log variables
   c_module constant varchar2(100) := 'XXDL_INV_INTEGRATION_PKG';
-  g_log_level varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
-  --g_log_level    varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
+  --g_log_level varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
+  g_log_level    varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
   g_last_message varchar2(2000);
   g_report_id    number := -1;
 
@@ -27,7 +27,7 @@ create or replace package body xxdl_inv_integration_pkg is
   begin
     g_last_message := p_text;
     if g_log_level = xxdl_log_pkg.g_level_statement then
-      dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
+      --dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
       xxdl_log_pkg.log(p_module => c_module, p_log_level => xxdl_log_pkg.g_level_statement, p_message => p_text);
     end if;
   end;
