@@ -9,6 +9,7 @@ v1.1 16.05.2022 - Marko Sladoljev - Handling case without <?xml ?> tag in Respon
 v1.2 18.07.2022 - Marko Sladoljev - XXFN_WS_CALL_LOG.response_json column supported
 v1.3 20.07.2022 - Marko Sladoljev - response_json column null bug
 v1.4 25.11.2022 - Marko Sladoljev - DELETE_LOBS_FROM_LOG: response_json set to null
+v1.1 25.11.2022 - Marko Sladoljev: Removed scheme prefix
 ============================================================================+*/
 
   g_step varchar2(200);
@@ -1253,7 +1254,7 @@ Usage       :
 Arguments   : p_ws_call_id -> web service call identifier
 ============================================================================+*/
 procedure DELETE_LOBS_FROM_LOG(
-    p_ws_call_id    in XX_INTEGRATION_DEV.xxfn_ws_call_log.ws_call_id%type) is pragma autonomous_transaction;
+    p_ws_call_id    in xxfn_ws_call_log.ws_call_id%type) is pragma autonomous_transaction;
 begin
   update XXFN_WS_CALL_LOG wcl
   set wcl.ws_payload = null,

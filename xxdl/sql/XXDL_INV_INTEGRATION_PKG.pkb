@@ -286,6 +286,9 @@ create or replace package body xxdl_inv_integration_pkg is
     
     end loop;
   
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+  
     xout('Item costs downloaded: ' || l_count);
     xout('*** End of report ***');
   
@@ -351,7 +354,7 @@ create or replace package body xxdl_inv_integration_pkg is
     if l_last_creation_date is null then
       l_last_creation_date := to_timestamp('1-1-1900', 'dd-mm-yyyy');
     end if;
-    
+  
     -- To force dowbnloading all transactions
     --l_last_creation_date := to_timestamp('1-1-1900', 'dd-mm-yyyy');
   
@@ -506,6 +509,9 @@ create or replace package body xxdl_inv_integration_pkg is
       end if;
     
     end loop;
+  
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
   
     xout('Transactions downloaded: ' || l_count);
     xout('*** End of report ***');
@@ -679,6 +685,9 @@ create or replace package body xxdl_inv_integration_pkg is
       insert into xxdl_inv_organizations values l_row;
     
     end loop;
+  
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
   
     xout('Organizations downloaded: ' || l_count);
     xout('*** End of report ***');
@@ -867,6 +876,9 @@ create or replace package body xxdl_inv_integration_pkg is
       insert into xxdl_egp_system_items values l_row;
     
     end loop;
+  
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
   
     xout('Items downloaded: ' || l_count);
     xout('*** End of report ***');
@@ -1077,6 +1089,9 @@ create or replace package body xxdl_inv_integration_pkg is
       
         l_trans_status := 'PROCESSED';
       
+        -- Delete lobs after successful call
+        xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+      
       exception
         when e_processing_exception then
           xlog('e_processing_exception');
@@ -1277,6 +1292,9 @@ create or replace package body xxdl_inv_integration_pkg is
     
     end loop;
   
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+  
     xout('Transaction types downloaded: ' || l_count);
     xout('*** End of report ***');
   
@@ -1460,6 +1478,9 @@ create or replace package body xxdl_inv_integration_pkg is
       insert into xxdl_egp_item_relations values l_row;
     
     end loop;
+  
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
   
     xout('Item relations downloaded: ' || l_count);
     xout('*** End of report ***');
@@ -1670,6 +1691,9 @@ create or replace package body xxdl_inv_integration_pkg is
       insert into xxdl_cst_accounting values l_row;
     
     end loop;
+  
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
   
     xout('Cost accounting lines downloaded: ' || l_count);
     xout('*** End of report ***');
