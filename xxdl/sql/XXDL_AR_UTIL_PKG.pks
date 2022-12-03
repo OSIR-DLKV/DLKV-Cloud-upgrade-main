@@ -83,10 +83,18 @@ procedure find_address_cloud(
 ============================================================================+*/
 procedure update_cust_site_tax_ref(
       p_party_id in varchar2
-      ,p_party_site_id in varchar2);
-      
+      ,p_cust_account_id in varchar2);
 
-  /*===========================================================================+
+/*===========================================================================+
+ -- Name    : update_supplier_tax_ref
+ -- Desc    : Update supplier and supplier site tax profile
+ -- Usage   : 
+ -- Parameters
+ ============================================================================+*/
+ procedure update_supplier_tax_ref(
+     p_supplier_number in varchar2);
+
+/*===========================================================================+
   -- Name    : update_cust_acc_profile
   -- Desc    : Update customer acct profile
   -- Usage   : 

@@ -20,6 +20,7 @@ CREATE
     "VENDOR_SITE_ID"       NUMBER,
     "PARTY_SITE_ID"        NUMBER,
     "LOCATION_ID"          NUMBER,
+    "ADDRESS_NAME"         VARCHAR2(400 BYTE),
     "ADDRESS"              VARCHAR2(4000 BYTE),
     "ADDRESS1"             VARCHAR2(960 BYTE),
     "ADDRESS2"             VARCHAR2(960 BYTE),
