@@ -6,7 +6,7 @@ create or replace package body xxdl_mig_items_pkg as
    -- Date        :  18-10-2022
    -- Description :  Items migration package
    --                !!! VAZNO !!!
-   --                Prereq: Tablica xxdl_inv_organizations treba imai downloadane cloud organizacije 
+   --                Prereq: Tablica xxdl_inv_organizations treba imai download-ane cloud organizacije 
                              jer se koristi za validaciju
    --
    -- -------- ------ ------------ -----------------------------------------------
@@ -18,6 +18,7 @@ create or replace package body xxdl_mig_items_pkg as
   =============================================================================*/
   --c_log_module constant varchar2(300) := $$plsql_unit;
   e_processing_exception exception;
+  e_not_migrated         exception;
   c_eur_rate constant number := 7.5345;
 
   /*===========================================================================+
@@ -28,7 +29,7 @@ create or replace package body xxdl_mig_items_pkg as
   ============================================================================+*/
   procedure xlog(p_text in varchar2) as
   begin
-    dbms_output.put_line(p_text);
+    --dbms_output.put_line(p_text);
     null;
   
   end;
@@ -400,9 +401,7 @@ create or replace package body xxdl_mig_items_pkg as
     x_return_status  := 'S';
     x_return_message := '';
   
-    for c_xref in cur_xref loop
-    
-      l_xref_json := '{
+    l_xref_json := '{
         "MasterOrganizationCode"     : "DLK",
         "ApplicableOrganizationId"   : [APPLICABLE_ORGANIZATION_ID],
         "Item"                       : "[ITEM_NUMBER]",
@@ -410,6 +409,8 @@ create or replace package body xxdl_mig_items_pkg as
         "CrossReference"             : "[CROSS_REFERENCE]",
         "ApplyToAllOrganizationFlag" : false
         }';
+  
+    for c_xref in cur_xref loop
     
       l_text := l_xref_json;
       l_text := replace(l_text, '[APPLICABLE_ORGANIZATION_ID]', l_dlk_cloud_org_id);
@@ -417,9 +418,7 @@ create or replace package body xxdl_mig_items_pkg as
       l_text := replace(l_text, '[CROSS_REFERENCE_TYPE]', apex_escape.json(c_xref.cross_reference_type));
       l_text := replace(l_text, '[CROSS_REFERENCE]', apex_escape.json(c_xref.cross_reference));
     
-      l_rest_env := l_rest_env || to_clob(l_text);
-      l_text     := '';
-    
+      l_rest_env := to_clob(l_text);
       xlog('   Calling web service.');
     
       xxfn_cloud_ws_pkg.ws_rest_call(p_ws_url         => l_app_url || '/fscmRestApi/resources/11.13.18.05/crossReferenceRelationships',
@@ -452,6 +451,31 @@ create or replace package body xxdl_mig_items_pkg as
   end;
 
   --/*-----------------------------------------------------------------------------
+  -- Name    :get_po_category
+  -- Desc    :TRanslation PO Category according to xxdl_nab_cat_old_new
+  -------------------------------------------------------------------------------*/
+  function get_po_category(p_category_code varchar2) return varchar as
+    l_new_category varchar2(100);
+  begin
+  
+    begin
+      select trim(cat_new) into l_new_category from xxdl.xxdl_nab_cat_old_new@ebsprod where cat_old = p_category_code;
+    exception
+      when no_data_found then
+        l_new_category := p_category_code;
+      when too_many_rows then
+        l_new_category := 'Multiple';
+    end;
+  
+    if l_new_category is null then
+      l_new_category := p_category_code;
+    end if;
+  
+    return l_new_category;
+  
+  end;
+
+  --/*-----------------------------------------------------------------------------
   -- Name    :shoud_migrate_item
   -- Desc    :Checks whether item should be migrated
   -------------------------------------------------------------------------------*/
@@ -461,7 +485,7 @@ create or replace package body xxdl_mig_items_pkg as
     l_count             number;
     l_organization_code varchar2(10);
     l_dlk_org_id        number;
-    
+  
     l_result varchar2(1);
   
     cursor cur_itm is
@@ -479,6 +503,8 @@ create or replace package body xxdl_mig_items_pkg as
     for c_itm in cur_itm loop
     
       l_organization_code := get_organization_code(c_itm.organization_code_ebs);
+      -- get l_dlk_org_id
+      select organization_id into l_dlk_org_id from apps.mtl_parameters@ebsprod where organization_code = 'DLK';
     
       -- Org check   
       select count(1)
@@ -506,7 +532,7 @@ create or replace package body xxdl_mig_items_pkg as
            and rownum = 1;
       
         if l_count > 0 then
-          --  xlog('Item has XXDL_ITEM_MIG_PROIZV_USLUGE record');
+          --xlog('Item has XXDL_ITEM_MIG_PROIZV_USLUGE record');
           return 'Y';
         end if;
       
@@ -539,7 +565,7 @@ create or replace package body xxdl_mig_items_pkg as
            and rownum = 1;
       
         if l_count > 0 then
-          -- xlog('Item has MMT record');
+          --xlog('Item has MMT record');
           return 'Y';
         end if;
       
@@ -555,7 +581,7 @@ create or replace package body xxdl_mig_items_pkg as
            and rownum = 1;
       
         if l_count > 0 then
-          -- xlog('Item has RCT record');
+          --xlog('Item has RCT record');
           return 'Y';
         end if;
       
@@ -568,7 +594,7 @@ create or replace package body xxdl_mig_items_pkg as
            and rownum = 1;
       
         if l_count > 0 then
-          -- xlog('Item has Onhand record');
+          --xlog('Item has Onhand record');
           return 'Y';
         end if;
       
@@ -580,8 +606,9 @@ create or replace package body xxdl_mig_items_pkg as
            and msi.source_organization_id = p_organization_id;
       
         if l_count > 0 then
-          -- xlog('Item has org as source org');
-          return 'Y';
+          --xlog('Item has org as source org');
+          l_result := should_migrate_item(p_inventory_item_id => p_inventory_item_id, p_organization_id => l_dlk_org_id);
+          return l_result;
         end if;
       
       end if; -- End materijal
@@ -589,13 +616,10 @@ create or replace package body xxdl_mig_items_pkg as
       -- Dodatno, ako je validating org, onda se purchaseable itemi dodaju tamo ako se migriraju i na DLK
       if l_organization_code in ('PMK', 'POS', 'EMU', 'NUF') and c_itm.purchasing_enabled_flag = 'Y' then
       
-        -- get l_dlk_org_id
-        select organization_id into l_dlk_org_id from apps.mtl_parameters@ebsprod where organization_code = 'DLK';
-      
         l_result := should_migrate_item(p_inventory_item_id => p_inventory_item_id, p_organization_id => l_dlk_org_id);
-        
+      
         --xlog('should_migrate_item for DLK returned: ' || l_result);
-        
+      
         return l_result;
       
       end if;
@@ -626,6 +650,10 @@ create or replace package body xxdl_mig_items_pkg as
              msi.long_description,
              muom.unit_of_measure_tl primary_uom_code,
              msi.list_price_per_unit,
+             msi.purchasing_item_flag,
+             msi.purchasing_enabled_flag,
+             msi.customer_order_flag,
+             msi.customer_order_enabled_flag,
              msi.unit_weight,
              msi.inventory_item_id,
              msi.organization_id,
@@ -639,10 +667,7 @@ create or replace package body xxdl_mig_items_pkg as
              msi.attribute8 dff_usluga_cincanja,
              decode(msi.source_type, 1, 'Organization', 2, 'Supplier', 3, 'Subinventory', null) source_type_value,
              (select organization_code from apps.mtl_parameters@ebsprod where organization_id = msi.source_organization_id) source_organization_code,
-             msi.source_subinventory,
-             msi.min_minmax_quantity,
-             msi.max_minmax_quantity,
-             decode(msi.inventory_planning_code, 2, 'Min-max planning', null) inventory_planning_value
+             msi.source_subinventory
         from apps.mtl_system_items_vl@ebsprod     msi,
              apps.mtl_parameters@ebsprod          mp,
              apps.mtl_units_of_measure_tl@ebsprod muom
@@ -654,7 +679,7 @@ create or replace package body xxdl_mig_items_pkg as
                 from xxdl_mtl_system_items_mig xx
                where xx.inventory_item_id = msi.inventory_item_id
                  and xx.organization_id = msi.organization_id
-                 and xx.process_flag = 'S') -- Ne postoje uspjesno procesirani
+                 and xx.process_flag in ('S', 'X')) -- Ne postoje uspjesno procesirani
          and not exists (select 1
                 from xxdl_mtl_system_items_mig xx
                where xx.inventory_item_id = msi.inventory_item_id
@@ -737,16 +762,24 @@ create or replace package body xxdl_mig_items_pkg as
     l_empty_clob      clob;
     l_text            varchar2(32000);
     l_text_categories varchar2(32000);
-    x_return_status   varchar2(500);
-    x_return_message  varchar2(32000);
-    x_ws_call_id      number;
+    l_return_status   varchar2(500);
+    l_return_message  varchar2(32000);
+    l_ws_call_id      number;
     l_cnt             number := 0;
     l_item_count      number := 0;
+    l_new_category    varchar2(100);
   
     l_prev_item_id number := -1;
   
     l_organization_code varchar2(10);
     l_list_price        number;
+    l_weight_uom        varchar2(10);
+    l_unit_weight       number;
+  
+    l_purchasable_flag            varchar2(10);
+    l_purchasing_flag             varchar2(10);
+    l_customer_order_flag         varchar2(10);
+    l_customer_order_enabled_flag varchar2(10);
   
     l_app_url varchar2(100);
   
@@ -756,14 +789,15 @@ create or replace package body xxdl_mig_items_pkg as
     l_segment1 varchar2(100);
     l_template varchar2(30);
   
-    l_category_xml varchar2(32000);
-    l_item_xml     varchar2(32000);
+    l_category_xml    varchar2(32000);
+    l_item_master_xml varchar2(32000);
+    l_item_org_xml    varchar2(32000);
   
     l_source_organization_name varchar2(200);
   
   begin
   
-    xlog('Starting to import items:');
+    xlog('Starting to import items');
   
     l_app_url := xxdl_config_pkg.servicerooturl;
   
@@ -772,7 +806,7 @@ create or replace package body xxdl_mig_items_pkg as
                      <item:CategoryCode>[CATEGORY_CODE]</item:CategoryCode>
                   </item:ItemCategory>';
   
-    l_item_xml := ' <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/types/" xmlns:item="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/" xmlns:cat="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/itemSupplier/categories/" xmlns:item1="http://xmlns.oracle.com/apps/scm/productModel/items/flex/itemRevision/" xmlns:cat1="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/itemRevision/categories/" xmlns:cat2="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/item/categories/" xmlns:item2="http://xmlns.oracle.com/apps/scm/productModel/items/flex/item/" xmlns:item3="http://xmlns.oracle.com/apps/scm/productModel/items/flex/itemGdf/" xmlns:mod="http://xmlns.oracle.com/apps/flex/fnd/applcore/attachments/model/">
+    l_item_master_xml := ' <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/types/" xmlns:item="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/" xmlns:cat="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/itemSupplier/categories/" xmlns:item1="http://xmlns.oracle.com/apps/scm/productModel/items/flex/itemRevision/" xmlns:cat1="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/itemRevision/categories/" xmlns:cat2="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/item/categories/" xmlns:item2="http://xmlns.oracle.com/apps/scm/productModel/items/flex/item/" xmlns:item3="http://xmlns.oracle.com/apps/scm/productModel/items/flex/itemGdf/" xmlns:mod="http://xmlns.oracle.com/apps/flex/fnd/applcore/attachments/model/">
       <soapenv:Header/>
       <soapenv:Body>
           <typ:createItem>
@@ -784,6 +818,10 @@ create or replace package body xxdl_mig_items_pkg as
                   <item:ItemDescription>[DESCRIPTION]</item:ItemDescription>
                   <item:LongDescription>[LONG_DESCRIPTION]</item:LongDescription>
                   <item:PrimaryUOMValue>[PRIMARY_UOM_VALUE]</item:PrimaryUOMValue>
+                  <item:PurchasableFlag>[PURCHASABLE_FLAG]</item:PurchasableFlag>
+                  <item:PurchasingFlag>[PURCHASING_FLAG]</item:PurchasingFlag>
+                  <item:CustomerOrderFlag>[CUSTOMER_ORDER_FLAG]</item:CustomerOrderFlag>
+                  <item:CustomerOrderEnabledFlag>[CUSTOMER_ORDER_ENABLED_FLAG]</item:CustomerOrderEnabledFlag>
                   <item:ListPrice>[LIST_PRICE]</item:ListPrice>
                   <item:UnitWeightQuantity>[UNIT_WEIGHT_QUANTITY]</item:UnitWeightQuantity>
                   <item:WeightUOMValue>[WEIGHT_UOM]</item:WeightUOMValue>
@@ -794,9 +832,41 @@ create or replace package body xxdl_mig_items_pkg as
                   <item:SourceOrganizationValue>[SOURCE_ORGANIZATION_VALUE]</item:SourceOrganizationValue>
                   <item:SourceSubinventoryOrganizationValue>[SOURCE_SUBINVENTORY_ORGANIZATION_VALUE]</item:SourceSubinventoryOrganizationValue>
                   <item:SourceSubinventoryValue>[SOURCE_SUBINVENTORY_VALUE]</item:SourceSubinventoryValue>
-                  <item:InventoryPlanningMethodValue>[INVENTORY_PLANNINGMETHOD_VALUE]</item:InventoryPlanningMethodValue>
-                  <item:MinimumMinmaxQuantity>[MINIMUM_MINMAX_QUANTITY]</item:MinimumMinmaxQuantity>
-                  <item:MaximumMinmaxQuantity>[MAXIMUM_MINMAX_QUANTITY]</item:MaximumMinmaxQuantity> 
+                   <ns2:ItemDFF xmlns:ns15="http://xmlns.oracle.com/apps/scm/productModel/items/flex/item/">
+                      <ns15:standard>[DFF_STANDARD]</ns15:standard>
+                      <ns15:oznakaKvalitete>[DFF_OZNAKA_KVALITETE]</ns15:oznakaKvalitete>
+                      <ns15:cinka>[DFF_POSTO_CINKA]</ns15:cinka>
+                      <ns15:dlkUslugaCincanja>[DFF_USLUGA_CINCANJA]</ns15:dlkUslugaCincanja>
+                  </ns2:ItemDFF>                  
+                  [CATEGORIES_XML]
+                </typ:item>
+          </typ:createItem>
+      </soapenv:Body>
+   </soapenv:Envelope>';
+  
+    l_item_org_xml := ' <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/types/" xmlns:item="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/" xmlns:cat="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/itemSupplier/categories/" xmlns:item1="http://xmlns.oracle.com/apps/scm/productModel/items/flex/itemRevision/" xmlns:cat1="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/itemRevision/categories/" xmlns:cat2="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/item/categories/" xmlns:item2="http://xmlns.oracle.com/apps/scm/productModel/items/flex/item/" xmlns:item3="http://xmlns.oracle.com/apps/scm/productModel/items/flex/itemGdf/" xmlns:mod="http://xmlns.oracle.com/apps/flex/fnd/applcore/attachments/model/">
+      <soapenv:Header/>
+      <soapenv:Body>
+          <typ:createItem>
+              <typ:item xmlns:ns2="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/">
+                  <item:OrganizationCode>[ORGANIZATION_CODE]</item:OrganizationCode>
+                  <item:Template>[TEMPLATE]</item:Template>
+                  <item:ItemNumber>[ITEM_NUMBER]</item:ItemNumber>
+                  <item:ItemClass>Root Item Class</item:ItemClass>
+                  <item:ItemDescription>[DESCRIPTION]</item:ItemDescription>
+                  <item:PrimaryUOMValue>[PRIMARY_UOM_VALUE]</item:PrimaryUOMValue>
+                  <item:PurchasableFlag>[PURCHASABLE_FLAG]</item:PurchasableFlag>
+                  <item:PurchasingFlag>[PURCHASING_FLAG]</item:PurchasingFlag>
+                  <item:CustomerOrderFlag>[CUSTOMER_ORDER_FLAG]</item:CustomerOrderFlag>
+                  <item:CustomerOrderEnabledFlag>[CUSTOMER_ORDER_ENABLED_FLAG]</item:CustomerOrderEnabledFlag>
+                  <item:ListPrice>[LIST_PRICE]</item:ListPrice>
+                  <item:AssetCategoryValue>[ASSET_CATEGORY]</item:AssetCategoryValue>                  
+                  <item:ItemStatusValue>Active</item:ItemStatusValue>
+                  <item:LifecyclePhaseValue>Production</item:LifecyclePhaseValue>
+                  <item:ReplenishmentType>[REPLENISHMENT_TYPE]</item:ReplenishmentType>                  
+                  <item:SourceOrganizationValue>[SOURCE_ORGANIZATION_VALUE]</item:SourceOrganizationValue>
+                  <item:SourceSubinventoryOrganizationValue>[SOURCE_SUBINVENTORY_ORGANIZATION_VALUE]</item:SourceSubinventoryOrganizationValue>
+                  <item:SourceSubinventoryValue>[SOURCE_SUBINVENTORY_VALUE]</item:SourceSubinventoryValue>
                   <ns2:ItemDFF xmlns:ns15="http://xmlns.oracle.com/apps/scm/productModel/items/flex/item/">
                       <ns15:standard>[DFF_STANDARD]</ns15:standard>
                       <ns15:oznakaKvalitete>[DFF_OZNAKA_KVALITETE]</ns15:oznakaKvalitete>
@@ -810,39 +880,43 @@ create or replace package body xxdl_mig_items_pkg as
    </soapenv:Envelope>';
   
     for c_i in c_items loop
+      xlog('Item: ' || c_i.segment1);
     
       l_segment1 := c_i.segment1 || p_suffix;
     
       l_organization_code := get_organization_code(c_i.organization_code_ebs);
     
-      if should_migrate_item(c_i.inventory_item_id, c_i.organization_id) = 'N' then
-        xlog(c_i.segment1 || ', (' || l_organization_code || '): item should not be migrated');
-        continue;
-      end if;
-    
-      xlog('   -----------------------------');
-      xlog('   Import item: ' || l_segment1);
-      xlog('   Org        : ' || l_organization_code);
-    
-      xlog('   Checking if already exists in cloud!');
-    
-      find_item_cloud(l_segment1, l_organization_code, l_cloud_item, l_cloud_org);
-    
-      xlog('   Cloud item id:' || l_cloud_item);
-    
       l_item_rec.inventory_item_id := c_i.inventory_item_id;
       l_item_rec.organization_id   := c_i.organization_id;
       l_item_rec.segment1          := l_segment1;
       l_item_rec.organization_code := l_organization_code;
-      l_item_rec.description       := c_i.description;
-      l_item_rec.primary_uom_code  := c_i.primary_uom_code;
-      l_item_rec.process_flag      := x_return_status;
-      l_item_rec.creation_date     := sysdate;
-      l_item_rec.last_update_date  := sysdate;
+      xlog('Set desc');
+      l_item_rec.description := c_i.description;
+      xlog('Set uom');
+      l_item_rec.primary_uom_code := c_i.primary_uom_code;
+      xlog('Set creation date');
+      l_item_rec.creation_date    := sysdate;
+      l_item_rec.last_update_date := sysdate;
     
-      -- Item jos ne postoji
-      if l_cloud_item = 0 then
-        begin
+      begin
+      
+        if should_migrate_item(c_i.inventory_item_id, c_i.organization_id) = 'N' then
+          xlog(c_i.segment1 || ', (' || l_organization_code || '): item should not be migrated');
+          raise e_not_migrated;
+        end if;
+      
+        xlog('   -----------------------------');
+        xlog('   Import item: ' || l_segment1);
+        xlog('   Org        : ' || l_organization_code);
+      
+        xlog('   Checking if already exists in cloud!');
+      
+        find_item_cloud(l_segment1, l_organization_code, l_cloud_item, l_cloud_org);
+      
+        xlog('   Cloud item id:' || l_cloud_item);
+      
+        -- Item jos ne postoji
+        if l_cloud_item = 0 then
         
           -- Get template
           if l_organization_code = 'DLK' then
@@ -865,18 +939,74 @@ create or replace package body xxdl_mig_items_pkg as
             l_source_organization_name := get_organization_name(get_organization_code(c_i.source_organization_code));
           end if;
         
+          --Get l_unit_weight
+          if l_organization_code = 'DLK' then
+            if c_i.unit_weight is not null then
+              l_unit_weight := c_i.unit_weight;
+            else
+              -- Get max unit weigth from org levels
+              select max(unit_weight) into l_unit_weight from apps.mtl_system_items_b@ebsprod where inventory_item_id = c_i.inventory_item_id;
+            end if;
+          else
+            l_unit_weight := null;
+          end if;
+          xlog('l_unit_weight: ' || l_unit_weight);
+        
+          -- Get l_weight_uom
+          if l_unit_weight is not null then
+            l_weight_uom := 'kg';
+          else
+            l_weight_uom := null;
+          end if;
+        
+          -- Get flags --
+        
+          -- Purchasing item?
+          if c_i.purchasing_item_flag = 'Y' then
+            l_purchasing_flag := 'true';
+          else
+            l_purchasing_flag := 'false';
+          end if;
+          -- Purchasing enabled?
+          if c_i.purchasing_enabled_flag = 'Y' then
+            l_purchasable_flag := 'true';
+          else
+            l_purchasable_flag := 'false';
+          end if;
+          -- Customer ordered?
+          if c_i.customer_order_flag = 'Y' then
+            l_customer_order_flag := 'true';
+          else
+            l_customer_order_flag := 'false';
+          end if;
+          -- Customer order enabled?
+          if c_i.customer_order_enabled_flag = 'Y' then
+            l_customer_order_enabled_flag := 'true';
+          else
+            l_customer_order_enabled_flag := 'false';
+          end if;
+        
           xlog('Creating item...');
         
-          l_text := l_item_xml;
+          if l_organization_code = 'DLK' then
+            l_text := l_item_master_xml;
+          else
+            l_text := l_item_org_xml;
+          end if;
+        
           l_text := replace(l_text, '[ORGANIZATION_CODE]', l_organization_code);
           l_text := replace(l_text, '[TEMPLATE]', l_template);
           l_text := replace(l_text, '[ITEM_NUMBER]', l_segment1);
           l_text := replace(l_text, '[DESCRIPTION]', cdata(c_i.description));
           l_text := replace(l_text, '[LONG_DESCRIPTION]', cdata(c_i.long_description));
-          l_text := replace(l_text, '[PRIMARY_UOM_VALUE]', c_i.primary_uom_code);
+          l_text := replace(l_text, '[PRIMARY_UOM_VALUE]', c_i.primary_uom_code);    
+          l_text := replace(l_text, '[PURCHASING_FLAG]', l_purchasing_flag);
+          l_text := replace(l_text, '[PURCHASABLE_FLAG]', l_purchasable_flag);
+          l_text := replace(l_text, '[CUSTOMER_ORDER_FLAG]', l_customer_order_flag);
+          l_text := replace(l_text, '[CUSTOMER_ORDER_ENABLED_FLAG]', l_customer_order_enabled_flag);
           l_text := replace(l_text, '[LIST_PRICE]', format_number(l_list_price));
-          l_text := replace(l_text, '[UNIT_WEIGHT_QUANTITY]', format_number(c_i.unit_weight));
-          l_text := replace(l_text, '[WEIGHT_UOM]', 'kg');
+          l_text := replace(l_text, '[UNIT_WEIGHT_QUANTITY]', format_number(l_unit_weight));
+          l_text := replace(l_text, '[WEIGHT_UOM]', l_weight_uom);
           l_text := replace(l_text, '[ASSET_CATEGORY]', c_i.asset_category);
           l_text := replace(l_text, '[DFF_STANDARD]', cdata(c_i.dff_standard));
           l_text := replace(l_text, '[DFF_OZNAKA_KVALITETE]', cdata(c_i.dff_oznaka_kvalitete));
@@ -886,22 +1016,20 @@ create or replace package body xxdl_mig_items_pkg as
           l_text := replace(l_text, '[SOURCE_ORGANIZATION_VALUE]', l_source_organization_name);
           l_text := replace(l_text, '[SOURCE_SUBINVENTORY_ORGANIZATION_VALUE]', null);
           l_text := replace(l_text, '[SOURCE_SUBINVENTORY_VALUE]', c_i.source_subinventory);
-          l_text := replace(l_text, '[INVENTORY_PLANNINGMETHOD_VALUE]', c_i.inventory_planning_value);
-          l_text := replace(l_text, '[MINIMUM_MINMAX_QUANTITY]', format_number(c_i.min_minmax_quantity));
-          l_text := replace(l_text, '[MAXIMUM_MINMAX_QUANTITY]', format_number(c_i.max_minmax_quantity));
-          -- Master level attributes
-          if l_organization_code = 'DLK' then
-            null;
-          else
-            null;
-          end if;
         
           l_text_categories := '';
         
           for c_i_cat in c_item_categories(c_i.inventory_item_id, c_i.organization_id) loop
           
             if c_i_cat.orig_category_set_name = 'XXDL kategorizacija' then
-              l_item_rec.category := c_i_cat.category_code;
+              l_new_category      := get_po_category(c_i_cat.category_code);
+              l_item_rec.category := l_new_category;
+              if l_new_category = 'Multiple' then
+                l_item_rec.error_msg := 'Multiple new categories mapped to category ' || c_i_cat.category_code;
+                raise e_processing_exception;
+              end if;
+              xlog('Old category: ' || c_i_cat.category_code);
+              xlog('New category: ' || l_item_rec.category);
             end if;
           
             if c_i_cat.orig_category_set_name = 'XXDL PLA' then
@@ -911,7 +1039,7 @@ create or replace package body xxdl_mig_items_pkg as
             if l_organization_code = 'DLK' and c_i_cat.orig_category_set_name = 'XXDL kategorizacija' then
               l_text_categories := l_text_categories || l_category_xml;
               l_text_categories := replace(l_text_categories, '[CATEGORY_SET_NAME]', c_i_cat.category_set_name);
-              l_text_categories := replace(l_text_categories, '[CATEGORY_CODE]', c_i_cat.category_code);
+              l_text_categories := replace(l_text_categories, '[CATEGORY_CODE]', l_item_rec.category);
             end if;
           
             if c_i_cat.orig_category_set_name = 'XXDL PLA' then
@@ -926,26 +1054,23 @@ create or replace package body xxdl_mig_items_pkg as
           l_soap_env := l_soap_env || to_clob(l_text);
           l_text     := '';
         
-          xlog('   Envelope built!');
-        
           xlog('   Calling web service.');
           xlog('   Url:' || l_app_url || 'fscmService/ItemServiceV2?WSDL');
           xxfn_cloud_ws_pkg.ws_call(p_ws_url         => l_app_url || 'fscmService/ItemServiceV2?WSDL',
                                     p_soap_env       => l_soap_env,
                                     p_soap_act       => 'createItem',
                                     p_content_type   => 'text/xml;charset="UTF-8"',
-                                    x_return_status  => x_return_status,
-                                    x_return_message => x_return_message,
-                                    x_ws_call_id     => x_ws_call_id);
+                                    x_return_status  => l_return_status,
+                                    x_return_message => l_return_message,
+                                    x_ws_call_id     => l_ws_call_id);
         
-          --log(l_text);
-          --dbms_lob.freetemporary(l_soap_env);
-          xlog('   ws_call_id (Create Item):' || x_ws_call_id);
+          xlog('   ws_call_id (Create Item):' || l_ws_call_id);
         
-          if x_return_status = 'S' then
+          if l_return_status = 'S' then
           
             xlog('   Item migrated!');
-            l_item_rec.process_flag := x_return_status;
+          
+            l_item_rec.process_flag := l_return_status;
           
             begin
               -- Get cloud id
@@ -962,7 +1087,7 @@ create or replace package body xxdl_mig_items_pkg as
                               '/env:Envelope/env:Body/ns0:createItemResponse/ns2:result/val:Value' passing x.response_xml columns cloud_item_id
                               varchar2(4000) path './ns1:ItemId',
                               cloud_org_id varchar2(4000) path './ns1:OrganizationId') xt
-               where x.ws_call_id = x_ws_call_id;
+               where x.ws_call_id = l_ws_call_id;
             
             exception
               when no_data_found then
@@ -970,16 +1095,12 @@ create or replace package body xxdl_mig_items_pkg as
                 l_item_rec.cloud_org_id  := null;
             end;
           
-            /*update xxfn_ws_call_log xx 
-            set xx.response_xml = null
-            ,xx.response_clob = null
-            ,xx.response_blob = null
-            ,xx.ws_payload_xml = null
-            where ws_call_id = x_ws_call_id;
-            */
+            -- Delete lobs after successful item migrated
+            xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
           
           else
             xlog('   Error! Item not migrated!');
+            xlog('x_return_message: ' || l_return_message);
           
             -- Get error message
             begin
@@ -991,7 +1112,7 @@ create or replace package body xxdl_mig_items_pkg as
                      xmltable(xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"),
                               './/env:Fault' passing x.response_xml columns faultcode varchar2(4000) path '.',
                               faultstring varchar2(4000) path '.') xt
-               where x.ws_call_id = x_ws_call_id;
+               where x.ws_call_id = l_ws_call_id;
             
             exception
               when no_data_found then
@@ -1001,7 +1122,7 @@ create or replace package body xxdl_mig_items_pkg as
                     into l_fault_code,
                          l_fault_string
                     from xxfn_ws_call_log x
-                   where x.ws_call_id = x_ws_call_id;
+                   where x.ws_call_id = l_ws_call_id;
                 
                 exception
                   when others then
@@ -1016,22 +1137,26 @@ create or replace package body xxdl_mig_items_pkg as
             xlog('   ' || l_item_rec.error_msg);
           end if;
         
-        exception
-          when e_processing_exception then
-            l_item_rec.process_flag := 'E';
-            xlog('*** Error in processing item');
-            xlog(l_item_rec.error_msg);
-        end;
+        else
+          xlog('  Cloud Item already exists!');
+        
+          l_item_rec.cloud_item_id := l_cloud_item;
+          l_item_rec.cloud_org_id  := l_cloud_org;
+          l_item_rec.process_flag  := 'S';
+          l_item_rec.error_msg     := null;
+        
+        end if; -- end if already exists
       
-      else
-        xlog('  Cloud Item already exists!');
-      
-        l_item_rec.cloud_item_id := l_cloud_item;
-        l_item_rec.cloud_org_id  := l_cloud_org;
-        l_item_rec.process_flag  := 'S';
-        l_item_rec.error_msg     := null;
-      
-      end if; -- end if already exists
+      exception
+        when e_processing_exception then
+          l_item_rec.process_flag := 'E';
+          xlog('*** Error in processing item');
+          xlog(l_item_rec.error_msg);
+        
+        when e_not_migrated then
+          xlog('Setting status to X');
+          l_item_rec.process_flag := 'X';
+      end;
     
       -- Save resullts to xxdl_mtl_system_items_mig
       begin
@@ -1054,11 +1179,11 @@ create or replace package body xxdl_mig_items_pkg as
         update_item_description(l_item_rec.inventory_item_id,
                                 l_item_rec.organization_id,
                                 l_item_rec.cloud_item_id,
-                                x_return_status,
-                                x_return_message);
+                                l_return_status,
+                                l_return_message);
       
-        l_item_rec.process_flag     := x_return_status;
-        l_item_rec.error_msg        := x_return_message;
+        l_item_rec.process_flag     := l_return_status;
+        l_item_rec.error_msg        := l_return_message;
         l_item_rec.last_update_date := sysdate;
       
         update xxdl_mtl_system_items_mig xx
@@ -1070,10 +1195,10 @@ create or replace package body xxdl_mig_items_pkg as
     
       -- Migrate Cross References for master org
       if l_organization_code = 'DLK' and l_item_rec.process_flag = 'S' then
-        migrate_cross_references(l_item_rec.inventory_item_id, l_segment1, x_return_status, x_return_message);
+        migrate_cross_references(l_item_rec.inventory_item_id, l_segment1, l_return_status, l_return_message);
       
-        l_item_rec.process_flag     := x_return_status;
-        l_item_rec.error_msg        := x_return_message;
+        l_item_rec.process_flag     := l_return_status;
+        l_item_rec.error_msg        := l_return_message;
         l_item_rec.last_update_date := sysdate;
       
         update xxdl_mtl_system_items_mig xx
@@ -1113,6 +1238,93 @@ create or replace package body xxdl_mig_items_pkg as
            dbms_utility.format_error_backtrace());
     
   end migrate_items_cloud;
+
+  --/*-----------------------------------------------------------------------------
+  -- Name    : migrate_item_batch
+  -- Desc    : Migrate next not migrated items
+  -- Usage   : 
+  -------------------------------------------------------------------------------*/
+  procedure migrate_item_batch(p_batch_size number, p_retry_error in varchar2) as
+  
+    cursor cur_items is
+      select distinct segment1
+        from apps.mtl_system_items_b@ebsprod msi
+       where not exists (select 1
+                from xxdl_mtl_system_items_mig xx
+               where xx.inventory_item_id = msi.inventory_item_id
+                 and xx.organization_id = msi.organization_id
+                 and xx.process_flag in ('S', 'X'))
+         and not exists (select 1
+                from xxdl_mtl_system_items_mig xx
+               where xx.inventory_item_id = msi.inventory_item_id
+                 and xx.organization_id = msi.organization_id
+                 and xx.process_flag = 'E'
+                 and p_retry_error = 'N')
+       order by segment1;
+  
+    l_count number := 0;
+  
+  begin
+  
+    for c_item in cur_items loop
+    
+      l_count := l_count + 1;
+    
+      --dbms_output.put_line(l_count || '. Item: ' || c_item.segment1);
+    
+      xxdl_mig_items_pkg.migrate_items_cloud(p_item_seg => c_item.segment1, p_rows => 1, p_retry_error => p_retry_error, p_suffix => '');
+    
+      commit;
+    
+      if l_count >= p_batch_size then
+        exit;
+      end if;
+    
+    end loop;
+  
+  end;
+
+  --/*-----------------------------------------------------------------------------
+  -- Name    : migrate_item_all
+  -- Desc    : Migrate all items
+  -- Usage   : 
+  -------------------------------------------------------------------------------*/
+  procedure migrate_item_all as
+  begin
+    migrate_item_batch(p_batch_size => 999999999, p_retry_error => 'N');
+  end;
+
+  --/*-----------------------------------------------------------------------------
+  -- Name    : reprocess_error_batch
+  -- Desc    : Reprocess errors
+  -- Usage   : 
+  -------------------------------------------------------------------------------*/
+  procedure reprocess_error_batch(p_batch_size number) as
+  
+    cursor cur_items is
+      select distinct segment1 from xxdl_mtl_system_items_mig xx where xx.process_flag = 'E' order by segment1;
+  
+    l_count number := 0;
+  
+  begin
+  
+    for c_item in cur_items loop
+    
+      l_count := l_count + 1;
+    
+      --dbms_output.put_line(l_count || '. Item: ' || c_item.segment1);
+    
+      xxdl_mig_items_pkg.migrate_items_cloud(p_item_seg => c_item.segment1, p_rows => 1, p_retry_error => 'Y', p_suffix => '');
+    
+      commit;
+    
+      if l_count >= p_batch_size then
+        exit;
+      end if;
+    
+    end loop;
+  
+  end;
 
   --/*-----------------------------------------------------------------------------
   -- Name    : find_item_cloud
@@ -1237,6 +1449,9 @@ create or replace package body xxdl_mig_items_pkg as
   
     xlog('Cloud ItemId: ' || p_cloud_item);
     xlog('Cloud OrganizationId: ' || p_cloud_org);
+  
+    -- Delete lobs after usage
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(x_ws_call_id);
   
   exception
     when others then
