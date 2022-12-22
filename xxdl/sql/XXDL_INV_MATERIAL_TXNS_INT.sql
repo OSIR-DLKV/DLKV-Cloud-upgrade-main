@@ -15,7 +15,7 @@ CREATE TABLE xxdl_inv_material_txns_int (
      item_number              VARCHAR2(300) NOT NULL,
      transaction_type_name    VARCHAR2(80) NOT NULL,
      transaction_quantity     NUMBER NOT NULL,
-     transaction_uom          VARCHAR2(3) NOT NULL,
+     transaction_uom          VARCHAR2(20) NOT NULL,
      transaction_date         DATE NOT NULL,
      subinventory_code        VARCHAR2(10) NOT NULL,
      locator_name             VARCHAR2(255),

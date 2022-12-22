@@ -5,7 +5,8 @@ create or replace package body xxdl_inv_integration_pkg is
   Object      : XXDL_INV_INTEGRATION_PKG
   Description : Package to Inventory integrations 
   History     :
-  v1.0 15.7.2022 Marko Sladoljev: Inicijalna verzija
+  v1.0 15.07.2022 Marko Sladoljev: Inicijalna verzija
+  v1.1 22.12.2022 Marko Sladoljev: Verzija za PROD
   ============================================================================+*/
 
   -- Log variables
@@ -904,7 +905,9 @@ create or replace package body xxdl_inv_integration_pkg is
   Arguments   : 
   ============================================================================+*/
   procedure process_transactions_interface(p_batch_id number) as
-  
+      -- Potrebno da se moze iz triggera pozivati
+    pragma autonomous_transaction;
+    
     cursor cur_transactions is
       select *
         from xxdl_inv_material_txns_int
