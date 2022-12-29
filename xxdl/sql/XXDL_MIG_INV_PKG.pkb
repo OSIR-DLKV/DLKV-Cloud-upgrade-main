@@ -10,13 +10,11 @@ create or replace package body xxdl_mig_inv_pkg as
 
   -- Log variables
   c_module    constant varchar2(100) := 'XXDL_MIG_INV_PKG';
-  g_log_level constant varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
-  --g_log_level    constant varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
+  --g_log_level constant varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
+  g_log_level    constant varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular production error only logging
 
   -- Constants
-  g_account               constant varchar2(100) := '590310'; --- konto
-  g_subinventory_code     constant varchar2(100) := 'Zalihe'; -- sve ide na isti subinventory
-  g_locator               constant varchar2(100) := '00-00-00-00-00';
+  g_account               constant varchar2(100) := '100970'; --- konto
   g_transaction_date      constant date := to_date('1-JUL-2022', 'DD-MON-YYYY');
   g_transaction_type_name constant varchar2(250) := unistr('Migracija po\010Detnih stanja ulaz');
   c_eur_rate              constant number := 7.5345;
@@ -37,7 +35,7 @@ create or replace package body xxdl_mig_inv_pkg as
   begin
     g_last_message := p_text;
     if g_log_level = xxdl_log_pkg.g_level_statement then
-      dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
+      --dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
       xxdl_log_pkg.log(p_module => c_module, p_log_level => xxdl_log_pkg.g_level_statement, p_message => p_text);
     end if;
   end;
@@ -72,68 +70,7 @@ create or replace package body xxdl_mig_inv_pkg as
       -- Not mapped
       l_seg1 := null;
     end if;
-    /*
-      select decode(p_org_code,
-                    'I10',
-                    '01',
-                    'GDP',
-                    '02',
-                    'I04',
-                    '01',
-                    'R01',
-                    '01',
-                    'I02',
-                    '01',
-                    'I05',
-                    '01',
-                    'NUF',
-                    '11',
-                    'X04',
-                    '01',
-                    'I04',
-                    '01',
-                    'T01',
-                    '01',
-                    'T01',
-                    '01',
-                    'X01',
-                    '01',
-                    'I01',
-                    '01',
-                    'NU1',
-                    '11',
-                    'MS1',
-                    '02',
-                    'MP1',
-                    '02',
-                    'SO1',
-                    '02',
-                    'MPR',
-                    '02',
-                    'OA3',
-                    '02',
-                    'SO2',
-                    '02',
-                    'SS1',
-                    '13',
-                    'AO3',
-                    '13',
-                    'SWE',
-                    '11',
-                    'MT1',
-                    '02',
-                    'SP1',
-                    '13',
-    
-                    --Dalekovod EMU 06
-                    'ET1',
-                    '06',
-                    'ES1',
-                    '06',
-                    null)
-        into l_seg1
-        from dual;
-    */
+   
     if l_seg1 is null then
       g_error_message := 'Org code ' || p_org_code || ' not mapped to company segment 1';
       raise e_processing_exception;
@@ -164,6 +101,44 @@ create or replace package body xxdl_mig_inv_pkg as
   end;
 
   /*===========================================================================+
+  Procedure   : get_locator
+  Description : 
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  function get_locator(p_org_code varchar2) return varchar2 as
+    l_locator varchar2(250);
+  begin
+  
+    if p_org_code in ('ES1', 'ET1') then
+      l_locator := '00';
+    else
+      l_locator := '00-00-00-00-00';
+    end if;
+  
+    return l_locator;
+  end;
+
+  /*===========================================================================+
+  Procedure   : get_subinventory
+  Description : 
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  function get_subinventory(p_org_code varchar2) return varchar2 as
+    l_locator varchar2(250);
+  begin
+  
+    if p_org_code in ('ET1') then
+      l_locator := 'Zalihe2'; -- TODO: Za produkciju Zalihe
+    else
+      l_locator := 'Zalihe';
+    end if;
+  
+    return l_locator;
+  end;
+
+  /*===========================================================================+
   Procedure   : migrate_onhand
   Description : 
   Usage       : 
@@ -186,6 +161,10 @@ create or replace package body xxdl_mig_inv_pkg as
   
     l_seg1 varchar2(10);
   
+    l_locator varchar2(100);
+  
+    l_subinventory varchar2(20);
+  
   begin
   
     xlog('Procedure migrate_onhand started');
@@ -193,11 +172,13 @@ create or replace package body xxdl_mig_inv_pkg as
     for c_exp in cur_exp loop
       begin
       
-        xlog('Inserting into xxdl_inv_material_txns_int l_batch_id: ' || l_batch_id);
-      
         l_batch_id := xxdl_inv_material_txns_bat_s1.nextval;
       
+        xlog('Inserting into xxdl_inv_material_txns_int l_batch_id: ' || l_batch_id);
+      
         l_seg1 := get_company_segment1(c_exp.organization_code_ebs);
+      
+        l_locator := get_locator(c_exp.organization_code_ebs);
       
         l_row.transaction_interface_id := xxdl_inv_material_txns_int_s1.nextval;
         l_row.batch_id                 := l_batch_id;
@@ -207,10 +188,10 @@ create or replace package body xxdl_mig_inv_pkg as
         l_row.transaction_quantity     := c_exp.primary_transaction_quantity;
         l_row.transaction_uom          := c_exp.primary_uom_code;
         l_row.transaction_date         := g_transaction_date;
-        l_row.subinventory_code        := g_subinventory_code;
-        l_row.locator_name             := g_locator;
-        l_row.inv_project_number       := c_exp.project_number;
-        l_row.inv_task_number          := c_exp.task_number;
+        l_row.subinventory_code        := get_subinventory(c_exp.organization_code_ebs);
+        l_row.locator_name             := l_locator;
+        l_row.inv_project_number       := null; --c_exp.project_number; --Prema dogovoru, zalihu na projektu ne migriramo
+        l_row.inv_task_number          := null; -- c_exp.task_number;
         l_row.account_combination      := l_seg1 || '.' || g_account || '.000000.000000.000000.0000000.000000.0.000000.000000';
         l_row.source_code              := 'DLKV';
         l_row.source_line_id           := 1;
@@ -223,7 +204,20 @@ create or replace package body xxdl_mig_inv_pkg as
         l_row.creation_date            := sysdate;
         l_row.last_update_date         := sysdate;
       
+        xlog('Deleting from xxdl_inv_material_txns_int if exists from prevous errored transactions');
+        delete from xxdl_inv_material_txns_int
+         where organization_name = l_row.organization_name
+           and item_number = l_row.item_number
+           and transaction_type_name = l_row.transaction_type_name
+           and nvl(locator_name, 'X') = nvl(l_row.locator_name, 'X')
+           and nvl(inv_project_number, 'X') = nvl(l_row.inv_project_number, 'X')
+           and nvl(inv_task_number, 'X') = nvl(l_row.inv_task_number, 'X');
+        xlog('Deleted: ' || sql%rowcount);
+      
         insert into xxdl_inv_material_txns_int values l_row;
+      
+        -- process_transactions_interface is autonomous, commit is required
+        commit;
       
         xxdl_inv_integration_pkg.process_transactions_interface(p_batch_id => l_batch_id);
       
@@ -252,6 +246,20 @@ create or replace package body xxdl_mig_inv_pkg as
     xlog('Procedure migrate_onhand ended');
   
   end;
+
+  /*===========================================================================+
+  Procedure   : migrate_onhand_all
+  Description : Migrates all exported onhand, for usage in a scheduled job
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure migrate_onhand_all as
+  begin
+  
+    xxdl_mig_inv_pkg.migrate_onhand(p_org_code => null, p_item => null);
+  
+  end;
+
   /*===========================================================================+
   Procedure   : export_onhand
   Description : 
@@ -344,6 +352,16 @@ create or replace package body xxdl_mig_inv_pkg as
                                        'ET1')
          and mtp.organization_code = nvl(p_org_code, mtp.organization_code)
          and msi.segment1 = nvl(p_item, msi.segment1)
+            -- Not exported already
+         and not exists (select 1
+                from xxdl_mig_onhand mig
+               where mig.organization_code_ebs = mtp.organization_code
+                 and mig.item = msi.segment1
+                 and mig.subinventory_code = mig.subinventory_code
+                 and nvl(mig.project_number, 'X') = nvl(p.segment1, 'X')
+                 and nvl(mig.task_number, 'X') = nvl(t.task_number, 'X')
+                 and nvl(mig.locator_id, -1) = nvl(onh.locator_id, -1))
+      
        order by mtp.organization_code,
                 msi.segment1,
                 onh.subinventory_code;

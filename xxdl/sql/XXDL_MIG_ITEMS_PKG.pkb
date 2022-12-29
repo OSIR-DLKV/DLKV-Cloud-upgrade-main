@@ -14,7 +14,7 @@ create or replace package body xxdl_mig_items_pkg as
    -- -------- ------ ------------ -----------------------------------------------
    -- 28-04-22 120.00 zkovac       Initial creation 
    -- 18-10-22 1.1    msladoljev   New package XXDL_MIG_ITEMS_PKG  
-   --
+   -- 22-11-22 1.2    msladoljev   Verzija nakon mapiranja nabavnih kategorija
   =============================================================================*/
   --c_log_module constant varchar2(300) := $$plsql_unit;
   e_processing_exception exception;
@@ -139,7 +139,7 @@ create or replace package body xxdl_mig_items_pkg as
   
     close cur_itm;
   
-    if c_itm.segment1 like 'U%' then
+    if c_itm.segment1 like 'U%' or c_itm.segment1 like 'IU%' or c_itm.segment1 like '1USLUGA%' then
     
       --------------------------
       --- Template za usluge ---
@@ -296,10 +296,10 @@ create or replace package body xxdl_mig_items_pkg as
       l_text := l_item_xml;
       l_text := replace(l_text, '[ITEM_ID]', p_cloud_item_id);
       l_text := replace(l_text, '[ORGANIZATION_ID]', l_dlk_cloud_org_id);
-      l_text := replace(l_text, '[DESCRIPTION_HR]', c_desc.description_hr);
-      l_text := replace(l_text, '[LONG_DESCRIPTION_HR]', c_desc.long_description_hr);
-      l_text := replace(l_text, '[DESCRIPTION_US]', c_desc.description_us);
-      l_text := replace(l_text, '[LONG_DESCRIPTION_US]', c_desc.long_description_us);
+      l_text := replace(l_text, '[DESCRIPTION_HR]', cdata(c_desc.description_hr));
+      l_text := replace(l_text, '[LONG_DESCRIPTION_HR]', cdata(c_desc.long_description_hr));
+      l_text := replace(l_text, '[DESCRIPTION_US]', cdata(c_desc.description_us));
+      l_text := replace(l_text, '[LONG_DESCRIPTION_US]', cdata(c_desc.long_description_us));
     
       l_soap_env := l_soap_env || to_clob(l_text);
       l_text     := '';
@@ -454,21 +454,34 @@ create or replace package body xxdl_mig_items_pkg as
   -- Name    :get_po_category
   -- Desc    :TRanslation PO Category according to xxdl_nab_cat_old_new
   -------------------------------------------------------------------------------*/
-  function get_po_category(p_category_code varchar2) return varchar as
+  function get_po_category(p_item_number varchar2, p_category_code_old varchar2) return varchar as
     l_new_category varchar2(100);
   begin
   
+    -- Check xxdl_nab_cat_old_new_map for item
     begin
-      select trim(cat_new) into l_new_category from xxdl.xxdl_nab_cat_old_new@ebsprod where cat_old = p_category_code;
+      select max(trim(cat_new)) into l_new_category from xxdl.xxdl_nab_cat_old_new_map@ebsprod where proizvd = p_item_number;
     exception
       when no_data_found then
-        l_new_category := p_category_code;
+        l_new_category := null;
+    end;
+  
+    if l_new_category is not null then
+      return l_new_category;
+    end if;
+    
+    -- Check xxdl_nab_cat_old_new for category mapping
+    begin
+      select trim(cat_new) into l_new_category from xxdl.xxdl_nab_cat_old_new@ebsprod where cat_old = p_category_code_old;
+    exception
+      when no_data_found then
+        l_new_category := p_category_code_old;
       when too_many_rows then
-        l_new_category := 'Multiple';
+        l_new_category := p_category_code_old;
     end;
   
     if l_new_category is null then
-      l_new_category := p_category_code;
+      l_new_category := p_category_code_old;
     end if;
   
     return l_new_category;
@@ -518,7 +531,16 @@ create or replace package body xxdl_mig_items_pkg as
         return 'N';
       end if;
     
-      if c_itm.segment1 like 'U%' then
+      -- First chek xxdl_migracija_artikala for master item
+      if p_organization_id = l_dlk_org_id then
+        select count(1) into l_count from xxdl.xxdl_migracija_artikala@ebsprod where sprom = c_itm.segment1;
+      
+        if l_count > 0 then
+          return 'Y';
+        end if;
+      end if;
+    
+      if c_itm.segment1 like 'U%' or c_itm.segment1 like 'IU%' or c_itm.segment1 like '1USLUGA%' then
       
         ------------------
         ----- Usluge -----
@@ -890,13 +912,10 @@ create or replace package body xxdl_mig_items_pkg as
       l_item_rec.organization_id   := c_i.organization_id;
       l_item_rec.segment1          := l_segment1;
       l_item_rec.organization_code := l_organization_code;
-      xlog('Set desc');
-      l_item_rec.description := c_i.description;
-      xlog('Set uom');
-      l_item_rec.primary_uom_code := c_i.primary_uom_code;
-      xlog('Set creation date');
-      l_item_rec.creation_date    := sysdate;
-      l_item_rec.last_update_date := sysdate;
+      l_item_rec.description       := c_i.description;
+      l_item_rec.primary_uom_code  := c_i.primary_uom_code;
+      l_item_rec.creation_date     := sysdate;
+      l_item_rec.last_update_date  := sysdate;
     
       begin
       
@@ -999,7 +1018,7 @@ create or replace package body xxdl_mig_items_pkg as
           l_text := replace(l_text, '[ITEM_NUMBER]', l_segment1);
           l_text := replace(l_text, '[DESCRIPTION]', cdata(c_i.description));
           l_text := replace(l_text, '[LONG_DESCRIPTION]', cdata(c_i.long_description));
-          l_text := replace(l_text, '[PRIMARY_UOM_VALUE]', c_i.primary_uom_code);    
+          l_text := replace(l_text, '[PRIMARY_UOM_VALUE]', c_i.primary_uom_code);
           l_text := replace(l_text, '[PURCHASING_FLAG]', l_purchasing_flag);
           l_text := replace(l_text, '[PURCHASABLE_FLAG]', l_purchasable_flag);
           l_text := replace(l_text, '[CUSTOMER_ORDER_FLAG]', l_customer_order_flag);
@@ -1022,7 +1041,7 @@ create or replace package body xxdl_mig_items_pkg as
           for c_i_cat in c_item_categories(c_i.inventory_item_id, c_i.organization_id) loop
           
             if c_i_cat.orig_category_set_name = 'XXDL kategorizacija' then
-              l_new_category      := get_po_category(c_i_cat.category_code);
+              l_new_category      := get_po_category(c_i.segment1, c_i_cat.category_code);
               l_item_rec.category := l_new_category;
               if l_new_category = 'Multiple' then
                 l_item_rec.error_msg := 'Multiple new categories mapped to category ' || c_i_cat.category_code;
@@ -1291,7 +1310,7 @@ create or replace package body xxdl_mig_items_pkg as
   -------------------------------------------------------------------------------*/
   procedure migrate_item_all as
   begin
-    migrate_item_batch(p_batch_size => 999999999, p_retry_error => 'N');
+    migrate_item_batch(p_batch_size => 999999999, p_retry_error => 'N'); -- TODO : Prvi put s 'N' pokrenuti, kasnije s 'Y'
   end;
 
   --/*-----------------------------------------------------------------------------

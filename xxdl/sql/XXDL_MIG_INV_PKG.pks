@@ -11,6 +11,8 @@ WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
 
 create or replace package xxdl_mig_inv_pkg as
 
+  procedure migrate_onhand_all; 
+
   procedure migrate_onhand(p_org_code varchar2 default null, p_item varchar2 default null);
 
   procedure export_onhand(p_org_code varchar2 default null, p_item varchar2 default null);
