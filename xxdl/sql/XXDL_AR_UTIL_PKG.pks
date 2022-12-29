@@ -83,7 +83,8 @@ procedure find_address_cloud(
 ============================================================================+*/
 procedure update_cust_site_tax_ref(
       p_party_id in varchar2
-      ,p_cust_account_id in varchar2);
+      ,p_cust_account_id in varchar2
+      ,p_type in varchar2);
 
 /*===========================================================================+
  -- Name    : update_supplier_tax_ref
@@ -93,6 +94,15 @@ procedure update_cust_site_tax_ref(
  ============================================================================+*/
  procedure update_supplier_tax_ref(
      p_supplier_number in varchar2);
+ 
+/*===========================================================================+
+ -- Name    : update_supplier_payment_method
+ -- Desc    : Update supplier payment method
+ -- Usage   : 
+ -- Parameters
+ ============================================================================+*/
+ procedure update_supplier_payment_method(
+        p_supplier_number in varchar2);
 
 /*===========================================================================+
   -- Name    : update_cust_acc_profile
@@ -139,7 +149,24 @@ procedure get_supplier_info (errbuf out varchar2, retcode out varchar2);
 ============================================================================+*/
 procedure migrate_suppliers_cloud(
       p_party_number in varchar2);
-      
+
+/*===========================================================================+
+-- Name    : reset_cust_mig
+-- Desc    : Update customer acct profile
+-- Usage   : 
+-- Parameters
+============================================================================+*/
+procedure reset_cust_mig(p_party_number in varchar2);
+
+/*===========================================================================+
+-- Name    : reset_cust_mig
+-- Desc    : Update customer acct profile
+-- Usage   : 
+-- Parameters
+============================================================================+*/
+procedure reset_sup_mig(p_supplier_number in varchar2);      
+
+
 function parse_cs_response(p_ws_call_id in number) return varchar2;
 
 

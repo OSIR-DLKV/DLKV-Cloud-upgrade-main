@@ -89,6 +89,439 @@
             NULL;
     END;
 
+
+    procedure create_party_site(p_party_number in varchar2, x_return_status out varchar2) is
+
+    cursor c_party_sites(c_party_number in varchar2) is 
+    select distinct
+    hl.location_id
+    ,hps.party_site_id
+    ,hp.party_id
+    ,'99999999'||hp.party_number party_number
+    ,'99999999'||hps.party_site_number party_site_number
+    ,HCASA.attribute4 party_site_name
+    ,hps.IDENTIFYING_ADDRESS_FLAG
+    ,decode(hps.IDENTIFYING_ADDRESS_FLAG,'Y','true','false') IDENTIFYING_ADDRESS_FLAG_SOAP
+    ,hps.status
+    ,case
+                when hl.country = 'HR' then
+                    case when hl.country != hl.state then
+                        hl.state
+                    else                
+                        decode(hl.country,'CS','XK',hl.country)
+                    end
+                else decode(hl.country,'CS','XK',hl.country)   
+            end cloud_country 
+    ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
+    ,case
+            when hl.country = 'HR' then
+                case when hl.country != hl.state then
+                    case 
+                        when hl.state = 'HR' then
+                            'HR'
+                        when (hl.state = 'DE' or hl.state = 'AT') then
+                            'D'
+                        else 'US' 
+                    end
+                else                
+                    case
+                        when hl.country = 'HR' then
+                            'HR'
+                        when (hl.country = 'DE' or hl.country = 'AT') then
+                            'D'
+                        else 'US' 
+                    end
+                end
+            else 
+                case
+                        when hl.country = 'HR' then
+                            'HR'
+                        when (hl.country = 'DE' or hl.country = 'AT') then
+                            'D'
+                        else 'US' 
+                    end   
+        end language          
+    ,xhl.cloud_location_id    
+    from
+    apps.hz_parties@ebsprod hp
+    ,apps.hz_party_sites@ebsprod hps
+    ,apps.hz_cust_accounts@ebsprod hca
+    ,apps.HZ_CUST_ACCT_SITES_ALL@ebsprod HCASA
+    ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
+    ,apps.hz_locations@ebsprod hl
+    ,xxdl_hz_locations xhl
+    where 1=1
+    and hp.party_id = hca.party_id(+)
+    and hp.party_id = hps.party_id(+)
+    and hca.cust_account_id = hcasa.cust_account_id
+    and hps.party_site_id = hcasa.party_site_id(+)
+    and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
+    and hps.location_id = hl.location_id(+)
+    and hcsu.site_use_code is not null
+    --and hps.status = 'A'
+    and hcasa.org_id in (102,531,532,663,1486,2068,2288)
+    --and hcasa.org_id in (102,531,2288)
+    and to_number(hp.party_number) = case
+                            when length(c_party_number)-8=length(hp.party_number) then
+                                case when length(hp.party_number)!= length(c_party_number) then to_number(substr(c_party_number,length(c_party_number)-length(hp.party_number)+1,length(c_party_number))) else to_number(c_party_number) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_number mora zapisati s nekim sufiksom radi unique errora
+                            else
+                                to_number(c_party_number)
+                            end
+    and hl.location_id = xhl.location_id
+    and not exists (select 1 from xxdl_hz_party_sites xhps 
+                    where xhps.party_site_id = hps.party_site_id
+                    and xhps.process_flag = 'S' )
+    ;    
+
+    cursor c_party_site_use(c_party_site_id in varchar2) is
+    select distinct
+    hl.location_id
+    ,hps.party_site_id
+    ,'99999999'||hps.party_site_number party_site_number
+    ,HCASA.attribute4 party_site_name
+    ,hpsu.site_use_type site_use_code
+    ,hpsu.party_site_use_id site_use_id
+    ,nvl(hpsu.primary_per_type,'N') primary_per_type
+    ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
+    ,case
+                when hl.country = 'HR' then
+                    case when hl.country != hl.state then
+                        hl.state
+                    else                
+                        decode(hl.country,'CS','XK',hl.country)
+                    end
+                else decode(hl.country,'CS','XK',hl.country)    
+            end cloud_country 
+    from
+    apps.hz_parties@ebsprod hp
+    ,apps.hz_party_sites@ebsprod hps
+    ,apps.hz_party_site_uses@ebsprod hpsu
+    ,apps.hz_cust_accounts@ebsprod hca
+    ,apps.HZ_CUST_ACCT_SITES_ALL@ebsprod HCASA
+    ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
+    ,apps.hz_locations@ebsprod hl
+    where 1=1
+    and hp.party_id = hca.party_id(+)
+    and hp.party_id = hps.party_id(+)
+    and hps.party_site_id = hpsu.party_site_id
+    and hca.cust_account_id = hcasa.cust_account_id
+    and hps.party_site_id = hcasa.party_site_id(+)
+    and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
+    and hps.location_id = hl.location_id(+)
+    and hcsu.site_use_code = hpsu.site_use_type
+    and hps.party_site_id = c_party_site_id
+    --and hps.status = 'A'
+    and hpsu.status = 'A'
+    and hcasa.org_id in (102,531,532,663,1486,2068,2288)
+    --and hcasa.org_id in (102,531,2288)
+    and not exists (select 1 from xxdl_hz_party_site_uses xhpsu 
+                    where xhpsu.site_use_id = hpsu.party_site_use_id
+                    and xhpsu.process_flag = 'S' )
+    ;      
+
+    l_par_site_rec XXDL_HZ_PARTY_SITES%ROWTYPE;
+    l_par_site_rec_empty XXDL_HZ_PARTY_SITES%ROWTYPE;
+    l_par_site_use_rec xxdl_hz_party_site_uses%ROWTYPE;
+    l_par_site_use_rec_empty xxdl_hz_party_site_uses%ROWTYPE;
+
+
+    l_rest_env clob;
+
+    l_fault_code          varchar2(4000);
+    l_fault_string        varchar2(4000); 
+    l_error_message        varchar2(4000); 
+    l_soap_env clob;
+    l_empty_clob clob;
+    l_text varchar2(32000);
+    l_bill_text varchar2(32000);
+    x_return_message varchar2(32000);
+    x_ps_ws_call_id number;
+    l_cnt number := 0;
+    l_app_url           varchar2(100);
+    l_username          varchar2(100);
+    l_password           varchar2(100);
+    l_cloud_party_id number;
+    l_cloud_party_site_id number;
+    l_cloud_cust_account_id number;
+    l_cloud_cust_acct_site_id number;
+    l_cloud_site_use_id number;
+    l_cloud_set_id number;
+    l_cloud_address_id number;
+    l_cloud_bill_use_id number;
+
+    l_cloud_acct_existing number := 0;
+
+    l_count_address number := 1;
+
+
+    begin
+
+    l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
+
+
+    dbms_lob.createtemporary(l_soap_env, TRUE);
+
+    l_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/organizationService/applicationModule/types/" xmlns:org="http://xmlns.oracle.com/apps/cdm/foundation/parties/organizationService/" xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/" xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/" xmlns:con="http://xmlns.oracle.com/apps/cdm/foundation/parties/contactPointService/" xmlns:con1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/contactPoint/" xmlns:org1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/organization/" xmlns:par1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/partySite/" xmlns:rel="http://xmlns.oracle.com/apps/cdm/foundation/parties/relationshipService/" xmlns:org2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/orgContact/" xmlns:rel1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/relationship/">
+                                    <soapenv:Header/>
+                                    <soapenv:Body>
+                                        <typ:mergeOrganization>
+                                            <typ:organizationParty>
+                                                <org:PartyNumber>'||p_party_number||'</org:PartyNumber>';
+
+     l_soap_env := l_soap_env || to_clob(l_text);  
+     for c_ps in c_party_sites(p_party_number) loop
+
+
+                    log('       Need to create a party site!');
+                    log('       Found party site name:'||c_ps.party_site_name);
+
+                    l_par_site_rec.PARTY_SITE_ID := c_ps.PARTY_SITE_ID;
+                    l_par_site_rec.PARTY_ID := c_ps.PARTY_ID;
+                    l_par_site_rec.LOCATION_ID := c_ps.LOCATION_ID;
+                    l_par_site_rec.PARTY_SITE_NUMBER := c_ps.PARTY_SITE_NUMBER;
+                    l_par_site_rec.IDENTIFYING_ADDRESS_FLAG := c_ps.IDENTIFYING_ADDRESS_FLAG;
+                    l_par_site_rec.STATUS := c_ps.STATUS;
+                    l_par_site_rec.PARTY_SITE_NAME := c_ps.PARTY_SITE_NAME;
+                    l_par_site_rec.LANGUAGE := c_ps.language;
+                    l_par_site_rec.creation_date := sysdate;
+                  
+
+
+                    begin
+                        insert into xxdl_hz_party_sites values l_par_site_rec;
+                    exception
+                        when dup_val_on_index then
+                            l_par_site_rec.last_update_date := sysdate;
+                            update xxdl_hz_party_sites xx
+                            set row = l_par_site_rec
+                            where xx.PARTY_SITE_ID = c_ps.PARTY_SITE_ID;
+                    end;
+
+                    l_text := '
+                                                <org:PartySite>
+                                                    <par:PartySiteNumber>'||c_ps.party_site_number||'</par:PartySiteNumber>
+                                                    <par:OrigSystem>EBSR11</par:OrigSystem>         
+                                                    <par:OrigSystemReference>99999999'||c_ps.party_site_id||'</par:OrigSystemReference>
+                                                    <par:StartDateActive>'||c_ps.start_date||'</par:StartDateActive>
+                                                    <par:IdentifyingAddressFlag>'||c_ps.IDENTIFYING_ADDRESS_FLAG_SOAP||'</par:IdentifyingAddressFlag>
+                                                    <par:Language>'||c_ps.language||'</par:Language>
+                                                    <par:LocationId>'||c_ps.cloud_location_id||'</par:LocationId>
+                                                    <par:CreatedByModule>HZ_WS</par:CreatedByModule>
+                                                    ';
+                    l_soap_env := l_soap_env || to_clob(l_text); 
+                    for c_psu in c_party_site_use(c_ps.party_site_id) loop
+
+                        log('           Found site use id:'||c_psu.site_use_id);
+                        log('           Found site use code:'||c_psu.site_use_code);
+
+                        l_par_site_use_rec.SITE_USE_ID := c_psu.SITE_USE_ID;
+                        l_par_site_use_rec.PARTY_SITE_ID := c_psu.PARTY_SITE_ID;
+                        l_par_site_use_rec.SITE_USE_CODE := c_psu.SITE_USE_CODE;
+                        l_par_site_use_rec.PRIMARY_PER_TYPE := c_psu.PRIMARY_PER_TYPE;                        
+                        l_par_site_use_rec.CREATION_DATE := sysdate;
+                        begin
+                            insert into xxdl_hz_party_site_uses values l_par_site_use_rec;
+                            exception
+                            when dup_val_on_index then
+                                l_par_site_use_rec.last_update_date := sysdate;
+                                update xxdl_hz_party_site_uses xx
+                                set row = l_par_site_use_rec
+                                where xx.site_use_id = l_par_site_use_rec.site_use_id;
+                            end;                        
+                        l_text := '
+                                    <par:PartySiteUse>
+                                        <par:BeginDate>'||c_psu.start_date||'</par:BeginDate>
+                                        <par:SiteUseType>'||c_psu.site_use_code||'</par:SiteUseType>
+                                        <par:PrimaryPerType>'||c_psu.primary_per_type||'</par:PrimaryPerType>  
+                                        <par:OrigSystem>EBSR11</par:OrigSystem>                                                                             
+                                        <par:CreatedByModule>HZ_WS</par:CreatedByModule>      
+                                        <par:OrigSystemReference>99999999'||c_psu.site_use_id||'</par:OrigSystemReference>
+                                    </par:PartySiteUse>';
+                        l_soap_env := l_soap_env || to_clob(l_text);  
+                        
+                      
+                    end loop;    
+                    l_text := '</org:PartySite>
+                            '; 
+                   l_soap_env := l_soap_env || to_clob(l_text);
+                  
+                end loop;
+                -- end party site loop;  
+                l_text := '
+                            </typ:organizationParty> 
+                            </typ:mergeOrganization>
+                    </soapenv:Body>
+                    </soapenv:Envelope>'; 
+                
+                  l_soap_env := l_soap_env || to_clob(l_text);
+                    
+                    log('   Soap envelope ready!');
+
+                    log('   Calling webservice!');
+                    log('   Url:'||l_app_url||'crmService/FoundationPartiesOrganizationService?WSDL');
+
+                    XXFN_CLOUD_WS_PKG.WS_CALL(
+                    p_ws_url => l_app_url||'crmService/FoundationPartiesOrganizationService?WSDL',
+                    p_soap_env => l_soap_env,
+                    p_soap_act => 'mergeOrganization',
+                    p_content_type => 'text/xml;charset="UTF-8"',
+                    x_return_status => x_return_status,
+                    x_return_message => x_return_message,
+                    x_ws_call_id => x_ps_ws_call_id);
+
+                    log('   Web service finished! ws_call_id:'||x_ps_ws_call_id);
+
+                    log('   After call XXFN_CLOUD_WS_PKG.WS_CALL');
+
+                    dbms_lob.freetemporary(l_soap_env);
+
+                     if x_return_status = 'S' then
+
+                        log('   Party site created!');
+
+                        --account loop
+                        for c_r in (select
+                                    x_acc.party_id
+                                    ,x_acc.party_site_id
+                                    ,x_acc.source_party_site_id
+                                    from
+                                    xxfn_ws_call_log xx
+                                    ,xmltable(
+                                        xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/organizationService/applicationModule/types/' as "ns0"
+                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/organizationService/' as "ns2"
+                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/' as "ns1"),
+                                        '/env:Envelope/env:Body/ns0:mergeOrganizationResponse/ns0:result/ns2:Value/ns2:PartySite' passing xx.response_xml columns
+                                        party_id number path './ns1:PartyId'
+                                        ,party_site_id number path './ns1:PartySiteId'
+                                        ,source_party_site_id number path './ns1:OrigSystemReference') x_acc                               
+                                    where xx.ws_call_id = x_ps_ws_call_id
+                                    ) loop
+
+                            log('       Party site id is being stored in log!');                        
+
+                        
+                            update xxdl_hz_party_sites xx
+                            set xx.cloud_party_site_id = c_r.party_site_id
+                            ,xx.cloud_party_id = c_r.party_id
+                            ,xx.process_flag = x_return_status
+                            ,xx.last_update_date = sysdate
+                            where xx.party_site_id = case when length(xx.party_site_id)!= length(c_r.source_party_site_id) then to_number(substr(c_r.source_party_site_id,length(c_r.source_party_site_id)-length(xx.party_site_id)+1,length(c_r.source_party_site_id))) else to_number(c_r.source_party_site_id) end
+                            ;
+
+                            
+                            --account site loop
+                            for c_as in (select
+                                    x_acc.party_site_id
+                                    ,x_acc.party_site_use_id
+                                    ,x_acc.site_use_type
+                                    from
+                                    xxfn_ws_call_log xx
+                                    ,xmltable(
+                                        xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/organizationService/applicationModule/types/' as "ns0"
+                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/organizationService/' as "ns2"
+                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/' as "ns1"),
+                                        '/env:Envelope/env:Body/ns0:mergeOrganizationResponse/ns0:result/ns2:Value/ns2:PartySite/ns1:PartySiteUse' passing xx.response_xml columns
+                                        party_site_id number path './ns1:PartySiteId'
+                                        ,party_site_use_id number path './ns1:PartySiteUseId'
+                                        ,site_use_type varchar2(100) path './ns1:SiteUseType') x_acc                               
+                                    where xx.ws_call_id = x_ps_ws_call_id
+                                    ) loop
+                                
+                                log('       Customer account site is being stored in log!');               
+                                                            
+                                update xxdl_hz_party_site_uses xx
+                                set xx.process_flag = x_return_status            
+                                ,xx.cloud_party_site_id = c_as.party_site_id
+                                ,xx.CLOUD_SITE_USE_ID = c_as.party_site_use_id
+                                where xx.party_site_id = case when length(xx.party_site_id)!= length(c_r.source_party_site_id) then to_number(substr(c_r.source_party_site_id,length(c_r.source_party_site_id)-length(xx.party_site_id)+1,length(c_r.source_party_site_id))) else to_number(c_r.source_party_site_id) end
+                                and xx.site_use_code = c_as.site_use_type
+                                --xx.cust_acct_site_id = c_as.source_cust_acct_site_id
+                                ;                             
+
+                                                                
+                               
+
+                            end loop;
+                            --end party site use loop
+
+                        end loop;    
+                        --end party site loop       
+                            
+                        commit;    
+                         
+                    else
+
+                        log('           Party site not migrated!');
+
+                        BEGIN
+                            SELECT
+                                xt.faultcode,
+                                xt.faultstring
+                            INTO
+                            l_fault_code,
+                                l_fault_string
+                            FROM
+                            xxfn_ws_call_log x,
+                            XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" ), './/env:Fault' PASSING x.response_xml COLUMNS
+                            faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
+                            WHERE
+                                x.ws_call_id = x_ps_ws_call_id;
+
+                        EXCEPTION
+                            WHEN no_data_found THEN
+                                BEGIN
+                                    SELECT
+                                        nvl(x.response_status_code, 'ERROR'),
+                                        x.response_reason_phrase
+                                    INTO
+                                        l_fault_code,
+                                        l_fault_string
+                                    FROM
+                                        xxfn_ws_call_log x
+                                    WHERE
+                                        x.ws_call_id = x_ps_ws_call_id;
+                            EXCEPTION
+                                    WHEN OTHERS THEN
+                                        l_par_site_rec.error_msg := 'Cannot find env:Fault in ws call results.';
+                                END;
+                        END;             
+
+                        if l_fault_code is not null or l_fault_string is not null then
+                            l_error_message := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
+                        end if;
+                        log('   '||l_error_message);
+
+                        update xxdl_hz_party_sites xx
+                        set xx.ERROR_MSG = l_error_message
+                        ,xx.process_flag = 'E'
+                        where xx.party_site_id in (select xx2.party_site_id 
+                                                    from xxdl_hz_party_sites xx2
+                                                    ,xxdl_hz_parties xhp
+                                                    where xhp.party_number = '99999999'||p_party_number
+                                                    and xhp.party_id = xx2.party_id
+                        )
+                        ;  
+
+                        update xxdl_hz_party_site_uses xx
+                        set xx.ERROR_MSG = l_error_message
+                        ,xx.process_flag = 'E'
+                        where xx.party_site_id in (select xx2.party_site_id 
+                                                    from xxdl_hz_party_sites xx2
+                                                    ,xxdl_hz_parties xhp
+                                                    where xhp.party_number = '99999999'||p_party_number
+                                                    and xhp.party_id = xx2.party_id
+                        )
+                        ;                        
+
+                        commit;                
+                    
+                    end if;
+                  
+    end create_party_site;
+
     /*===========================================================================+
     -- Name    : migrate_customers_cloud
     -- Desc    : Procedure for migrating EBS items to cloud
@@ -108,7 +541,7 @@
     cursor c_party is
     select 
     hp.party_name party_name
-    ,'9999999'||hp.party_number party_number
+    ,'99999999'||hp.party_number party_number
     ,hp.jgzz_fiscal_code TAXPAYER_ID
     ,hp.party_id
     ,hp.duns_number
@@ -121,29 +554,14 @@
     and hp.party_id > 0
     and rownum <= nvl(p_rows,10)
     and not exists (select 1 from xxdl_hz_parties xx
-                        where xx.party_number = hp.party_number
+                        where xx.party_number = '99999999'||hp.party_number
                         and nvl(xx.process_flag,'X') in ('S',decode(p_retry_error,'Y','N','E'))
                         )
     ;
 
     cursor c_locations(c_party_number in number) is 
     select 
-    a.location_id,
-    a.party_site_id,
-    a.party_site_number,
-    a.party_site_name,
-    a.address1,
-    a.address2,
-    a.address3,
-    a.address4,
-    a.city,
-    a.country,
-    a.cloud_country,
-    a.county,
-    a.postal_code,
-    a.postal_plus4_code,
-    a.state,
-    a.start_date
+    a.*
     from
     (
         select 
@@ -154,27 +572,27 @@
             select distinct
             hl.location_id
             ,hps.party_site_id
-            ,'9999999'||hps.party_site_number party_site_number
+            ,'99999999'||hps.party_site_number party_site_number
             ,HCASA.attribute4 party_site_name
             ,hl.address1
             ,hl.address2
             ,hl.address3
             ,hl.address4
             ,hl.city
-            ,hl.country
+            ,decode(hl.country,'CS','XK',hl.country) country
             ,case
                 when hl.country = 'HR' then
                     case when hl.country != hl.state then
                         hl.state
                     else                
-                        hl.country
+                        decode(hl.country,'CS','XK',hl.country)
                     end
-                else hl.country    
+                else decode(hl.country,'CS','XK',hl.country)   
             end cloud_country  
             ,hl.county
             ,hl.postal_code
             ,hl.POSTAL_PLUS4_CODE
-            ,hl.state
+            ,decode(hl.state,'CS','XK',hl.state) state
             ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
             from
             apps.hz_parties@ebsprod hp
@@ -190,8 +608,16 @@
             and hps.party_site_id = hcasa.party_site_id(+)
             and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
             and hps.location_id = hl.location_id(+)
+            --and hps.status = 'A'
             and hcsu.site_use_code is not null
-            and hp.party_number = c_party_number
+            and hcasa.org_id in (102,531,532,663,1486,2068,2288)
+            --and hcasa.org_id in (102,531,2288)
+            and to_number(hp.party_number) = case
+                            when length(c_party_number)-8=length(hp.party_number) then
+                                case when length(hp.party_number)!= length(c_party_number) then to_number(substr(c_party_number,length(c_party_number)-length(hp.party_number)+1,length(c_party_number))) else to_number(c_party_number) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_number mora zapisati s nekim sufiksom radi unique errora
+                            else
+                                to_number(c_party_number)
+                            end
             and not exists (select 1 from xxdl_hz_locations xxhl 
                             where xxhl.location_id = hl.LOCATION_ID
                             and xxhl.process_flag = 'S' )
@@ -237,7 +663,8 @@
     a.postal_code,
     a.postal_plus4_code,
     a.state,
-    a.start_date
+    a.start_date,
+    a.c
     from
     (
         select 
@@ -248,27 +675,27 @@
             select distinct
             hl.location_id
             ,hps.party_site_id
-            ,'9999999'||hps.party_site_number party_site_number
+            ,'99999999'||hps.party_site_number party_site_number
             ,HCASA.attribute4 party_site_name
             ,hl.address1
             ,hl.address2
             ,hl.address3
             ,hl.address4
             ,hl.city
-            ,hl.country
+            ,decode(hl.country,'CS','XK',hl.country) country
             ,case
                 when hl.country = 'HR' then
                     case when hl.country != hl.state then
                         hl.state
                     else                
-                        hl.country
+                        decode(hl.country,'CS','XK',hl.country)
                     end
-                else hl.country    
+                else decode(hl.country,'CS','XK',hl.country)   
             end cloud_country  
             ,hl.county
             ,hl.postal_code
             ,hl.POSTAL_PLUS4_CODE
-            ,hl.state
+            ,decode(hl.state,'CS','XK',hl.state) state
             ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
             from
             apps.hz_parties@ebsprod hp
@@ -285,7 +712,15 @@
             and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
             and hps.location_id = hl.location_id(+)
             and hcsu.site_use_code is not null
-            and hp.party_number = c_party_number
+            --and hps.status = 'A'
+            and hcasa.org_id in (102,531,532,663,1486,2068,2288)
+            --and hcasa.org_id in (102,531,2288)
+            and to_number(hp.party_number) = case
+                            when length(c_party_number)-8=length(hp.party_number) then
+                                case when length(hp.party_number)!= length(c_party_number) then to_number(substr(c_party_number,length(c_party_number)-length(hp.party_number)+1,length(c_party_number))) else to_number(c_party_number) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_number mora zapisati s nekim sufiksom radi unique errora
+                            else
+                                to_number(c_party_number)
+                            end
             and not exists (select 1 from xxdl_hz_locations xxhl 
                             where xxhl.location_id = hl.LOCATION_ID
                             and xxhl.process_flag = 'S' )
@@ -314,6 +749,7 @@
                 )                
         ) a
     ) a    
+    order by 17 desc
     ;
 
     cursor c_rest(c_ws_call_id in number) is
@@ -432,9 +868,135 @@
     ,jt.source_party_id
     ;
 
+
+    cursor c_party_sites(c_party_number in varchar2) is 
+    select distinct
+    hl.location_id
+    ,hps.party_site_id
+    ,hp.party_id
+    ,'99999999'||hp.party_number party_number
+    ,'99999999'||hps.party_site_number party_site_number
+    ,HCASA.attribute4 party_site_name
+    ,hps.IDENTIFYING_ADDRESS_FLAG
+    ,decode(hps.IDENTIFYING_ADDRESS_FLAG,'Y','true','false') IDENTIFYING_ADDRESS_FLAG_SOAP
+    ,hps.status
+    ,case
+                when hl.country = 'HR' then
+                    case when hl.country != hl.state then
+                        hl.state
+                    else                
+                        decode(hl.country,'CS','XK',hl.country)
+                    end
+                else decode(hl.country,'CS','XK',hl.country)    
+            end cloud_country 
+    ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
+    ,case
+            when hl.country = 'HR' then
+                case when hl.country != hl.state then
+                    case 
+                        when hl.state = 'HR' then
+                            'HR'
+                        when (hl.state = 'DE' or hl.state = 'AT') then
+                            'D'
+                        else 'US' 
+                    end
+                else                
+                    case
+                        when hl.country = 'HR' then
+                            'HR'
+                        when (hl.country = 'DE' or hl.country = 'AT') then
+                            'D'
+                        else 'US' 
+                    end
+                end
+            else 
+                case
+                        when hl.country = 'HR' then
+                            'HR'
+                        when (hl.country = 'DE' or hl.country = 'AT') then
+                            'D'
+                        else 'US' 
+                    end   
+        end language          
+    from
+    apps.hz_parties@ebsprod hp
+    ,apps.hz_party_sites@ebsprod hps
+    ,apps.hz_cust_accounts@ebsprod hca
+    ,apps.HZ_CUST_ACCT_SITES_ALL@ebsprod HCASA
+    ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
+    ,apps.hz_locations@ebsprod hl
+    where 1=1
+    and hp.party_id = hca.party_id(+)
+    and hp.party_id = hps.party_id(+)
+    and hca.cust_account_id = hcasa.cust_account_id
+    and hps.party_site_id = hcasa.party_site_id(+)
+    and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
+    and hps.location_id = hl.location_id(+)
+    and hcsu.site_use_code is not null
+    --and hps.status = 'A'
+    and to_number(hp.party_number) = case
+                            when length(c_party_number)-8=length(hp.party_number) then
+                                case when length(hp.party_number)!= length(c_party_number) then to_number(substr(c_party_number,length(c_party_number)-length(hp.party_number)+1,length(c_party_number))) else to_number(c_party_number) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_number mora zapisati s nekim sufiksom radi unique errora
+                            else
+                                to_number(c_party_number)
+                            end
+    and hps.status = 'A'
+    and not exists (select 1 from xxdl_hz_party_sites xhps 
+                    where xhps.party_site_id = hps.party_site_id
+                    and xhps.process_flag = 'S' )
+    ;    
+
+    cursor c_party_site_use(c_party_site_id in varchar2) is
+    select distinct
+    hl.location_id
+    ,hps.party_site_id
+    ,'99999999'||hps.party_site_number party_site_number
+    ,HCASA.attribute4 party_site_name
+    ,hpsu.site_use_type site_use_code
+    ,hpsu.party_site_use_id site_use_id
+    ,nvl(hpsu.primary_per_type,'N') primary_per_type
+    ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
+    ,case
+                when hl.country = 'HR' then
+                    case when hl.country != hl.state then
+                        hl.state
+                    else                
+                        hl.country
+                    end
+                else hl.country    
+            end cloud_country 
+    from
+    apps.hz_parties@ebsprod hp
+    ,apps.hz_party_sites@ebsprod hps
+    ,apps.hz_party_site_uses@ebsprod hpsu
+    ,apps.hz_cust_accounts@ebsprod hca
+    ,apps.HZ_CUST_ACCT_SITES_ALL@ebsprod HCASA
+    ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
+    ,apps.hz_locations@ebsprod hl
+    where 1=1
+    and hp.party_id = hca.party_id(+)
+    and hp.party_id = hps.party_id(+)
+    and hps.party_site_id = hpsu.party_site_id
+    and hca.cust_account_id = hcasa.cust_account_id
+    and hps.party_site_id = hcasa.party_site_id(+)
+    and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
+    and hps.location_id = hl.location_id(+)
+    and hcsu.site_use_code = hpsu.site_use_type
+    and hps.party_site_id = c_party_site_id
+    --and hps.status = 'A'
+    --and hpsu.status = 'A'
+    and hcasa.org_id in (102,531,532,663,1486,2068,2288)
+    --and hcasa.org_id in (102,531,2288)
+    and not exists (select 1 from xxdl_hz_party_site_uses xhpsu 
+                    where xhpsu.site_use_id = hpsu.party_site_use_id
+                    and xhpsu.process_flag = 'S' )
+    ;      
+               
+
+
     cursor c_accounts(c_party_id in number) is
     select distinct
-        '9999999'||hca.account_number account_number
+        '99999999'||hca.account_number account_number
         ,hca.account_name
         ,hca.customer_type
         ,to_char(nvl(hca.account_activation_date,to_date('1998-01-01','YYYY-MM-DD')),'YYYY-MM-DD') account_activation_date    
@@ -458,9 +1020,12 @@
         and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
         and hps.location_id = hl.location_id(+)
         and hcsu.site_use_code is not null
-        and hcasa.org_id in (102,531,532,582,2068,2288)
+        --and hps.status = 'A'
+        and hcasa.org_id in (102,531,532,663,1486,2068,2288)
+        --and hcasa.org_id in (102,531,2288)
+        --and hps.status = 'A'
         and hp.party_id = case
-                            when length(c_party_id)-7=length(hp.party_id) then
+                            when length(c_party_id)-8=length(hp.party_id) then
                                 case when length(hp.party_id)!= length(c_party_id) then to_number(substr(c_party_id,length(c_party_id)-length(hp.party_id)+1,length(c_party_id))) else to_number(c_party_id) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_id mora zapisati s nekim sufiksom radi unique errora
                             else
                                 to_number(c_party_id)
@@ -493,7 +1058,7 @@
         ,jt.address_id cloud_address_id
         ,jt.cloud_party_site_number
         ,HCSA.attribute4 party_site_name
-        ,'9999999'||hps.party_site_number party_site_number
+        ,'99999999'||hps.party_site_number party_site_number
         ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
         ,case
             when hl.country = 'HR' then
@@ -609,14 +1174,25 @@
         and hps.location_id = hl.location_id(+)
         and hcsu.site_use_code is not null
         and hca.cust_account_id = c_cust_account_id
-        and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
-        and hps.party_site_id = case when length(hps.party_site_id)!=length(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1)) then to_number(substr(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1),(length(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1))-length(hps.party_site_id))+1,length(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1)))) else to_number(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1)) end
+        --and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
+        and hps.party_site_id = case
+                            when length(jt.source_address_id)-8=length(hps.party_site_id) then
+                                case when length(hps.party_site_id)!=length(jt.source_address_id) then to_number(substr(jt.source_address_id,(length(jt.source_address_id)-length(hps.party_site_id))+1,length(jt.source_address_id))) else to_number(jt.source_address_id) end
+                            else
+                                to_number(jt.source_address_id)
+                            end             
         and hcsa.org_id =  xx_set.ebs_org_id(+)
-        and hcsa.org_id in (102,531,532,582,2068,2288)
+        and hcsa.org_id in (102,531,532,663,1486,2068,2288)
+        and hcsa.org_id = xx_set.ebs_org_id
+        --and hcsa.org_id in (102,531,2288)
         and jt.ws_call_id = c_ws_call_id
+        and hps.status = 'A'
         and not exists (select 1 from XXDL_HZ_CUST_ACCT_SITES xxhca 
                             where xxhca.cust_acct_site_id = hcsa.cust_acct_site_id
                             and nvl(xxhca.process_flag,'X') = 'S')
+        and exists (select 1 from xxdl_hz_party_sites xhps
+                    where xhps.party_site_id = hps.party_site_id
+                    and nvl(xhps.process_flag,'X')='S')                    
         ;
         
 
@@ -635,6 +1211,7 @@
         ,xx_set.reference_data_set_id cloud_set_id
         ,jt.address_id cloud_address_id
         ,jt.location_id cloud_location_id
+        ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
         from
         apps.hz_parties@ebsprod hp
         ,apps.hz_party_sites@ebsprod hps
@@ -721,14 +1298,24 @@
         and hps.location_id = hl.location_id(+)
         and hcsu.site_use_code is not null
         and hcsa.cust_acct_site_id = c_cust_acct_site_id
-        and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
-        and hps.party_site_id = case when length(hps.party_site_id)!=length(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1)) then to_number(substr(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1),(length(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1))-length(hps.party_site_id))+1,length(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1)))) else to_number(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1)) end
-        and hcsa.org_id =  xx_set.ebs_org_id(+)
-        and hcsa.org_id in (102,531,532,582,2068,2288)
+        --and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
+        and hps.party_site_id = case
+                            when length(jt.source_address_id)-8=length(hps.party_site_id) then
+                                case when length(hps.party_site_id)!=length(jt.source_address_id) then to_number(substr(jt.source_address_id,(length(jt.source_address_id)-length(hps.party_site_id))+1,length(jt.source_address_id))) else to_number(jt.source_address_id) end
+                            else
+                                to_number(jt.source_address_id)
+                            end     
+        and hcsa.org_id in (102,531,532,663,1486,2068,2288)
+        and hcsa.org_id = xx_set.ebs_org_id
+        --and hcsa.org_id in (102,531,2288)
         and jt.ws_call_id = c_ws_call_id
+        and hps.status = 'A'
         and not exists (select 1 from XXDL_HZ_CUST_ACCT_SITE_USES xxhca 
                             where xxhca.site_use_id = hcsu.site_use_id
                             and nvl(xxhca.process_flag,'X') = 'S')
+        and exists (select 1 from xxdl_hz_party_sites xhps
+                    where xhps.party_site_id = hps.party_site_id
+                    and nvl(xhps.process_flag,'X')='S')                      
         ;
 
 
@@ -736,6 +1323,10 @@
     l_party_rec_empty XXDL_HZ_PARTIES%ROWTYPE;
     l_loc_rec XXDL_HZ_LOCATIONS%ROWTYPE;
     l_loc_rec_empty XXDL_HZ_LOCATIONS%ROWTYPE;
+    l_par_site_rec XXDL_HZ_PARTY_SITES%ROWTYPE;
+    l_par_site_rec_empty XXDL_HZ_PARTY_SITES%ROWTYPE;
+    l_par_site_use_rec xxdl_hz_party_site_uses%ROWTYPE;
+    l_par_site_use_rec_empty xxdl_hz_party_site_uses%ROWTYPE;
     l_cust_acct_rec XXDL_HZ_CUST_ACCOUNTS%ROWTYPE;
     l_cust_acct_rec_empty XXDL_HZ_CUST_ACCOUNTS%ROWTYPE;
     l_cust_acct_site_rec XXDL_HZ_CUST_ACCT_SITES%ROWTYPE;
@@ -758,6 +1349,7 @@
     xb_return_status varchar2(500);
     xb_return_message varchar2(32000);
     x_ws_call_id number;
+    x_ps_ws_call_id number;
     xb_ws_call_id number;
     xr_ws_call_id number;
     l_cnt number := 0;
@@ -786,7 +1378,7 @@
     log('Starting to import customer:');
 
     l_app_url := get_config('ServiceRootURL');
-    --l_app_url := get_config('SoapUrl'); --encc
+    --l_app_url := get_config('EwhaTestServiceRootURL');
     l_username := get_config('ServiceUsername');
     l_password := get_config('ServicePassword');
 
@@ -826,6 +1418,8 @@
         if l_cloud_party_id > 0 then
             
             log('       Party already in cloud!');
+
+            x_return_status := 'S';
 
             log('       Get address information for party:'||c_p.party_number);
 
@@ -904,9 +1498,9 @@
 
                     
 
-                    l_text := l_text || '{
-                                "Address1": "'||c_l.address1||'",
-                                "Address2": "'||c_l.address2||'",
+                    l_text := '{
+                                "Address1": "'||apex_escape.json(c_l.address1)||'",
+                                "Address2": "'||apex_escape.json(c_l.address2)||'",
                                 "Address3": "'||c_l.address3||'",
                                 "Address4": "'||c_l.address4||'",
                                 "City": "'||c_l.city||'",
@@ -919,13 +1513,14 @@
                                 "AddressNumber":"'||c_l.party_site_number||'",
                                 "SourceSystem": "EBSR11_NEW",
                                 "StartDateActive" : "'||c_l.start_date||'",
-                                "SourceSystemReferenceValue": "9999999'||c_l.party_site_id||';9999999'||c_l.location_id||'"
+                                "SourceSystemReferenceValue": "99999999'||c_l.party_site_id||'"
                             }';
     
                     l_rest_env := l_rest_env|| to_clob(l_text);
                     l_text := '';
 
                     l_loc_rec.LOCATION_ID := c_l.LOCATION_ID;
+                    l_loc_rec.PARTY_SITE_ID := c_l.party_site_id;
                     l_loc_rec.ADDRESS1 := c_l.ADDRESS1;
                     l_loc_rec.ADDRESS2 := c_l.ADDRESS2;
                     l_loc_rec.ADDRESS3 := c_l.ADDRESS3;
@@ -952,9 +1547,9 @@
                     log('   REST payload built!');
 
                     log('   Calling REST web service.');
-                    log('   Url:'||l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_p.party_number||'/child/Address');
+                    log('   Url:'||l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_p.party_number||'/child/Address?onlyData=true&limit=500&fields=PartyId,PartyNumber,AddressId,AddressType,SourceSystemReferenceValue,PartySourceSystemReferenceValue,LocationId');
                     XXFN_CLOUD_WS_PKG.WS_REST_CALL(
-                    p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_p.party_number||'/child/Address',
+                    p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_p.party_number||'/child/Address?onlyData=true&limit=500&fields=PartyId,PartyNumber,AddressId,AddressType,SourceSystemReferenceValue,PartySourceSystemReferenceValue,LocationId',
                     p_rest_env => l_rest_env,
                     p_rest_act => 'POST',
                     p_content_type => 'application/json;charset="UTF-8"',
@@ -1024,7 +1619,7 @@
                                         update xxdl_hz_locations xx
                                         set xx.cloud_location_id = c_loc.cloud_location_id
                                         ,xx.process_flag = x_return_status
-                                        where '9999999'||xx.location_id = substr(c_loc.source_address_id,instr(c_loc.source_address_id,';',1,1)+1,length(c_loc.source_address_id));
+                                        where '99999999'||xx.party_site_id = c_loc.source_address_id;
                                     end if;                
                         end loop;
 
@@ -1052,633 +1647,736 @@
 
             end if;
 
-            --update_cust_cloud_ref(c_p.party_number,c_p.party_id,xr_ws_call_id);
-            log('           Getting addresses again!');
-            find_address_cloud(c_p.party_number,xr_ws_call_id);
+            create_party_site(c_p.party_number,x_return_status);            
+           
+            --only continue if party site is created    
+            if x_return_status = 'S' then    
+                --update_cust_cloud_ref(c_p.party_number,c_p.party_id,xr_ws_call_id);
+                log('           Getting addresses again!');
+                find_address_cloud(c_p.party_number,xr_ws_call_id);
 
 
-            log('        Address ws_call_id:'||xr_ws_call_id);
+                log('        Address ws_call_id:'||xr_ws_call_id);
 
 
-            --find res payload loop
-            for c_r in c_rest_find(xr_ws_call_id) loop
-                l_soap_env := l_empty_clob;
-                
-                log('         First fetching the rest payload!');
-                log('         Found cloud party id:'||c_r.cloud_party_id);
-                log('         Found cloud party number:'||c_r.cloud_party_number);
-                log('         Found source party id:'||c_p.party_id||' for finding cust account!');
-                
-                l_text := '';
-
-                l_cloud_acct_existing:=0;
-                
-                    for c_a in c_accounts(c_p.party_id) loop
-                        log('           Now finding customer accounts!');
-                        log('           Customer account number:'||c_a.account_number);
-                        log('           Customer account_name:'||c_a.account_name);
-                        log('           Account_activation_date:'||c_a.account_activation_date);
-                        log('           Customer account_id:'||c_a.cust_account_id);
-
-                        if nvl(c_a.cloud_cust_account_id,0) > 0 THEN
-
-                            l_cloud_acct_existing := 1;
-
-                            log('               Customer accout already exists, so we are updating new sites for it!');
-
-                            l_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/" xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/" xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/" xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/" xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/" xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/" xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/" xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/" xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/" xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
-                                    <soapenv:Header/>
-                                    <soapenv:Body>
-                                        <typ:mergeCustomerAccount>                                    
-                                            <typ:customerAccount>
-                                                <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
-                                                <cus:AccountNumber>'||c_a.account_number||'</cus:AccountNumber>
-                                                <cus:CustomerAccountId>'||c_a.cloud_cust_account_id||'</cus:CustomerAccountId>';
-
-                            l_soap_env := l_soap_env || to_clob(l_text);
-
-                        else
-
-                            l_cust_acct_rec.party_id := c_p.party_id;
-                            l_cust_acct_rec.account_number := c_a.account_number;
-                            l_cust_acct_rec.account_name := c_a.account_name;
-                            l_cust_acct_rec.cust_account_id := c_a.cust_account_id;
-                            l_cust_acct_rec.account_number := c_a.account_number;
-                            l_cust_acct_rec.status := c_a.status;
-                            l_cust_acct_rec.creation_date := sysdate;
-
-                            begin
-                                insert into XXDL_HZ_CUST_ACCOUNTS values l_cust_acct_rec;
-                                exception
-                                when dup_val_on_index then
-                                    l_cust_acct_rec.last_update_date := sysdate;
-                                    update XXDL_HZ_CUST_ACCOUNTS xx
-                                    set row = l_cust_acct_rec
-                                    where xx.cust_account_id = c_a.cust_account_id;
-                                end;
-
-                            l_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/" xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/" xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/" xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/" xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/" xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/" xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/" xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/" xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/" xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
-                                    <soapenv:Header/>
-                                    <soapenv:Body>
-                                        <typ:createCustomerAccount>                                    
-                                            <typ:customerAccount>
-                                                <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
-                                                <cus:AccountName>'||c_a.account_name||'</cus:AccountName>    
-                                                <cus:AccountNumber>'||c_a.account_number||'</cus:AccountNumber>
-                                                <cus:CustomerType>'||c_a.account_name||'</cus:CustomerType>
-                                                <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
-                                                <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
-                                                <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                <cus:OrigSystemReference>9999999'||c_a.cust_account_id||'</cus:OrigSystemReference>';
-
-                            l_soap_env := l_soap_env || to_clob(l_text);
-
-                        end if;
+                --find res payload loop
+                for c_r in c_rest_find(xr_ws_call_id) loop
+                    l_soap_env := l_empty_clob;
                     
-
-                        for c_as in c_account_sites(c_a.cust_account_id, xr_ws_call_id) loop
-                            log('               Now adding account sites!');
-                            log('               Now finding customer accounts!');
-                            log('               Customer CUST_ACCT_SITE_ID:'||c_as.CUST_ACCT_SITE_ID);
-                            log('               Customer CUST_ACCOUNT_ID:'||c_a.cust_account_id);
-                            log('               Customer PARTY_SITE_ID:'||c_as.PARTY_SITE_ID);
-                            log('               Customer set_code:'||c_as.cloud_set_code);
-                            log('               Customer set_id:'||c_as.cloud_set_id);
-
-                            l_cust_acct_site_rec.cust_acct_site_id := c_as.cust_acct_site_id;
-                            l_cust_acct_site_rec.CUST_ACCOUNT_ID := c_as.CUST_ACCOUNT_ID;
-                            l_cust_acct_site_rec.PARTY_SITE_ID := c_as.PARTY_SITE_ID;
-                            l_cust_acct_site_rec.BILL_TO_FLAG := c_as.BILL_TO_FLAG;
-                            l_cust_acct_site_rec.SHIP_TO_FLAG := c_as.SHIP_TO_FLAG;
-                            l_cust_acct_site_rec.STATUS := c_as.STATUS ;
-                            l_cust_acct_site_rec.ORG_ID := c_as.ORG_ID;
-                            l_cust_acct_site_rec.CLOUD_SET_ID := c_as.CLOUD_SET_ID;
-                            l_cust_acct_site_rec.cloud_party_site_number := c_as.cloud_party_site_number;
-                            l_cust_acct_site_rec.creation_date := sysdate;
-                            l_cust_acct_site_rec.party_site_name := c_as.party_site_name;
-                            l_cust_acct_site_rec.party_site_number := c_as.party_site_number;
-
-                            begin
-                                insert into XXDL_HZ_CUST_ACCT_SITES values l_cust_acct_site_rec;
-                                exception
-                                when dup_val_on_index then
-                                    l_cust_acct_site_rec.last_update_date := sysdate;
-                                    update XXDL_HZ_CUST_ACCT_SITES xx
-                                    set row = l_cust_acct_site_rec
-                                    where xx.cust_acct_site_id = c_as.cust_acct_site_id;
-                                end;
-
-                               l_text := '
-                                            <cus:CustomerAccountSite>
-                                                <cus:PartySiteId>'||c_as.cloud_address_id||'</cus:PartySiteId>
-                                                <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
-                                                <cus:SetId>'||c_as.cloud_set_id||'</cus:SetId>
-                                                <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
-                                                <cus:Language>'||c_as.language||'</cus:Language>
-                                                <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                <cus:OrigSystemReference>9999999'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
-                             l_soap_env := l_soap_env || to_clob(l_text);                   
-
-                            for c_asu in c_account_site_use(c_as.cust_acct_site_id,xr_ws_call_id) loop
-                                log('                   Now adding account sites use!');
-                                log('                   Now finding customer accounts uses!');
-                                log('                   Customer CUST_ACCT_SITE_ID:'||c_as.CUST_ACCT_SITE_ID);
-                                log('                   Customer SITE_USE_ID:'||c_asu.SITE_USE_ID);
-                                log('                   Customer PARTY_SITE_ID:'||c_asu.PARTY_SITE_ID);
-                                log('                   Customer BILL_TO_SITE_USE_ID:'||c_asu.BILL_TO_SITE_USE_ID);
-                                log('                   Customer SITE_USE_CODE:'||c_asu.SITE_USE_CODE);
-                                log('                   Customer PRIMARY_FLAG:'||c_asu.PRIMARY_FLAG);
-                                log('                   Customer LOCATION:'||c_asu.LOCATION);
-                                log('                   Customer STATUS:'||c_asu.STATUS  );
-                                log('                   Customer ORG_ID:'||c_asu.ORG_ID);
-                                log('                   Customer CLOUD_SET_ID:'||c_asu.CLOUD_SET_ID);
-                                l_cust_acct_site_use_rec:=l_cust_acct_site_use_rec_empty;
-
-                                l_cust_acct_site_use_rec.cust_acct_site_id := c_as.cust_acct_site_id;
-                                l_cust_acct_site_use_rec.site_use_id := c_asu.site_use_id;
-                                l_cust_acct_site_use_rec.party_site_id := c_asu.party_site_id;
-                                l_cust_acct_site_use_rec.BILL_TO_SITE_USE_ID := c_asu.BILL_TO_SITE_USE_ID;
-                                l_cust_acct_site_use_rec.PRIMARY_FLAG := c_asu.PRIMARY_FLAG;
-                                l_cust_acct_site_use_rec.SITE_USE_CODE := c_asu.SITE_USE_CODE;
-                                l_cust_acct_site_use_rec.LOCATION := c_asu.LOCATION;
-                                l_cust_acct_site_use_rec.location_id := c_asu.location_id;
-                                l_cust_acct_site_use_rec.ORG_ID := c_asu.ORG_ID;
-                                l_cust_acct_site_use_rec.CLOUD_SET_ID := c_asu.CLOUD_SET_ID;
-                                l_cust_acct_site_use_rec.cloud_location_id := c_asu.cloud_location_id;
-                                l_cust_acct_site_use_rec.creation_date := sysdate;
-
-                                begin
-                                log('                   inserting SITE_USE_ID:'||l_cust_acct_site_use_rec.SITE_USE_ID);
-                            
-                                insert into XXDL_HZ_CUST_ACCT_SITE_USES values l_cust_acct_site_use_rec;
-                                exception
-                                when dup_val_on_index then
-                                    update XXDL_HZ_CUST_ACCT_SITE_USES xx
-                                    SET row = l_cust_acct_site_use_rec
-                                    where xx.site_use_id = c_asu.site_use_id;
-                                        log('                    SITE_USE_ID već postoji u logu:'||l_cust_acct_site_use_rec.SITE_USE_ID);
-                                end;        
-
-                                l_text := '
-                                                <cus:CustomerAccountSiteUse>
-                                                        <cus:SiteUseCode>'||c_asu.site_use_code||'</cus:SiteUseCode>
-                                                        <cus:Location>'||c_asu.cloud_location_id||'</cus:Location>
-                                                        <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
-                                                        <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                        <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag> 
-                                                        <cus:OrigSystemReference>9999999'||c_asu.site_use_id||'</cus:OrigSystemReference>
-                                                </cus:CustomerAccountSiteUse>';
-                                l_soap_env := l_soap_env || to_clob(l_text);
-
-                            end loop;
-
-                            l_text := '
-                                            </cus:CustomerAccountSite>
-                                                    '; 
-                            l_soap_env := l_soap_env || to_clob(l_text);
-                        end loop;       
-                        --l_text := l_text || '</typ:customerAccount>
-                        l_text := '</typ:customerAccount>
-                                    ';
-                        l_soap_env := l_soap_env || to_clob(l_text);            
-
-            
-                    end loop;
-                     
-                    if (nvl(l_cloud_acct_existing,0)>0) then
-
-                        l_text := '</typ:mergeCustomerAccount>
-                                        </soapenv:Body>
-                                        </soapenv:Envelope>';
-                    else
-                        l_text := '</typ:createCustomerAccount>
-                                        </soapenv:Body>
-                                        </soapenv:Envelope>';
-                    end if;                
-                    l_soap_env := l_soap_env || to_clob(l_text);
+                    log('         First fetching the rest payload!');
+                    log('         Found cloud party id:'||c_r.cloud_party_id);
+                    log('         Found cloud party number:'||c_r.cloud_party_number);
+                    log('         Found source party id:'||c_p.party_id||' for finding cust account!');
+                    
                     l_text := '';
 
-                    log('   Soap envelope ready!');
+                    l_cloud_acct_existing:=0;
+                    
+                        for c_a in c_accounts(c_p.party_id) loop
+                            log('           Now finding customer accounts!');
+                            log('           Customer account number:'||c_a.account_number);
+                            log('           Customer account_name:'||c_a.account_name);
+                            log('           Account_activation_date:'||c_a.account_activation_date);
+                            log('           Customer account_id:'||c_a.cust_account_id);
 
-                    log('   Calling webservice!');
-                    log('   Url:'||l_app_url||'crmService/CustomerAccountService?WSDL');
+                            if nvl(c_a.cloud_cust_account_id,0) > 0 THEN
 
-                    if (nvl(l_cloud_acct_existing,0)>0) then
+                                l_cloud_acct_existing := 1;
 
-                        XXFN_CLOUD_WS_PKG.WS_CALL(
-                        p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
-                        p_soap_env => l_soap_env,
-                        p_soap_act => 'mergeCustomerAccount',
-                        p_content_type => 'text/xml;charset="UTF-8"',
-                        x_return_status => x_return_status,
-                        x_return_message => x_return_message,
-                        x_ws_call_id => x_ws_call_id);
+                                log('               Customer accout already exists, so we are updating new sites for it!');
 
-                    else
-                        XXFN_CLOUD_WS_PKG.WS_CALL(
-                        p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
-                        p_soap_env => l_soap_env,
-                        p_soap_act => 'createCustomerAccount',
-                        p_content_type => 'text/xml;charset="UTF-8"',
-                        x_return_status => x_return_status,
-                        x_return_message => x_return_message,
-                        x_ws_call_id => x_ws_call_id);
+                                l_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/" xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/" xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/" xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/" xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/" xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/" xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/" xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/" xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/" xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
+                                        <soapenv:Header/>
+                                        <soapenv:Body>
+                                            <typ:mergeCustomerAccount>                                    
+                                                <typ:customerAccount>
+                                                    <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
+                                                    <cus:AccountNumber>'||c_a.account_number||'</cus:AccountNumber>
+                                                    <cus:CustomerAccountId>'||c_a.cloud_cust_account_id||'</cus:CustomerAccountId>';
 
-                    end if;
+                                l_soap_env := l_soap_env || to_clob(l_text);
 
-                    log('   Web service finished! ws_call_id:'||x_ws_call_id);
+                            else
 
-                    log('   After call XXFN_CLOUD_WS_PKG.WS_CALL');
+                                l_cust_acct_rec.party_id := c_p.party_id;
+                                l_cust_acct_rec.account_number := c_a.account_number;
+                                l_cust_acct_rec.account_name := c_a.account_name;
+                                l_cust_acct_rec.cust_account_id := c_a.cust_account_id;
+                                l_cust_acct_rec.account_number := c_a.account_number;
+                                l_cust_acct_rec.status := c_a.status;
+                                l_cust_acct_rec.creation_date := sysdate;
 
-                    dbms_lob.freetemporary(l_soap_env);
+                                begin
+                                    insert into XXDL_HZ_CUST_ACCOUNTS values l_cust_acct_rec;
+                                    exception
+                                    when dup_val_on_index then
+                                        l_cust_acct_rec.last_update_date := sysdate;
+                                        update XXDL_HZ_CUST_ACCOUNTS xx
+                                        set row = l_cust_acct_rec
+                                        where xx.cust_account_id = c_a.cust_account_id;
+                                    end;
 
-                    if x_return_status = 'S' then
+                                l_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/" xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/" xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/" xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/" xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/" xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/" xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/" xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/" xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/" xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
+                                        <soapenv:Header/>
+                                        <soapenv:Body>
+                                            <typ:createCustomerAccount>                                    
+                                                <typ:customerAccount>
+                                                    <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
+                                                    <cus:AccountName>'||c_a.account_name||'</cus:AccountName>    
+                                                    <cus:AccountNumber>'||c_a.account_number||'</cus:AccountNumber>
+                                                    <cus:CustomerType>'||c_a.account_name||'</cus:CustomerType>
+                                                    <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
+                                                    <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
+                                                    <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
+                                                    <cus:OrigSystemReference>99999999'||c_a.cust_account_id||'</cus:OrigSystemReference>';
 
-                        log('   Customer account created!');
+                                l_soap_env := l_soap_env || to_clob(l_text);
 
-                        --account loop
-                        for c_r in (select
-                                    x_acc.party_id
-                                    ,x_acc.cust_account_id
-                                    ,x_acc.account_number
-                                    ,x_acc.source_account_id
-                                    from
-                                    xxfn_ws_call_log xx
-                                    ,xmltable(
-                                        xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
-                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
-                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
-                                        '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value' passing xx.response_xml columns
-                                        party_id number path './ns2:PartyId'
-                                        ,cust_account_id number path './ns2:CustomerAccountId'
-                                        ,account_number number path './ns2:AccountNumber'
-                                        ,source_account_id number path './ns2:OrigSystemReference') x_acc                               
-                                    where xx.ws_call_id = x_ws_call_id
-                                    ) loop
-
-                            log('       Customer account is being stored in log!');                        
-
+                            end if;
                         
-                            update XXDL_HZ_CUST_ACCOUNTS xx
-                            set xx.CLOUD_CUST_ACCOUNT_ID = c_r.cust_account_id
-                            ,xx.CLOUD_PARTY_ID = c_r.party_id
-                            ,xx.process_flag = x_return_status
-                            ,xx.last_update_date = sysdate
-                            where xx.cust_account_id = case when length(xx.cust_account_id)!= length(c_r.source_account_id) then to_number(substr(c_r.source_account_id,length(c_r.source_account_id)-length(xx.cust_account_id)+1,length(c_r.source_account_id))) else to_number(c_r.source_account_id) end  
-                            --xx.cust_account_id = c_r.source_account_id
-                            ;
 
-                            
-                            --account site loop
-                            for c_as in (select
-                                    x_acc_site.cust_acct_site_id
-                                    ,x_acc_site.party_site_id
-                                    ,x_acc_site.source_cust_acct_site_id
-                                    ,x_acc_site.cust_account_id
-                                    from
-                                    xxfn_ws_call_log xx
-                                    ,xmltable(
-                                        xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
-                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
-                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
-                                        '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite' passing xx.response_xml columns
-                                        party_site_id number path './ns2:PartySiteId'
-                                        ,cust_account_id number path './ns2:CustomerAccountId'                                    
-                                        ,cust_acct_site_id number path './ns2:CustomerAccountSiteId'
-                                        ,source_cust_acct_site_id number path './ns2:OrigSystemReference') x_acc_site                                
-                                    where xx.ws_call_id = x_ws_call_id
-                                    and x_acc_site.cust_account_id = c_r.cust_account_id
-                                    ) loop
+                            for c_as in c_account_sites(c_a.cust_account_id, xr_ws_call_id) loop
+                                log('               Now adding account sites!');
+                                log('               Now finding customer accounts!');
+                                log('               Customer CUST_ACCT_SITE_ID:'||c_as.CUST_ACCT_SITE_ID);
+                                log('               Customer CUST_ACCOUNT_ID:'||c_a.cust_account_id);
+                                log('               Customer PARTY_SITE_ID:'||c_as.PARTY_SITE_ID);
+                                log('               Customer set_code:'||c_as.cloud_set_code);
+                                log('               Customer set_id:'||c_as.cloud_set_id);
+
+                                l_cust_acct_site_rec.cust_acct_site_id := c_as.cust_acct_site_id;
+                                l_cust_acct_site_rec.CUST_ACCOUNT_ID := c_as.CUST_ACCOUNT_ID;
+                                l_cust_acct_site_rec.PARTY_SITE_ID := c_as.PARTY_SITE_ID;
+                                l_cust_acct_site_rec.BILL_TO_FLAG := c_as.BILL_TO_FLAG;
+                                l_cust_acct_site_rec.SHIP_TO_FLAG := c_as.SHIP_TO_FLAG;
+                                l_cust_acct_site_rec.STATUS := c_as.STATUS ;
+                                l_cust_acct_site_rec.ORG_ID := c_as.ORG_ID;
+                                l_cust_acct_site_rec.CLOUD_SET_ID := c_as.CLOUD_SET_ID;
+                                l_cust_acct_site_rec.cloud_party_site_number := c_as.cloud_party_site_number;
+                                l_cust_acct_site_rec.creation_date := sysdate;
+                                l_cust_acct_site_rec.party_site_name := c_as.party_site_name;
+                                l_cust_acct_site_rec.party_site_number := c_as.cloud_party_site_number;
+
+                                begin
+                                    insert into XXDL_HZ_CUST_ACCT_SITES values l_cust_acct_site_rec;
+                                    exception
+                                    when dup_val_on_index then
+                                        l_cust_acct_site_rec.last_update_date := sysdate;
+                                        update XXDL_HZ_CUST_ACCT_SITES xx
+                                        set row = l_cust_acct_site_rec
+                                        where xx.cust_acct_site_id = c_as.cust_acct_site_id;
+                                    end;
+
+                                l_text := '
+                                                <cus:CustomerAccountSite>
+                                                    <cus:PartySiteId>'||c_as.cloud_address_id||'</cus:PartySiteId>
+                                                    <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
+                                                    <cus:SetId>'||c_as.cloud_set_id||'</cus:SetId>
+                                                    <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
+                                                    <cus:Language>'||c_as.language||'</cus:Language>
+                                                    <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
+                                                    <cus:OrigSystemReference>99999999'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                l_soap_env := l_soap_env || to_clob(l_text);                   
+
+                                for c_asu in c_account_site_use(c_as.cust_acct_site_id,xr_ws_call_id) loop
+                                    log('                   Now adding account sites use!');
+                                    log('                   Now finding customer accounts uses!');
+                                    log('                   Customer CUST_ACCT_SITE_ID:'||c_as.CUST_ACCT_SITE_ID);
+                                    log('                   Customer SITE_USE_ID:'||c_asu.SITE_USE_ID);
+                                    log('                   Customer PARTY_SITE_ID:'||c_asu.PARTY_SITE_ID);
+                                    log('                   Customer BILL_TO_SITE_USE_ID:'||c_asu.BILL_TO_SITE_USE_ID);
+                                    log('                   Customer SITE_USE_CODE:'||c_asu.SITE_USE_CODE);
+                                    log('                   Customer PRIMARY_FLAG:'||c_asu.PRIMARY_FLAG);
+                                    log('                   Customer LOCATION:'||c_asu.LOCATION);
+                                    log('                   Customer STATUS:'||c_asu.STATUS  );
+                                    log('                   Customer ORG_ID:'||c_asu.ORG_ID);
+                                    log('                   Customer CLOUD_SET_ID:'||c_asu.CLOUD_SET_ID);
+                                    l_cust_acct_site_use_rec:=l_cust_acct_site_use_rec_empty;
+
+                                    l_cust_acct_site_use_rec.cust_acct_site_id := c_as.cust_acct_site_id;
+                                    l_cust_acct_site_use_rec.site_use_id := c_asu.site_use_id;
+                                    l_cust_acct_site_use_rec.party_site_id := c_asu.party_site_id;
+                                    l_cust_acct_site_use_rec.BILL_TO_SITE_USE_ID := c_asu.BILL_TO_SITE_USE_ID;
+                                    l_cust_acct_site_use_rec.PRIMARY_FLAG := c_asu.PRIMARY_FLAG;
+                                    l_cust_acct_site_use_rec.SITE_USE_CODE := c_asu.SITE_USE_CODE;
+                                    l_cust_acct_site_use_rec.LOCATION := c_asu.LOCATION;
+                                    l_cust_acct_site_use_rec.location_id := c_asu.location_id;
+                                    l_cust_acct_site_use_rec.ORG_ID := c_asu.ORG_ID;
+                                    l_cust_acct_site_use_rec.CLOUD_SET_ID := c_asu.CLOUD_SET_ID;
+                                    l_cust_acct_site_use_rec.cloud_location_id := c_asu.cloud_location_id;
+                                    l_cust_acct_site_use_rec.creation_date := sysdate;
+
+                                    begin
+                                    log('                   inserting SITE_USE_ID:'||l_cust_acct_site_use_rec.SITE_USE_ID);
                                 
-                                log('       Customer account site is being stored in log!');               
-                                                            
-                                update XXDL_HZ_CUST_ACCT_SITES xx
-                                set xx.process_flag = x_return_status            
-                                ,xx.cloud_party_site_id = c_as.party_site_id
-                                ,xx.cloud_cust_acct_site_id = c_as.cust_acct_site_id
-                                ,xx.CLOUD_CUST_ACCOUNT_ID = c_as.cust_account_id  
-                                where xx.cust_acct_site_id = case when length(xx.cust_acct_site_id)!= length(c_as.source_cust_acct_site_id) then to_number(substr(c_as.source_cust_acct_site_id,length(c_as.source_cust_acct_site_id)-length(xx.cust_acct_site_id)+1,length(c_as.source_cust_acct_site_id))) else to_number(c_as.source_cust_acct_site_id) end  
-                                --xx.cust_acct_site_id = c_as.source_cust_acct_site_id
-                                ;     
-                                                                
-                                --account site use loop
-                                for c_asu in (select                               
-                                        x_site_use.cust_acct_site_id
-                                        ,x_site_use.cust_acct_site_use_id
-                                        ,x_site_use.site_use_code
-                                        ,x_site_use.set_id
-                                        ,x_site_use.bill_site_to_use_id
-                                        ,x_site_use.source_acct_site_use_id
+                                    insert into XXDL_HZ_CUST_ACCT_SITE_USES values l_cust_acct_site_use_rec;
+                                    exception
+                                    when dup_val_on_index then
+                                        update XXDL_HZ_CUST_ACCT_SITE_USES xx
+                                        SET row = l_cust_acct_site_use_rec
+                                        where xx.site_use_id = c_asu.site_use_id;
+                                            log('                    SITE_USE_ID već postoji u logu:'||l_cust_acct_site_use_rec.SITE_USE_ID);
+                                    end;        
+
+                                    l_text := '
+                                                    <cus:CustomerAccountSiteUse>
+                                                            <cus:SiteUseCode>'||c_asu.site_use_code||'</cus:SiteUseCode>
+                                                            <cus:Location>'||c_asu.cloud_location_id||'</cus:Location>
+                                                            <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
+                                                            <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
+                                                            <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag> 
+                                                            <cus:OrigSystemReference>99999999'||c_asu.site_use_id||'</cus:OrigSystemReference>
+                                                            <cus:StartDate>'||c_asu.start_date||'</cus:StartDate>
+                                                    </cus:CustomerAccountSiteUse>';
+                                    l_soap_env := l_soap_env || to_clob(l_text);
+
+                                end loop;
+
+                                l_text := '
+                                                </cus:CustomerAccountSite>
+                                                        '; 
+                                l_soap_env := l_soap_env || to_clob(l_text);
+                            end loop;       
+                            --l_text := l_text || '</typ:customerAccount>
+                            l_text := '</typ:customerAccount>
+                                        ';
+                            l_soap_env := l_soap_env || to_clob(l_text);            
+
+                
+                        end loop;
+                        
+                        if (nvl(l_cloud_acct_existing,0)>0) then
+
+                            l_text := '</typ:mergeCustomerAccount>
+                                            </soapenv:Body>
+                                            </soapenv:Envelope>';
+                        else
+                            l_text := '</typ:createCustomerAccount>
+                                            </soapenv:Body>
+                                            </soapenv:Envelope>';
+                        end if;                
+                        l_soap_env := l_soap_env || to_clob(l_text);
+                        l_text := '';
+
+                        log('   Soap envelope ready!');
+
+
+                        log('   Calling webservice!');
+                        log('   Url:'||l_app_url||'crmService/CustomerAccountService?WSDL');
+
+                        if (nvl(l_cloud_acct_existing,0)>0) then
+
+                            XXFN_CLOUD_WS_PKG.WS_CALL(
+                            p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
+                            p_soap_env => l_soap_env,
+                            p_soap_act => 'mergeCustomerAccount',
+                            p_content_type => 'text/xml;charset="UTF-8"',
+                            x_return_status => x_return_status,
+                            x_return_message => x_return_message,
+                            x_ws_call_id => x_ws_call_id);
+
+                        else
+                            XXFN_CLOUD_WS_PKG.WS_CALL(
+                            p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
+                            p_soap_env => l_soap_env,
+                            p_soap_act => 'createCustomerAccount',
+                            p_content_type => 'text/xml;charset="UTF-8"',
+                            x_return_status => x_return_status,
+                            x_return_message => x_return_message,
+                            x_ws_call_id => x_ws_call_id);
+
+                        end if;
+
+                        log('   Web service finished! ws_call_id:'||x_ws_call_id);
+
+                        log('   After call XXFN_CLOUD_WS_PKG.WS_CALL');
+
+                        dbms_lob.freetemporary(l_soap_env);
+
+                        if x_return_status = 'S' then
+
+                            log('   Customer account created!');
+
+                            --account loop
+                            for c_r in (select
+                                        x_acc.party_id
+                                        ,x_acc.cust_account_id
+                                        ,x_acc.account_number
+                                        ,x_acc.source_account_id
                                         from
                                         xxfn_ws_call_log xx
                                         ,xmltable(
                                             xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
                                             ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
                                             ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
-                                            '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
-                                            cust_acct_site_id number path './ns2:CustomerAccountSiteId'
-                                            ,cust_acct_site_use_id number path './ns2:SiteUseId'
-                                            ,site_use_code varchar2(30) path './ns2:SiteUseCode'
-                                            ,set_id number path './ns2:SetId'
-                                            ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
-                                            ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
+                                            '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value' passing xx.response_xml columns
+                                            party_id number path './ns2:PartyId'
+                                            ,cust_account_id number path './ns2:CustomerAccountId'
+                                            ,account_number number path './ns2:AccountNumber'
+                                            ,source_account_id number path './ns2:OrigSystemReference') x_acc                               
                                         where xx.ws_call_id = x_ws_call_id
-                                        and x_site_use.cust_acct_site_id = c_as.cust_acct_site_id
+                                        union
+                                        select
+                                        x_acc.party_id
+                                        ,x_acc.cust_account_id
+                                        ,x_acc.account_number
+                                        ,x_acc.source_account_id
+                                        from
+                                        xxfn_ws_call_log xx
+                                        ,xmltable(
+                                            xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                            '/env:Envelope/env:Body/ns0:mergeCustomerAccountResponse/ns0:result/ns2:Value' passing xx.response_xml columns
+                                            party_id number path './ns2:PartyId'
+                                            ,cust_account_id number path './ns2:CustomerAccountId'
+                                            ,account_number number path './ns2:AccountNumber'
+                                            ,source_account_id number path './ns2:OrigSystemReference') x_acc                               
+                                        where xx.ws_call_id = x_ws_call_id
                                         ) loop
+
+                                log('       Customer account is being stored in log!');                        
+
                             
-                                    log('           Customer account site use is being stored in log!');           
-                                    log('           For account site use:'||c_asu.source_acct_site_use_id||' cloud id is:'||c_asu.cust_acct_site_use_id);           
+                                update XXDL_HZ_CUST_ACCOUNTS xx
+                                set xx.CLOUD_CUST_ACCOUNT_ID = c_r.cust_account_id
+                                ,xx.CLOUD_PARTY_ID = c_r.party_id
+                                ,xx.process_flag = x_return_status
+                                ,xx.last_update_date = sysdate
+                                where xx.cust_account_id = case
+                                    when length(c_r.source_account_id)-8=length(xx.cust_account_id) then
+                                        case when length(xx.cust_account_id)!= length(c_r.source_account_id) then to_number(substr(c_r.source_account_id,length(c_r.source_account_id)-length(xx.cust_account_id)+1,length(c_r.source_account_id))) else to_number(c_r.source_account_id) end  
+                                    else
+                                        to_number(c_r.source_account_id)
+                                    end                                  
+                                --xx.cust_account_id = c_r.source_account_id  --sve zbog ponavljanja migracija
+                                ;
 
-                                    update XXDL_HZ_CUST_ACCT_SITE_USES xx
-                                    set xx.CLOUD_SITE_USE_ID = c_asu.cust_acct_site_use_id
-                                    ,xx.CLOUD_CUST_ACCT_SITE_ID= c_asu.cust_acct_site_id
-                                    ,xx.CLOUD_PARTY_SITE_ID= c_as.party_site_id
-                                    ,xx.CLOUD_SET_ID= c_asu.set_id
-                                    ,xx.CLOUD_BILL_TO_SITE_USE_ID= c_asu.bill_site_to_use_id
-                                    ,xx.process_flag = 'S'
-                                    where xx.site_use_id = case when length(xx.site_use_id)!= length(c_asu.source_acct_site_use_id) then to_number(substr(c_asu.source_acct_site_use_id,length(c_asu.source_acct_site_use_id)-length(xx.site_use_id)+1,length(c_asu.source_acct_site_use_id))) else to_number(c_asu.source_acct_site_use_id) end  
-                                    --xx.site_use_id = c_asu.source_acct_site_use_id
-                                    ;
-
-                                    --start ship_to bill_to mapping
-                                    if c_asu.site_use_code = 'SHIP_TO' and c_asu.bill_site_to_use_id is null then
-                                    
-                                        log('               Found SHIP_TO site use! Need to update bill_to_site_use_id!');  
-                                        l_cloud_bill_use_id := null;                     
-
-                                        log('               Searching BILL_TO for acct site id:'||c_asu.cust_acct_site_id);
-
-                                        begin
-                                        select x_site_use.cust_acct_site_use_id into l_cloud_bill_use_id
-                                                from
-                                                xxfn_ws_call_log xx
-                                                ,xmltable(
-                                                    xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
-                                                    ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
-                                                    ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
-                                                    '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
-                                                    cust_acct_site_id number path './ns2:CustomerAccountSiteId'
-                                                    ,cust_acct_site_use_id number path './ns2:SiteUseId'
-                                                    ,site_use_code varchar2(30) path './ns2:SiteUseCode'
-                                                    ,set_id number path './ns2:SetId'
-                                                    ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
-                                                    ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
-                                                where xx.ws_call_id = x_ws_call_id
-                                                and x_site_use.cust_acct_site_id = c_asu.cust_acct_site_id
-                                                and x_site_use.site_use_code = 'BILL_TO';
-                                        exception
-                                        when no_data_found then
-                                            l_cloud_bill_use_id := null;
-                                        end;        
                                 
-                                        log('               Bill to site use id:'||l_cloud_bill_use_id);                        
-                        
-                                        --start bill_use_id update
-                                        if nvl(l_cloud_bill_use_id,0) != 0 then
-
-                                            log('                   Preparing to call SOAP to update bill to use id!');
-                                            l_soap_env := l_empty_clob;
-
-                                            l_bill_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                                                        xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/"
-                                                        xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/"
-                                                        xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/"
-                                                        xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/"
-                                                        xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/"
-                                                        xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/"
-                                                        xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/"
-                                                        xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/"
-                                                        xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/"
-                                                        xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
-                                                        <soapenv:Header/>
-                                                        <soapenv:Body>
-                                                            <typ:updateCustomerAccount>
-                                                                <typ:customerAccount>
-                                                                    <cus:CustomerAccountId>'||c_r.cust_account_id||'</cus:CustomerAccountId>
-                                                                    <cus:PartyId>'||c_r.party_id||'</cus:PartyId>
-                                                                    <cus:AccountNumber>'||c_r.account_number||'</cus:AccountNumber>
-                                                                    <cus:CustomerAccountSite>
-                                                                        <cus:CustomerAccountSiteId>'||c_as.cust_acct_site_id||'</cus:CustomerAccountSiteId>
-                                                                        <cus:CustomerAccountId>'||c_as.cust_account_id||'</cus:CustomerAccountId>
-                                                                        <cus:PartySiteId>'||c_as.party_site_id||'</cus:PartySiteId>
-                                                                        <cus:CustomerAccountSiteUse>
-                                                                            <cus:SiteUseId>'||c_asu.cust_acct_site_use_id||'</cus:SiteUseId>
-                                                                            <cus:CustomerAccountSiteId>'||c_asu.cust_acct_site_id||'</cus:CustomerAccountSiteId>
-                                                                            <cus:SiteUseCode>SHIP_TO</cus:SiteUseCode>
-                                                                            <cus:BillToSiteUseId>'||l_cloud_bill_use_id||'</cus:BillToSiteUseId>
-                                                                            <cus:SetId>'||c_asu.set_id||'</cus:SetId>
-                                                                        </cus:CustomerAccountSiteUse>
-                                                                    </cus:CustomerAccountSite>
-                                                                </typ:customerAccount>
-                                                            </typ:updateCustomerAccount>
-                                                        </soapenv:Body>
-                                                    </soapenv:Envelope>';
-
-                                            log('                       Soap envelope for bill to use is built!');
-
-                                            
-                                            l_soap_env := l_empty_clob;
-                                            l_soap_env := l_soap_env || to_clob(l_bill_text);
-
-                                            XXFN_CLOUD_WS_PKG.WS_CALL(
-                                            p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
-                                            p_soap_env => l_soap_env,
-                                            p_soap_act => 'createCustomerAccount',
-                                            p_content_type => 'text/xml;charset="UTF-8"',
-                                            x_return_status => xb_return_status,
-                                            x_return_message => xb_return_message,
-                                            x_ws_call_id => xb_ws_call_id);
-
-                                            log('                           Web service finished! ws_call_id:'||xb_ws_call_id);  
-                                            dbms_lob.freetemporary(l_soap_env);
-
-                                            
-
-                                            if xb_return_status = 'S' then
-
-                                                log('                       Bill to site use id migrated!');
-
-                                                begin
-                                                select x_site_use.bill_site_to_use_id into l_cloud_bill_use_id
-                                                        from
-                                                        xxfn_ws_call_log xx
-                                                        ,xmltable(
-                                                            xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
-                                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
-                                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
-                                                            '/env:Envelope/env:Body/ns0:updateCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
-                                                            cust_acct_site_id number path './ns2:CustomerAccountSiteId'
-                                                            ,cust_acct_site_use_id number path './ns2:SiteUseId'
-                                                            ,site_use_code varchar2(30) path './ns2:SiteUseCode'
-                                                            ,set_id number path './ns2:SetId'
-                                                            ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
-                                                            ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
-                                                        where xx.ws_call_id = xb_ws_call_id
-                                                        and x_site_use.cust_acct_site_id = c_asu.cust_acct_site_id
-                                                        and x_site_use.site_use_code = 'SHIP_TO';
-                                                exception
-                                                when no_data_found then
-                                                    l_cloud_bill_use_id := null;
-                                                end;    
-
-                                                log('                       Bill to site use id:'||l_cloud_bill_use_id);
-
-                                                update XXDL_HZ_CUST_ACCT_SITE_USES xx
-                                                set xx.CLOUD_BILL_TO_SITE_USE_ID = l_cloud_bill_use_id
-                                                ,xx.process_flag = 'S'
-                                                where xx.cloud_site_use_id = c_asu.cust_acct_site_use_id;    
-
+                                --account site loop
+                                for c_as in (select
+                                        x_acc_site.cust_acct_site_id
+                                        ,x_acc_site.party_site_id
+                                        ,x_acc_site.source_cust_acct_site_id
+                                        ,x_acc_site.cust_account_id
+                                        from
+                                        xxfn_ws_call_log xx
+                                        ,xmltable(
+                                            xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                            '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite' passing xx.response_xml columns
+                                            party_site_id number path './ns2:PartySiteId'
+                                            ,cust_account_id number path './ns2:CustomerAccountId'                                    
+                                            ,cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                            ,source_cust_acct_site_id number path './ns2:OrigSystemReference') x_acc_site                                
+                                        where xx.ws_call_id = x_ws_call_id
+                                        and x_acc_site.cust_account_id = c_r.cust_account_id
+                                        union
+                                        select
+                                        x_acc_site.cust_acct_site_id
+                                        ,x_acc_site.party_site_id
+                                        ,x_acc_site.source_cust_acct_site_id
+                                        ,x_acc_site.cust_account_id
+                                        from
+                                        xxfn_ws_call_log xx
+                                        ,xmltable(
+                                            xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                            '/env:Envelope/env:Body/ns0:mergeCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite' passing xx.response_xml columns
+                                            party_site_id number path './ns2:PartySiteId'
+                                            ,cust_account_id number path './ns2:CustomerAccountId'                                    
+                                            ,cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                            ,source_cust_acct_site_id number path './ns2:OrigSystemReference') x_acc_site                                
+                                        where xx.ws_call_id = x_ws_call_id
+                                        and x_acc_site.cust_account_id = c_r.cust_account_id
+                                        ) loop
+                                    
+                                    log('       Customer account site is being stored in log!');               
+                                                                
+                                    update XXDL_HZ_CUST_ACCT_SITES xx
+                                    set xx.process_flag = x_return_status            
+                                    ,xx.cloud_party_site_id = c_as.party_site_id
+                                    ,xx.cloud_cust_acct_site_id = c_as.cust_acct_site_id
+                                    ,xx.CLOUD_CUST_ACCOUNT_ID = c_as.cust_account_id  
+                                    where xx.cust_acct_site_id = case
+                                            when length(c_as.source_cust_acct_site_id)-8=length(xx.cust_acct_site_id) then
+                                                case when length(xx.cust_acct_site_id)!= length(c_as.source_cust_acct_site_id) then to_number(substr(c_as.source_cust_acct_site_id,length(c_as.source_cust_acct_site_id)-length(xx.cust_acct_site_id)+1,length(c_as.source_cust_acct_site_id))) else to_number(c_as.source_cust_acct_site_id) end  
                                             else
+                                                to_number(c_as.source_cust_acct_site_id)
+                                            end                                      
+                                    --xx.cust_acct_site_id = c_as.source_cust_acct_site_id --sve zbog ponavljanja migracije
+                                    ;     
+                                                                    
+                                    --account site use loop
+                                    for c_asu in (select                               
+                                            x_site_use.cust_acct_site_id
+                                            ,x_site_use.cust_acct_site_use_id
+                                            ,x_site_use.site_use_code
+                                            ,x_site_use.set_id
+                                            ,x_site_use.bill_site_to_use_id
+                                            ,x_site_use.source_acct_site_use_id
+                                            from
+                                            xxfn_ws_call_log xx
+                                            ,xmltable(
+                                                xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                                ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                                ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                                '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
+                                                cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                                ,cust_acct_site_use_id number path './ns2:SiteUseId'
+                                                ,site_use_code varchar2(30) path './ns2:SiteUseCode'
+                                                ,set_id number path './ns2:SetId'
+                                                ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
+                                                ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
+                                            where xx.ws_call_id = x_ws_call_id
+                                            and x_site_use.cust_acct_site_id = c_as.cust_acct_site_id
+                                            union
+                                            select                               
+                                            x_site_use.cust_acct_site_id
+                                            ,x_site_use.cust_acct_site_use_id
+                                            ,x_site_use.site_use_code
+                                            ,x_site_use.set_id
+                                            ,x_site_use.bill_site_to_use_id
+                                            ,x_site_use.source_acct_site_use_id
+                                            from
+                                            xxfn_ws_call_log xx
+                                            ,xmltable(
+                                                xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                                ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                                ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                                '/env:Envelope/env:Body/ns0:mergeCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
+                                                cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                                ,cust_acct_site_use_id number path './ns2:SiteUseId'
+                                                ,site_use_code varchar2(30) path './ns2:SiteUseCode'
+                                                ,set_id number path './ns2:SetId'
+                                                ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
+                                                ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
+                                            where xx.ws_call_id = x_ws_call_id
+                                            and x_site_use.cust_acct_site_id = c_as.cust_acct_site_id
+                                            ) loop
+                                
+                                        log('           Customer account site use is being stored in log!');           
+                                        log('           For account site use:'||c_asu.source_acct_site_use_id||' cloud id is:'||c_asu.cust_acct_site_use_id);           
 
-                                                log('                       Bill to site use id not migrated!');
+                                        update XXDL_HZ_CUST_ACCT_SITE_USES xx
+                                        set xx.CLOUD_SITE_USE_ID = c_asu.cust_acct_site_use_id
+                                        ,xx.CLOUD_CUST_ACCT_SITE_ID= c_asu.cust_acct_site_id
+                                        ,xx.CLOUD_PARTY_SITE_ID= c_as.party_site_id
+                                        ,xx.CLOUD_SET_ID= c_asu.set_id
+                                        ,xx.CLOUD_BILL_TO_SITE_USE_ID= c_asu.bill_site_to_use_id
+                                        ,xx.process_flag = 'S'
+                                        where xx.site_use_id = case
+                                            when length(c_asu.source_acct_site_use_id)-8=length(xx.site_use_id) then
+                                                case when length(xx.site_use_id)!= length(c_asu.source_acct_site_use_id) then to_number(substr(c_asu.source_acct_site_use_id,length(c_asu.source_acct_site_use_id)-length(xx.site_use_id)+1,length(c_asu.source_acct_site_use_id))) else to_number(c_asu.source_acct_site_use_id) end  
+                                            else
+                                                to_number(c_asu.source_acct_site_use_id)
+                                            end                                        
+                                        --xx.site_use_id = c_asu.source_acct_site_use_id --sve zbog ponavljanja migracije
+                                        ;
 
-                                                BEGIN
-                                                    SELECT
-                                                        xt.faultcode,
-                                                        xt.faultstring
-                                                    INTO
-                                                        l_fault_code,
-                                                        l_fault_string
-                                                    FROM
-                                                        xxfn_ws_call_log x,
-                                                        XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" ), './/env:Fault' PASSING x.response_xml COLUMNS
-                                                        faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
-                                                    WHERE
-                                                        x.ws_call_id = xb_ws_call_id;
+                                        --start ship_to bill_to mapping
+                                        if c_asu.site_use_code = 'SHIP_TO' and c_asu.bill_site_to_use_id is null then
+                                        
+                                            log('               Found SHIP_TO site use! Need to update bill_to_site_use_id!');  
+                                            l_cloud_bill_use_id := null;                     
 
-                                                EXCEPTION
-                                                    WHEN no_data_found THEN
-                                                        BEGIN
-                                                            SELECT
-                                                                nvl(x.response_status_code, 'ERROR'),
-                                                                x.response_reason_phrase
-                                                            INTO
-                                                                l_fault_code,
-                                                                l_fault_string
-                                                            FROM
-                                                                xxfn_ws_call_log x
-                                                            WHERE
-                                                                x.ws_call_id = xb_ws_call_id;
+                                            log('               Searching BILL_TO for acct site id:'||c_asu.cust_acct_site_id);
 
-                                                        EXCEPTION
-                                                            WHEN OTHERS THEN
-                                                                l_cust_acct_site_use_rec.error_msg := 'Cannot find env:Fault in ws call results.';
-                                                        END;
-                                                END;             
+                                            begin
+                                            select cust_acct_site_use_id into l_cloud_bill_use_id
+                                            from
+                                            (   select x_site_use.cust_acct_site_use_id 
+                                                    from
+                                                    xxfn_ws_call_log xx
+                                                    ,xmltable(
+                                                        xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                                        '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
+                                                        cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                                        ,cust_acct_site_use_id number path './ns2:SiteUseId'
+                                                        ,site_use_code varchar2(30) path './ns2:SiteUseCode'
+                                                        ,set_id number path './ns2:SetId'
+                                                        ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
+                                                        ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
+                                                    where xx.ws_call_id = x_ws_call_id
+                                                    and x_site_use.cust_acct_site_id = c_asu.cust_acct_site_id
+                                                    and x_site_use.site_use_code = 'BILL_TO'
+                                                union
+                                                select x_site_use.cust_acct_site_use_id 
+                                                    from
+                                                    xxfn_ws_call_log xx
+                                                    ,xmltable(
+                                                        xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                                        '/env:Envelope/env:Body/ns0:mergeCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
+                                                        cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                                        ,cust_acct_site_use_id number path './ns2:SiteUseId'
+                                                        ,site_use_code varchar2(30) path './ns2:SiteUseCode'
+                                                        ,set_id number path './ns2:SetId'
+                                                        ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
+                                                        ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
+                                                    where xx.ws_call_id = x_ws_call_id
+                                                    and x_site_use.cust_acct_site_id = c_asu.cust_acct_site_id
+                                                    and x_site_use.site_use_code = 'BILL_TO');
+                                            exception
+                                            when no_data_found then
+                                                l_cloud_bill_use_id := null;
+                                            end;        
+                                    
+                                            log('               Bill to site use id:'||l_cloud_bill_use_id);                        
+                            
+                                            --start bill_use_id update
+                                            if nvl(l_cloud_bill_use_id,0) != 0 then
 
-                                                if l_fault_code is not null or l_fault_string is not null then
-                                                    l_error_message := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
+                                                log('                   Preparing to call SOAP to update bill to use id!');
+                                                l_soap_env := l_empty_clob;
+
+                                                l_bill_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                                                            xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/"
+                                                            xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/"
+                                                            xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/"
+                                                            xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/"
+                                                            xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/"
+                                                            xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/"
+                                                            xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/"
+                                                            xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/"
+                                                            xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/"
+                                                            xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
+                                                            <soapenv:Header/>
+                                                            <soapenv:Body>
+                                                                <typ:updateCustomerAccount>
+                                                                    <typ:customerAccount>
+                                                                        <cus:CustomerAccountId>'||c_r.cust_account_id||'</cus:CustomerAccountId>
+                                                                        <cus:PartyId>'||c_r.party_id||'</cus:PartyId>
+                                                                        <cus:AccountNumber>'||c_r.account_number||'</cus:AccountNumber>
+                                                                        <cus:CustomerAccountSite>
+                                                                            <cus:CustomerAccountSiteId>'||c_as.cust_acct_site_id||'</cus:CustomerAccountSiteId>
+                                                                            <cus:CustomerAccountId>'||c_as.cust_account_id||'</cus:CustomerAccountId>
+                                                                            <cus:PartySiteId>'||c_as.party_site_id||'</cus:PartySiteId>
+                                                                            <cus:CustomerAccountSiteUse>
+                                                                                <cus:SiteUseId>'||c_asu.cust_acct_site_use_id||'</cus:SiteUseId>
+                                                                                <cus:CustomerAccountSiteId>'||c_asu.cust_acct_site_id||'</cus:CustomerAccountSiteId>
+                                                                                <cus:SiteUseCode>SHIP_TO</cus:SiteUseCode>
+                                                                                <cus:BillToSiteUseId>'||l_cloud_bill_use_id||'</cus:BillToSiteUseId>
+                                                                                <cus:SetId>'||c_asu.set_id||'</cus:SetId>
+                                                                            </cus:CustomerAccountSiteUse>
+                                                                        </cus:CustomerAccountSite>
+                                                                    </typ:customerAccount>
+                                                                </typ:updateCustomerAccount>
+                                                            </soapenv:Body>
+                                                        </soapenv:Envelope>';
+
+                                                log('                       Soap envelope for bill to use is built!');
+
+                                                
+                                                l_soap_env := l_empty_clob;
+                                                l_soap_env := l_soap_env || to_clob(l_bill_text);
+
+                                                XXFN_CLOUD_WS_PKG.WS_CALL(
+                                                p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
+                                                p_soap_env => l_soap_env,
+                                                p_soap_act => 'createCustomerAccount',
+                                                p_content_type => 'text/xml;charset="UTF-8"',
+                                                x_return_status => xb_return_status,
+                                                x_return_message => xb_return_message,
+                                                x_ws_call_id => xb_ws_call_id);
+
+                                                log('                           Web service finished! ws_call_id:'||xb_ws_call_id);  
+                                                dbms_lob.freetemporary(l_soap_env);
+
+                                                
+
+                                                if xb_return_status = 'S' then
+
+                                                    log('                       Bill to site use id migrated!');
+
+                                                    begin
+                                                    select x_site_use.bill_site_to_use_id into l_cloud_bill_use_id
+                                                            from
+                                                            xxfn_ws_call_log xx
+                                                            ,xmltable(
+                                                                xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                                                ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                                                ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                                                '/env:Envelope/env:Body/ns0:updateCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
+                                                                cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                                                ,cust_acct_site_use_id number path './ns2:SiteUseId'
+                                                                ,site_use_code varchar2(30) path './ns2:SiteUseCode'
+                                                                ,set_id number path './ns2:SetId'
+                                                                ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
+                                                                ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
+                                                            where xx.ws_call_id = xb_ws_call_id
+                                                            and x_site_use.cust_acct_site_id = c_asu.cust_acct_site_id
+                                                            and x_site_use.site_use_code = 'SHIP_TO';
+                                                    exception
+                                                    when no_data_found then
+                                                        l_cloud_bill_use_id := null;
+                                                    end;    
+
+                                                    log('                       Bill to site use id:'||l_cloud_bill_use_id);
+
+                                                    update XXDL_HZ_CUST_ACCT_SITE_USES xx
+                                                    set xx.CLOUD_BILL_TO_SITE_USE_ID = l_cloud_bill_use_id
+                                                    ,xx.process_flag = 'S'
+                                                    where xx.cloud_site_use_id = c_asu.cust_acct_site_use_id;    
+
+                                                else
+
+                                                    log('                       Bill to site use id not migrated!');
+
+                                                    BEGIN
+                                                        SELECT
+                                                            xt.faultcode,
+                                                            xt.faultstring
+                                                        INTO
+                                                            l_fault_code,
+                                                            l_fault_string
+                                                        FROM
+                                                            xxfn_ws_call_log x,
+                                                            XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" ), './/env:Fault' PASSING x.response_xml COLUMNS
+                                                            faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
+                                                        WHERE
+                                                            x.ws_call_id = xb_ws_call_id;
+
+                                                    EXCEPTION
+                                                        WHEN no_data_found THEN
+                                                            BEGIN
+                                                                SELECT
+                                                                    nvl(x.response_status_code, 'ERROR'),
+                                                                    x.response_reason_phrase
+                                                                INTO
+                                                                    l_fault_code,
+                                                                    l_fault_string
+                                                                FROM
+                                                                    xxfn_ws_call_log x
+                                                                WHERE
+                                                                    x.ws_call_id = xb_ws_call_id;
+
+                                                            EXCEPTION
+                                                                WHEN OTHERS THEN
+                                                                    l_cust_acct_site_use_rec.error_msg := 'Cannot find env:Fault in ws call results.';
+                                                            END;
+                                                    END;             
+
+                                                    if l_fault_code is not null or l_fault_string is not null then
+                                                        l_error_message := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
+                                                    end if;
+                                                    log('   '||l_error_message);
+
+                                                    update XXDL_HZ_CUST_ACCT_SITE_USES xx
+                                                    set xx.ERROR_MSG = l_error_message
+                                                    ,xx.process_flag = 'E'
+                                                    where xx.cloud_site_use_id = c_asu.cust_acct_site_use_id;   
+
                                                 end if;
-                                                log('   '||l_error_message);
-
-                                                update XXDL_HZ_CUST_ACCT_SITE_USES xx
-                                                set xx.ERROR_MSG = l_error_message
-                                                ,xx.process_flag = 'E'
-                                                where xx.cloud_site_use_id = c_asu.cust_acct_site_use_id;   
 
                                             end if;
+                                            --end bill_use_id update
 
                                         end if;
-                                        --end bill_use_id update
+                                        --end ship_to bill_to mapping    
 
-                                    end if;
-                                    --end ship_to bill_to mapping    
+                                    end loop;    
+                                    --end account site use loop
 
-                                end loop;    
-                                --end account site use loop
+                                end loop;
+                                --end account site loop  
+                                log('       Calling update tax reference for cust acc!');
 
-                            end loop;
-                            --end account site loop  
-                            log('       Calling update tax reference for cust acc!');
+                                update_cust_site_tax_ref(c_p.party_id,c_r.cust_account_id,'PARTY_SITE');                       
+        
 
-                            update_cust_site_tax_ref(c_p.party_id,c_r.cust_account_id);                         
-       
+                            end loop;    
+                            --end account loop                                  
+                        else
 
-                        end loop;    
-                        --end account loop                                  
-                    else
+                            log('           Customer account not migrated!');
 
-                        log('           Customer account not migrated!');
+                            BEGIN
+                                SELECT
+                                    xt.faultcode,
+                                    xt.faultstring
+                                INTO
+                                l_fault_code,
+                                    l_fault_string
+                                FROM
+                                xxfn_ws_call_log x,
+                                XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" ), './/env:Fault' PASSING x.response_xml COLUMNS
+                                faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
+                                WHERE
+                                    x.ws_call_id = x_ws_call_id;
 
-                        BEGIN
-                            SELECT
-                                xt.faultcode,
-                                xt.faultstring
-                            INTO
-                            l_fault_code,
-                                l_fault_string
-                            FROM
-                            xxfn_ws_call_log x,
-                            XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" ), './/env:Fault' PASSING x.response_xml COLUMNS
-                            faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
-                            WHERE
-                                x.ws_call_id = x_ws_call_id;
-
-                        EXCEPTION
-                            WHEN no_data_found THEN
-                                BEGIN
-                                    SELECT
-                                        nvl(x.response_status_code, 'ERROR'),
-                                        x.response_reason_phrase
-                                    INTO
-                                        l_fault_code,
-                                        l_fault_string
-                                    FROM
-                                        xxfn_ws_call_log x
-                                    WHERE
-                                        x.ws_call_id = x_ws_call_id;
                             EXCEPTION
-                                    WHEN OTHERS THEN
-                                        l_cust_acct_rec.error_msg := 'Cannot find env:Fault in ws call results.';
-                                END;
-                        END;             
+                                WHEN no_data_found THEN
+                                    BEGIN
+                                        SELECT
+                                            nvl(x.response_status_code, 'ERROR'),
+                                            x.response_reason_phrase
+                                        INTO
+                                            l_fault_code,
+                                            l_fault_string
+                                        FROM
+                                            xxfn_ws_call_log x
+                                        WHERE
+                                            x.ws_call_id = x_ws_call_id;
+                                EXCEPTION
+                                        WHEN OTHERS THEN
+                                            l_cust_acct_rec.error_msg := 'Cannot find env:Fault in ws call results.';
+                                    END;
+                            END;             
 
-                        if l_fault_code is not null or l_fault_string is not null then
-                            l_error_message := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
+                            if l_fault_code is not null or l_fault_string is not null then
+                                l_error_message := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
+                            end if;
+                            log('   '||l_error_message);
+
+                            update XXDL_HZ_CUST_ACCOUNTS xx
+                            set xx.ERROR_MSG = l_error_message
+                            ,xx.process_flag = 'E'
+                            where xx.cust_account_id = l_cust_acct_rec.cust_account_id;                    
+                                            
+                        
                         end if;
-                        log('   '||l_error_message);
-
-                        update XXDL_HZ_CUST_ACCOUNTS xx
-                        set xx.ERROR_MSG = l_error_message
-                        ,xx.process_flag = 'E'
-                        where xx.cust_account_id = l_cust_acct_rec.cust_account_id;                    
-                                        
-                    
-                    end if;
 
 
-                end loop;
-                --end find rest payload loop
-            
+                    end loop;
+                    --end find rest payload loop
+            end if;
+            --end create party site    
             
         end if;
 
         if l_cloud_party_id = 0 then
             log('   Creating customer!');
             log('   Building REST paylod!');
+            dbms_lob.createtemporary(l_rest_env, TRUE);
             l_text := '{
                         "PartyNumber": "'||c_p.party_number||'",
                         "TaxpayerIdentificationNumber":"'||c_p.TAXPAYER_ID||'",
                         "SourceSystemReference": [
                             {
                                 "SourceSystem": "EBSR11_NEW",
-                                "SourceSystemReferenceValue": "9999999'||c_p.party_id||'"
+                                "SourceSystemReferenceValue": "99999999'||c_p.party_id||'"
                             }
                         ],
-                        "OrganizationName": "'||c_p.party_name||'",
+                        "OrganizationName": "'||apex_escape.json(c_p.party_name)||'",
                         "PartyUsageCode": "'||c_p.party_usage_code||'",
                         "DUNSNumber": "'||c_p.duns_number||'",
                         "Address": [
                         ';
-
+            l_rest_env := l_rest_env|| to_clob(l_text);            
             
-            for c_l in c_locations(p_party_number) loop
+            for c_l in c_locations(c_p.party_number) loop
                 log('       Found location!');
                 log('       Importing location!');
 
-                l_text := l_text || '{
-                            "Address1": "'||c_l.address1||'",
-                            "Address2": "'||c_l.address2||'",
+                l_text := '{
+                            "Address1": "'||apex_escape.json(c_l.address1)||'",
+                            "Address2": "'||apex_escape.json(c_l.address2)||'",
                             "Address3": "'||c_l.address3||'",
                             "Address4": "'||c_l.address4||'",
                             "City": "'||c_l.city||'",
@@ -1691,13 +2389,17 @@
                             "AddressNumber":"'||c_l.party_site_number||'",                                                        
                             "SourceSystem": "EBSR11_NEW",
                             "StartDateActive" : "'||c_l.start_date||'",
-                            "SourceSystemReferenceValue": "9999999'||c_l.party_site_id||';9999999'||c_l.location_id||'"
+                            "SourceSystemReferenceValue": "99999999'||c_l.party_site_id||'"
                         }';
                 if c_l.c > 0 then
-                l_text := l_text ||',';
+                    l_text := l_text ||',';
+
+                    
                 end if;
+                l_rest_env := l_rest_env|| to_clob(l_text);
 
                 l_loc_rec.LOCATION_ID := c_l.LOCATION_ID;
+                l_loc_rec.PARTY_SITE_ID := c_l.party_site_id;
                 l_loc_rec.ADDRESS1 := c_l.ADDRESS1;
                 l_loc_rec.ADDRESS2 := c_l.ADDRESS2;
                 l_loc_rec.ADDRESS3 := c_l.ADDRESS3;
@@ -1730,12 +2432,12 @@
             end loop;
 
 
-            l_text := l_text || ']}';
+            l_text := ']}';
 
             --log('   Rest payload:');
             --log(l_text);
 
-            l_rest_env := l_soap_env|| to_clob(l_text);
+            l_rest_env := l_rest_env|| to_clob(l_text);
             l_text := '';
 
             log('   REST payload built!');
@@ -1758,8 +2460,8 @@
             dbms_lob.freetemporary(l_rest_env);
 
 
-        --log(l_text);
-        --dbms_lob.freetemporary(l_soap_env);
+            --log(l_text);
+            --dbms_lob.freetemporary(l_soap_env);
             log('   ws_call_id:'||x_ws_call_id);
 
             if x_return_status = 'S' then
@@ -1767,9 +2469,6 @@
                 log('   Customer migrated!');
                 l_party_rec.process_flag := x_return_status;
 
-
-                log('   Locations migrated!');
-                
                 for c_loc in (
                                     select
                                     cloud_party_id
@@ -1814,595 +2513,622 @@
                                                         cloud_location_id number path '$.LocationId')))                   
                                     where xx.ws_call_id = x_ws_call_id
                                     ) loop
-                            if nvl(c_loc.address_id,0) > 0 then            
-                                update xxdl_hz_locations xx
-                                set xx.cloud_location_id = c_loc.cloud_location_id
-                                ,xx.process_flag = x_return_status
-                                where '9999999'||xx.location_id = substr(c_loc.source_address_id,instr(c_loc.source_address_id,';',1,1)+1,length(c_loc.source_address_id));
-                            end if;                
+                    if nvl(c_loc.address_id,0) > 0 then            
+                        update xxdl_hz_locations xx
+                        set xx.cloud_location_id = c_loc.cloud_location_id
+                        ,xx.process_flag = x_return_status
+                        where '99999999'||xx.party_site_id = c_loc.source_address_id;
+                    end if;                
                 end loop;
 
+                log('   Locations migrated!');
 
-                
-                BEGIN
-    
-                with json_response AS
-                (select treat(xx.response_clob as JSON) json_data
-                from xxfn_ws_call_log xx
-                where xx.ws_call_id = x_ws_call_id)
-                select
-                jr.json_data.PartyId
-                into l_cloud_party_id
-                from
-                json_response jr;   
+                create_party_site(c_p.party_number,x_return_status);
 
-                log('       Cloud party id:'||l_cloud_party_id);
+                --only if party site created then create customer account etc.
+                if x_return_status = 'S' then
 
-                l_party_rec.cloud_party_id := l_cloud_party_id;                 
-
-                EXCEPTION
-                    WHEN no_data_found THEN
-                        l_party_rec.cloud_party_id := null;
-                END;             
-
-                log('       Now we need to migrate customer account and sites');
                     
-                --rest payload loop    
-                for c_r in c_rest(x_ws_call_id) loop
-                l_soap_env := l_empty_clob;
-                log('         First fetching the rest payload!');
-                log('         Found cloud party id:'||c_r.cloud_party_id);
-                log('         Found cloud party number:'||c_r.cloud_party_number);
-                log('         Found source party id:'||c_r.source_party_id);
-                
-                l_text := '';
-                
-                    for c_a in c_accounts(c_r.source_party_id) loop
+                    BEGIN
+        
+                    with json_response AS
+                    (select treat(xx.response_clob as JSON) json_data
+                    from xxfn_ws_call_log xx
+                    where xx.ws_call_id = x_ws_call_id)
+                    select
+                    jr.json_data.PartyId
+                    into l_cloud_party_id
+                    from
+                    json_response jr;   
 
-                        log('           Now finding customer accounts!');
-                        log('           Customer account number:'||c_a.account_number);
-                        log('           Customer account_name:'||c_a.account_name);
-                        log('           Account_activation_date:'||c_a.account_activation_date);
-                        log('           Customer account_id:'||c_a.cust_account_id);
+                    log('       Cloud party id:'||l_cloud_party_id);
 
-                        l_cust_acct_rec.party_id := c_a.party_id;
-                        l_cust_acct_rec.account_number := c_a.account_number;
-                        l_cust_acct_rec.account_name := c_a.account_name;
-                        l_cust_acct_rec.cust_account_id := c_a.cust_account_id;
-                        l_cust_acct_rec.account_number := c_a.account_number;
-                        l_cust_acct_rec.status := c_a.status;
-                        l_cust_acct_rec.creation_date := sysdate;
+                    l_party_rec.cloud_party_id := l_cloud_party_id;                 
 
-                        begin
-                            insert into XXDL_HZ_CUST_ACCOUNTS values l_cust_acct_rec;
-                            exception
-                            when dup_val_on_index then
-                                l_cust_acct_rec.last_update_date := sysdate;
-                                update XXDL_HZ_CUST_ACCOUNTS xx
-                                set row = l_cust_acct_rec
-                                where xx.cust_account_id = c_a.cust_account_id;
-                            end;
+                    EXCEPTION
+                        WHEN no_data_found THEN
+                            l_party_rec.cloud_party_id := null;
+                    END;             
 
-                        l_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/" xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/" xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/" xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/" xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/" xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/" xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/" xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/" xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/" xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
-                                <soapenv:Header/>
-                                <soapenv:Body>
-                                    <typ:createCustomerAccount>                                    
-                                        <typ:customerAccount>
-                                            <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
-                                            <cus:AccountName>'||c_a.account_name||'</cus:AccountName>    
-                                            <cus:AccountNumber>'||c_a.account_number||'</cus:AccountNumber>
-                                            <cus:CustomerType>'||c_a.account_name||'</cus:CustomerType>
-                                            <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
-                                            <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
-                                            <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                            <cus:OrigSystemReference>9999999'||c_a.cust_account_id||'</cus:OrigSystemReference>';
-                        l_soap_env := l_soap_env || to_clob(l_text);
+                    log('       Now we need to migrate customer account and sites');
+                        
+                    --rest payload loop    
+                    for c_r in c_rest(x_ws_call_id) loop
+                    l_soap_env := l_empty_clob;
+                    log('         First fetching the rest payload!');
+                    log('         Found cloud party id:'||c_r.cloud_party_id);
+                    log('         Found cloud party number:'||c_r.cloud_party_number);
+                    log('         Found source party id:'||c_r.source_party_id);
+                    
+                    l_text := '';
+                    
+                        for c_a in c_accounts(c_r.source_party_id) loop
 
-                        for c_as in c_account_sites(c_a.cust_account_id, x_ws_call_id) loop
-                            log('               Now adding account sites!');
-                            log('               Now finding customer accounts!');
-                            log('               Customer CUST_ACCT_SITE_ID:'||c_as.CUST_ACCT_SITE_ID);
-                            log('               Customer CUST_ACCOUNT_ID:'||c_a.cust_account_id);
-                            log('               Customer PARTY_SITE_ID:'||c_as.PARTY_SITE_ID);
-                            log('               Customer set_code:'||c_as.cloud_set_code);
-                            log('               Customer set_id:'||c_as.cloud_set_id);
+                            log('           Now finding customer accounts!');
+                            log('           Customer account number:'||c_a.account_number);
+                            log('           Customer account_name:'||c_a.account_name);
+                            log('           Account_activation_date:'||c_a.account_activation_date);
+                            log('           Customer account_id:'||c_a.cust_account_id);
 
-                            l_cust_acct_site_rec.cust_acct_site_id := c_as.cust_acct_site_id;
-                            l_cust_acct_site_rec.CUST_ACCOUNT_ID := c_as.CUST_ACCOUNT_ID;
-                            l_cust_acct_site_rec.PARTY_SITE_ID := c_as.PARTY_SITE_ID;
-                            l_cust_acct_site_rec.BILL_TO_FLAG := c_as.BILL_TO_FLAG;
-                            l_cust_acct_site_rec.SHIP_TO_FLAG := c_as.SHIP_TO_FLAG;
-                            l_cust_acct_site_rec.STATUS := c_as.STATUS ;
-                            l_cust_acct_site_rec.ORG_ID := c_as.ORG_ID;
-                            l_cust_acct_site_rec.CLOUD_SET_ID := c_as.CLOUD_SET_ID;
-                            l_cust_acct_site_rec.cloud_party_site_number := c_as.cloud_party_site_number;
-                            l_cust_acct_site_rec.creation_date := sysdate;
-                            l_cust_acct_site_rec.party_site_name := c_as.party_site_name;
+                            l_cust_acct_rec.party_id := c_a.party_id;
+                            l_cust_acct_rec.account_number := c_a.account_number;
+                            l_cust_acct_rec.account_name := c_a.account_name;
+                            l_cust_acct_rec.cust_account_id := c_a.cust_account_id;
+                            l_cust_acct_rec.account_number := c_a.account_number;
+                            l_cust_acct_rec.status := c_a.status;
+                            l_cust_acct_rec.creation_date := sysdate;
 
                             begin
-                                insert into XXDL_HZ_CUST_ACCT_SITES values l_cust_acct_site_rec;
+                                insert into XXDL_HZ_CUST_ACCOUNTS values l_cust_acct_rec;
                                 exception
                                 when dup_val_on_index then
-                                    l_cust_acct_site_rec.last_update_date := sysdate;
-                                    update XXDL_HZ_CUST_ACCT_SITES xx
-                                    set row = l_cust_acct_site_rec
-                                    where xx.cust_acct_site_id = c_as.cust_acct_site_id;
+                                    l_cust_acct_rec.last_update_date := sysdate;
+                                    update XXDL_HZ_CUST_ACCOUNTS xx
+                                    set row = l_cust_acct_rec
+                                    where xx.cust_account_id = c_a.cust_account_id;
                                 end;
 
-                            l_text := '    
-                                            <cus:CustomerAccountSite>
-                                                <cus:PartySiteId>'||c_as.cloud_address_id||'</cus:PartySiteId>
+                            l_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/" xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/" xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/" xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/" xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/" xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/" xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/" xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/" xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/" xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
+                                    <soapenv:Header/>
+                                    <soapenv:Body>
+                                        <typ:createCustomerAccount>                                    
+                                            <typ:customerAccount>
+                                                <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
+                                                <cus:AccountName>'||c_a.account_name||'</cus:AccountName>    
+                                                <cus:AccountNumber>'||c_a.account_number||'</cus:AccountNumber>
+                                                <cus:CustomerType>'||c_a.account_name||'</cus:CustomerType>
+                                                <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
                                                 <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
-                                                <cus:SetId>'||c_as.cloud_set_id||'</cus:SetId>
-                                                <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
-                                                <cus:Language>'||c_as.language||'</cus:Language>
                                                 <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                <cus:OrigSystemReference>9999999'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
-                            l_soap_env := l_soap_env || to_clob(l_text);                    
+                                                <cus:OrigSystemReference>99999999'||c_a.cust_account_id||'</cus:OrigSystemReference>';
+                            l_soap_env := l_soap_env || to_clob(l_text);
 
-                            for c_asu in c_account_site_use(c_as.cust_acct_site_id,x_ws_call_id) loop
-                                log('                   Now adding account sites use!');
-                                log('                   Now finding customer accounts uses!');
-                                log('                   Customer CUST_ACCT_SITE_ID:'||c_as.CUST_ACCT_SITE_ID);
-                                log('                   Customer SITE_USE_ID:'||c_asu.SITE_USE_ID);
-                                log('                   Customer PARTY_SITE_ID:'||c_asu.PARTY_SITE_ID);
-                                log('                   Customer BILL_TO_SITE_USE_ID:'||c_asu.BILL_TO_SITE_USE_ID);
-                                log('                   Customer SITE_USE_CODE:'||c_asu.SITE_USE_CODE);
-                                log('                   Customer PRIMARY_FLAG:'||c_asu.PRIMARY_FLAG);
-                                log('                   Customer LOCATION:'||c_asu.LOCATION);
-                                log('                   Customer STATUS:'||c_asu.STATUS  );
-                                log('                   Customer ORG_ID:'||c_asu.ORG_ID);
-                                log('                   Customer CLOUD_SET_ID:'||c_asu.CLOUD_SET_ID);
-                                l_cust_acct_site_use_rec:=l_cust_acct_site_use_rec_empty;
+                            for c_as in c_account_sites(c_a.cust_account_id, x_ws_call_id) loop
+                                log('               Now adding account sites!');
+                                log('               Now finding customer accounts!');
+                                log('               Customer CUST_ACCT_SITE_ID:'||c_as.CUST_ACCT_SITE_ID);
+                                log('               Customer CUST_ACCOUNT_ID:'||c_a.cust_account_id);
+                                log('               Customer PARTY_SITE_ID:'||c_as.PARTY_SITE_ID);
+                                log('               Customer set_code:'||c_as.cloud_set_code);
+                                log('               Customer set_id:'||c_as.cloud_set_id);
 
-                                l_cust_acct_site_use_rec.cust_acct_site_id := c_as.cust_acct_site_id;
-                                l_cust_acct_site_use_rec.site_use_id := c_asu.site_use_id;
-                                l_cust_acct_site_use_rec.party_site_id := c_asu.party_site_id;
-                                l_cust_acct_site_use_rec.BILL_TO_SITE_USE_ID := c_asu.BILL_TO_SITE_USE_ID;
-                                l_cust_acct_site_use_rec.PRIMARY_FLAG := c_asu.PRIMARY_FLAG;
-                                l_cust_acct_site_use_rec.SITE_USE_CODE := c_asu.SITE_USE_CODE;
-                                l_cust_acct_site_use_rec.LOCATION := c_asu.LOCATION;
-                                l_cust_acct_site_use_rec.LOCATION_Id := c_asu.LOCATION_ID;
-                                l_cust_acct_site_use_rec.CLOUD_LOCATION_ID := c_asu.CLOUD_LOCATION_ID;
-                                l_cust_acct_site_use_rec.ORG_ID := c_asu.ORG_ID;
-                                l_cust_acct_site_use_rec.CLOUD_SET_ID := c_asu.CLOUD_SET_ID;
-                                l_cust_acct_site_use_rec.creation_date := sysdate;
+                                l_cust_acct_site_rec.cust_acct_site_id := c_as.cust_acct_site_id;
+                                l_cust_acct_site_rec.CUST_ACCOUNT_ID := c_as.CUST_ACCOUNT_ID;
+                                l_cust_acct_site_rec.PARTY_SITE_ID := c_as.PARTY_SITE_ID;
+                                l_cust_acct_site_rec.BILL_TO_FLAG := c_as.BILL_TO_FLAG;
+                                l_cust_acct_site_rec.SHIP_TO_FLAG := c_as.SHIP_TO_FLAG;
+                                l_cust_acct_site_rec.STATUS := c_as.STATUS ;
+                                l_cust_acct_site_rec.ORG_ID := c_as.ORG_ID;
+                                l_cust_acct_site_rec.CLOUD_SET_ID := c_as.CLOUD_SET_ID;
+                                l_cust_acct_site_rec.cloud_party_site_number := c_as.cloud_party_site_number;
+                                l_cust_acct_site_rec.creation_date := sysdate;
+                                l_cust_acct_site_rec.party_site_name := c_as.party_site_name;
+                                l_cust_acct_site_rec.cloud_party_site_number := c_as.cloud_party_site_number;
+                                l_cust_acct_site_rec.party_site_number := c_as.cloud_party_site_number;
 
                                 begin
-                                log('                   inserting SITE_USE_ID:'||l_cust_acct_site_use_rec.SITE_USE_ID);
-                            
-                                insert into XXDL_HZ_CUST_ACCT_SITE_USES values l_cust_acct_site_use_rec;
-                                exception
-                                when dup_val_on_index then
-                                    update XXDL_HZ_CUST_ACCT_SITE_USES xx
-                                    SET row = l_cust_acct_site_use_rec
-                                    where xx.site_use_id = c_asu.site_use_id;
-                                        log('                    SITE_USE_ID već postoji u logu:'||l_cust_acct_site_use_rec.SITE_USE_ID);
-                                end;        
-                                --primary_flag stavljeno na Yes jer se inače ne vidi u OM
-                                l_text := '  
-                                                <cus:CustomerAccountSiteUse>
-                                                        <cus:SiteUseCode>'||c_asu.site_use_code||'</cus:SiteUseCode>
-                                                        <cus:Location>'||c_asu.cloud_location_id||'</cus:Location>
-                                                        <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
-                                                        <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                        <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag>                                                    
-                                                        <cus:OrigSystemReference>9999999'||c_asu.site_use_id||'</cus:OrigSystemReference>
-                                                </cus:CustomerAccountSiteUse>';
-                                l_soap_env := l_soap_env || to_clob(l_text);                                        
+                                    insert into XXDL_HZ_CUST_ACCT_SITES values l_cust_acct_site_rec;
+                                    exception
+                                    when dup_val_on_index then
+                                        l_cust_acct_site_rec.last_update_date := sysdate;
+                                        update XXDL_HZ_CUST_ACCT_SITES xx
+                                        set row = l_cust_acct_site_rec
+                                        where xx.cust_acct_site_id = c_as.cust_acct_site_id;
+                                    end;
 
+                                l_text := '    
+                                                <cus:CustomerAccountSite>
+                                                    <cus:PartySiteId>'||c_as.cloud_address_id||'</cus:PartySiteId>
+                                                    <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
+                                                    <cus:SetId>'||c_as.cloud_set_id||'</cus:SetId>
+                                                    <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
+                                                    <cus:Language>'||c_as.language||'</cus:Language>
+                                                    <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
+                                                    <cus:OrigSystemReference>99999999'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                l_soap_env := l_soap_env || to_clob(l_text);                    
 
-                            end loop;
+                                for c_asu in c_account_site_use(c_as.cust_acct_site_id,x_ws_call_id) loop
+                                    log('                   Now adding account sites use!');
+                                    log('                   Now finding customer accounts uses!');
+                                    log('                   Customer CUST_ACCT_SITE_ID:'||c_as.CUST_ACCT_SITE_ID);
+                                    log('                   Customer SITE_USE_ID:'||c_asu.SITE_USE_ID);
+                                    log('                   Customer PARTY_SITE_ID:'||c_asu.PARTY_SITE_ID);
+                                    log('                   Customer BILL_TO_SITE_USE_ID:'||c_asu.BILL_TO_SITE_USE_ID);
+                                    log('                   Customer SITE_USE_CODE:'||c_asu.SITE_USE_CODE);
+                                    log('                   Customer PRIMARY_FLAG:'||c_asu.PRIMARY_FLAG);
+                                    log('                   Customer LOCATION:'||c_asu.LOCATION);
+                                    log('                   Customer STATUS:'||c_asu.STATUS  );
+                                    log('                   Customer ORG_ID:'||c_asu.ORG_ID);
+                                    log('                   Customer CLOUD_SET_ID:'||c_asu.CLOUD_SET_ID);
+                                    l_cust_acct_site_use_rec:=l_cust_acct_site_use_rec_empty;
 
-                            l_text := '
-                                            </cus:CustomerAccountSite>
-                                                    '; 
-                        l_soap_env := l_soap_env || to_clob(l_text);
-                        end loop;       
-                        l_text := '</typ:customerAccount>
-                                    ';
-                        l_soap_env := l_soap_env || to_clob(l_text);            
-            
-                    end loop;
+                                    l_cust_acct_site_use_rec.cust_acct_site_id := c_as.cust_acct_site_id;
+                                    l_cust_acct_site_use_rec.site_use_id := c_asu.site_use_id;
+                                    l_cust_acct_site_use_rec.party_site_id := c_asu.party_site_id;
+                                    l_cust_acct_site_use_rec.BILL_TO_SITE_USE_ID := c_asu.BILL_TO_SITE_USE_ID;
+                                    l_cust_acct_site_use_rec.PRIMARY_FLAG := c_asu.PRIMARY_FLAG;
+                                    l_cust_acct_site_use_rec.SITE_USE_CODE := c_asu.SITE_USE_CODE;
+                                    l_cust_acct_site_use_rec.LOCATION := c_asu.LOCATION;
+                                    l_cust_acct_site_use_rec.LOCATION_Id := c_asu.LOCATION_ID;
+                                    l_cust_acct_site_use_rec.CLOUD_LOCATION_ID := c_asu.CLOUD_LOCATION_ID;
+                                    l_cust_acct_site_use_rec.ORG_ID := c_asu.ORG_ID;
+                                    l_cust_acct_site_use_rec.CLOUD_SET_ID := c_asu.CLOUD_SET_ID;
+                                    l_cust_acct_site_use_rec.creation_date := sysdate;
 
-                    l_text := '</typ:createCustomerAccount>
-                                    </soapenv:Body>
-                                    </soapenv:Envelope>';
-                    l_soap_env := l_soap_env || to_clob(l_text);
-                    l_text := '';
-
-                    log('   Soap envelope ready!');
-
-                    log('   Calling webservice!');
-                    log('   Url:'||l_app_url||'crmService/CustomerAccountService?WSDL');
-
-                    XXFN_CLOUD_WS_PKG.WS_CALL(
-                    p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
-                    p_soap_env => l_soap_env,
-                    p_soap_act => 'createCustomerAccount',
-                    p_content_type => 'text/xml;charset="UTF-8"',
-                    x_return_status => x_return_status,
-                    x_return_message => x_return_message,
-                    x_ws_call_id => x_ws_call_id);
-
-                    log('   Web service finished! ws_call_id:'||x_ws_call_id);
-
-                    log('   After call XXFN_CLOUD_WS_PKG.WS_CALL');
-
-                    dbms_lob.freetemporary(l_soap_env);
-
-                    if x_return_status = 'S' then
-
-                        log('   Customer account created!');
-
-                        --account loop
-                        for c_r in (select
-                                    x_acc.party_id
-                                    ,x_acc.cust_account_id
-                                    ,x_acc.account_number
-                                    ,x_acc.source_account_id
-                                    from
-                                    xxfn_ws_call_log xx
-                                    ,xmltable(
-                                        xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
-                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
-                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
-                                        '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value' passing xx.response_xml columns
-                                        party_id number path './ns2:PartyId'
-                                        ,cust_account_id number path './ns2:CustomerAccountId'
-                                        ,account_number number path './ns2:AccountNumber'
-                                        ,source_account_id number path './ns2:OrigSystemReference') x_acc                               
-                                    where xx.ws_call_id = x_ws_call_id
-                                    ) loop
-
-                            log('       Customer account is being stored in log!');                        
-
-                        
-                            update XXDL_HZ_CUST_ACCOUNTS xx
-                            set xx.CLOUD_CUST_ACCOUNT_ID = c_r.cust_account_id
-                            ,xx.CLOUD_PARTY_ID = c_r.party_id
-                            ,xx.process_flag = x_return_status
-                            ,xx.last_update_date = sysdate
-                            where xx.cust_account_id = case when length(xx.cust_account_id)!= length(c_r.source_account_id) then to_number(substr(c_r.source_account_id,length(c_r.source_account_id)-length(xx.cust_account_id)+1,length(c_r.source_account_id))) else to_number(c_r.source_account_id) end
-                            ;
-
-                            
-                            --account site loop
-                            for c_as in (select
-                                    x_acc_site.cust_acct_site_id
-                                    ,x_acc_site.party_site_id
-                                    ,x_acc_site.source_cust_acct_site_id
-                                    ,x_acc_site.cust_account_id
-                                    from
-                                    xxfn_ws_call_log xx
-                                    ,xmltable(
-                                        xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
-                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
-                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
-                                        '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite' passing xx.response_xml columns
-                                        party_site_id number path './ns2:PartySiteId'
-                                        ,cust_account_id number path './ns2:CustomerAccountId'                                    
-                                        ,cust_acct_site_id number path './ns2:CustomerAccountSiteId'
-                                        ,source_cust_acct_site_id number path './ns2:OrigSystemReference') x_acc_site                                
-                                    where xx.ws_call_id = x_ws_call_id
-                                    and x_acc_site.cust_account_id = c_r.cust_account_id
-                                    ) loop
+                                    begin
+                                    log('                   inserting SITE_USE_ID:'||l_cust_acct_site_use_rec.SITE_USE_ID);
                                 
-                                log('       Customer account site is being stored in log!');               
-                                                            
-                                update XXDL_HZ_CUST_ACCT_SITES xx
-                                set xx.process_flag = x_return_status            
-                                ,xx.cloud_party_site_id = c_as.party_site_id
-                                ,xx.cloud_cust_acct_site_id = c_as.cust_acct_site_id
-                                ,xx.CLOUD_CUST_ACCOUNT_ID = c_as.cust_account_id  
-                                where xx.cust_acct_site_id =case when length(xx.cust_acct_site_id )!= length(c_as.source_cust_acct_site_id) then to_number(substr(c_as.source_cust_acct_site_id,length(c_as.source_cust_acct_site_id)-length(xx.cust_acct_site_id )+1,length(c_as.source_cust_acct_site_id))) else to_number(c_as.source_cust_acct_site_id) end
-                                --xx.cust_acct_site_id = c_as.source_cust_acct_site_id
-                                ;                             
+                                    insert into XXDL_HZ_CUST_ACCT_SITE_USES values l_cust_acct_site_use_rec;
+                                    exception
+                                    when dup_val_on_index then
+                                        update XXDL_HZ_CUST_ACCT_SITE_USES xx
+                                        SET row = l_cust_acct_site_use_rec
+                                        where xx.site_use_id = c_asu.site_use_id;
+                                            log('                    SITE_USE_ID već postoji u logu:'||l_cust_acct_site_use_rec.SITE_USE_ID);
+                                    end;        
+                                    --primary_flag stavljeno na Yes jer se inače ne vidi u OM
+                                    l_text := '  
+                                                    <cus:CustomerAccountSiteUse>
+                                                            <cus:SiteUseCode>'||c_asu.site_use_code||'</cus:SiteUseCode>
+                                                            <cus:Location>'||c_asu.cloud_location_id||'</cus:Location>
+                                                            <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
+                                                            <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
+                                                            <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag>                                                    
+                                                            <cus:OrigSystemReference>99999999'||c_asu.site_use_id||'</cus:OrigSystemReference>
+                                                            <cus:StartDate>'||c_asu.start_date||'</cus:StartDate>
+                                                    </cus:CustomerAccountSiteUse>';
+                                    l_soap_env := l_soap_env || to_clob(l_text);                                        
 
-                                                                
-                                --account site use loop
-                                for c_asu in (select                               
-                                        x_site_use.cust_acct_site_id
-                                        ,x_site_use.cust_acct_site_use_id
-                                        ,x_site_use.site_use_code
-                                        ,x_site_use.set_id
-                                        ,x_site_use.bill_site_to_use_id
-                                        ,x_site_use.source_acct_site_use_id
+
+                                end loop;
+
+                                l_text := '
+                                                </cus:CustomerAccountSite>
+                                                        '; 
+                            l_soap_env := l_soap_env || to_clob(l_text);
+                            end loop;       
+                            l_text := '</typ:customerAccount>
+                                        ';
+                            l_soap_env := l_soap_env || to_clob(l_text);            
+                
+                        end loop;
+
+                        l_text := '</typ:createCustomerAccount>
+                                        </soapenv:Body>
+                                        </soapenv:Envelope>';
+                        l_soap_env := l_soap_env || to_clob(l_text);
+                        l_text := '';
+
+                        log('   Soap envelope ready!');
+
+                        log('   Calling webservice!');
+                        log('   Url:'||l_app_url||'crmService/CustomerAccountService?WSDL');
+
+                        XXFN_CLOUD_WS_PKG.WS_CALL(
+                        p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
+                        p_soap_env => l_soap_env,
+                        p_soap_act => 'createCustomerAccount',
+                        p_content_type => 'text/xml;charset="UTF-8"',
+                        x_return_status => x_return_status,
+                        x_return_message => x_return_message,
+                        x_ws_call_id => x_ws_call_id);
+
+                        log('   Web service finished! ws_call_id:'||x_ws_call_id);
+
+                        log('   After call XXFN_CLOUD_WS_PKG.WS_CALL');
+
+                        dbms_lob.freetemporary(l_soap_env);
+
+                        if x_return_status = 'S' then
+
+                            log('   Customer account created!');
+
+                            --account loop
+                            for c_r in (select
+                                        x_acc.party_id
+                                        ,x_acc.cust_account_id
+                                        ,x_acc.account_number
+                                        ,x_acc.source_account_id
                                         from
                                         xxfn_ws_call_log xx
                                         ,xmltable(
                                             xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
                                             ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
                                             ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
-                                            '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
-                                            cust_acct_site_id number path './ns2:CustomerAccountSiteId'
-                                            ,cust_acct_site_use_id number path './ns2:SiteUseId'
-                                            ,site_use_code varchar2(30) path './ns2:SiteUseCode'
-                                            ,set_id number path './ns2:SetId'
-                                            ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
-                                            ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
+                                            '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value' passing xx.response_xml columns
+                                            party_id number path './ns2:PartyId'
+                                            ,cust_account_id number path './ns2:CustomerAccountId'
+                                            ,account_number number path './ns2:AccountNumber'
+                                            ,source_account_id number path './ns2:OrigSystemReference') x_acc                               
                                         where xx.ws_call_id = x_ws_call_id
-                                        and x_site_use.cust_acct_site_id = c_as.cust_acct_site_id
                                         ) loop
+
+                                log('       Customer account is being stored in log!');                        
+
                             
-                                    log('           Customer account site use is being stored in log!');           
-                                    log('           For account site use:'||c_asu.source_acct_site_use_id||' cloud id is:'||c_asu.cust_acct_site_use_id);           
-
-                                    update XXDL_HZ_CUST_ACCT_SITE_USES xx
-                                    set xx.CLOUD_SITE_USE_ID = c_asu.cust_acct_site_use_id
-                                    ,xx.CLOUD_CUST_ACCT_SITE_ID= c_asu.cust_acct_site_id
-                                    ,xx.CLOUD_PARTY_SITE_ID= c_as.party_site_id
-                                    ,xx.CLOUD_SET_ID= c_asu.set_id
-                                    ,xx.CLOUD_BILL_TO_SITE_USE_ID= c_asu.bill_site_to_use_id
-                                    ,xx.process_flag = 'S'
-                                    where xx.site_use_id = case when length(xx.site_use_id)!= length(c_asu.source_acct_site_use_id) then to_number(substr(c_asu.source_acct_site_use_id,length(c_asu.source_acct_site_use_id)-length(xx.site_use_id)+1,length(c_asu.source_acct_site_use_id))) else to_number(c_asu.source_acct_site_use_id) end  
-                                    --xx.site_use_id = c_asu.source_acct_site_use_id
-                                    ;
-
-                                    --start ship_to bill_to mapping
-                                    if c_asu.site_use_code = 'SHIP_TO' and c_asu.bill_site_to_use_id is null then
-                                    
-                                        log('               Found SHIP_TO site use! Need to update bill_to_site_use_id!');  
-                                        l_cloud_bill_use_id := null;                     
-
-                                        log('               Searching BILL_TO for acct site id:'||c_asu.cust_acct_site_id);
-
-                                        begin
-                                        select x_site_use.cust_acct_site_use_id into l_cloud_bill_use_id
-                                                from
-                                                xxfn_ws_call_log xx
-                                                ,xmltable(
-                                                    xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
-                                                    ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
-                                                    ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
-                                                    '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
-                                                    cust_acct_site_id number path './ns2:CustomerAccountSiteId'
-                                                    ,cust_acct_site_use_id number path './ns2:SiteUseId'
-                                                    ,site_use_code varchar2(30) path './ns2:SiteUseCode'
-                                                    ,set_id number path './ns2:SetId'
-                                                    ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
-                                                    ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
-                                                where xx.ws_call_id = x_ws_call_id
-                                                and x_site_use.cust_acct_site_id = c_asu.cust_acct_site_id
-                                                and x_site_use.site_use_code = 'BILL_TO';
-                                        exception
-                                        when no_data_found then
-                                            l_cloud_bill_use_id := null;
-                                        end;        
-                                
-                                        log('               Bill to site use id:'||l_cloud_bill_use_id);                        
-                        
-                                        --start bill_use_id update
-                                        if nvl(l_cloud_bill_use_id,0) != 0 then
-
-                                            log('                   Preparing to call SOAP to update bill to use id!');
-                                            l_soap_env := l_empty_clob;
-
-                                            l_bill_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                                                        xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/"
-                                                        xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/"
-                                                        xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/"
-                                                        xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/"
-                                                        xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/"
-                                                        xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/"
-                                                        xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/"
-                                                        xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/"
-                                                        xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/"
-                                                        xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
-                                                        <soapenv:Header/>
-                                                        <soapenv:Body>
-                                                            <typ:updateCustomerAccount>
-                                                                <typ:customerAccount>
-                                                                    <cus:CustomerAccountId>'||c_r.cust_account_id||'</cus:CustomerAccountId>
-                                                                    <cus:PartyId>'||c_r.party_id||'</cus:PartyId>
-                                                                    <cus:AccountNumber>'||c_r.account_number||'</cus:AccountNumber>
-                                                                    <cus:CustomerAccountSite>
-                                                                        <cus:CustomerAccountSiteId>'||c_as.cust_acct_site_id||'</cus:CustomerAccountSiteId>
-                                                                        <cus:CustomerAccountId>'||c_as.cust_account_id||'</cus:CustomerAccountId>
-                                                                        <cus:PartySiteId>'||c_as.party_site_id||'</cus:PartySiteId>
-                                                                        <cus:CustomerAccountSiteUse>
-                                                                            <cus:SiteUseId>'||c_asu.cust_acct_site_use_id||'</cus:SiteUseId>
-                                                                            <cus:CustomerAccountSiteId>'||c_asu.cust_acct_site_id||'</cus:CustomerAccountSiteId>
-                                                                            <cus:SiteUseCode>SHIP_TO</cus:SiteUseCode>
-                                                                            <cus:BillToSiteUseId>'||l_cloud_bill_use_id||'</cus:BillToSiteUseId>
-                                                                            <cus:SetId>'||c_asu.set_id||'</cus:SetId>
-                                                                        </cus:CustomerAccountSiteUse>
-
-                                                                    </cus:CustomerAccountSite>
-                                                                </typ:customerAccount>
-                                                            </typ:updateCustomerAccount>
-                                                        </soapenv:Body>
-                                                    </soapenv:Envelope>';
-
-                                            log('                       Soap envelope for bill to use is built!');
-
-                                            
-                                            l_soap_env := l_empty_clob;
-                                            l_soap_env := l_soap_env || to_clob(l_bill_text);
-
-                                            XXFN_CLOUD_WS_PKG.WS_CALL(
-                                            p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
-                                            p_soap_env => l_soap_env,
-                                            p_soap_act => 'createCustomerAccount',
-                                            p_content_type => 'text/xml;charset="UTF-8"',
-                                            x_return_status => xb_return_status,
-                                            x_return_message => xb_return_message,
-                                            x_ws_call_id => xb_ws_call_id);
-
-                                            log('                           Web service finished! ws_call_id:'||xb_ws_call_id);  
-                                            dbms_lob.freetemporary(l_soap_env);
-
-                                            
-
-                                            if xb_return_status = 'S' then
-
-                                                log('                       Bill to site use id migrated!');
-
-                                                begin
-                                                select x_site_use.bill_site_to_use_id into l_cloud_bill_use_id
-                                                        from
-                                                        xxfn_ws_call_log xx
-                                                        ,xmltable(
-                                                            xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
-                                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
-                                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
-                                                            '/env:Envelope/env:Body/ns0:updateCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
-                                                            cust_acct_site_id number path './ns2:CustomerAccountSiteId'
-                                                            ,cust_acct_site_use_id number path './ns2:SiteUseId'
-                                                            ,site_use_code varchar2(30) path './ns2:SiteUseCode'
-                                                            ,set_id number path './ns2:SetId'
-                                                            ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
-                                                            ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
-                                                        where xx.ws_call_id = xb_ws_call_id
-                                                        and x_site_use.cust_acct_site_id = c_asu.cust_acct_site_id
-                                                        and x_site_use.site_use_code = 'SHIP_TO';
-                                                exception
-                                                when no_data_found then
-                                                    l_cloud_bill_use_id := null;
-                                                end;    
-
-                                                log('                       Bill to site use id:'||l_cloud_bill_use_id);
-
-                                                update XXDL_HZ_CUST_ACCT_SITE_USES xx
-                                                set xx.CLOUD_BILL_TO_SITE_USE_ID = l_cloud_bill_use_id
-                                                ,xx.process_flag = 'S'
-                                                where xx.cloud_site_use_id = c_asu.cust_acct_site_use_id;    
-
+                                update XXDL_HZ_CUST_ACCOUNTS xx
+                                set xx.CLOUD_CUST_ACCOUNT_ID = c_r.cust_account_id
+                                ,xx.CLOUD_PARTY_ID = c_r.party_id
+                                ,xx.process_flag = x_return_status
+                                ,xx.last_update_date = sysdate
+                                where xx.cust_account_id = case
+                                            when length(c_r.source_account_id)-8=length(xx.cust_account_id) then
+                                                case when length(xx.cust_account_id)!= length(c_r.source_account_id) then to_number(substr(c_r.source_account_id,length(c_r.source_account_id)-length(xx.cust_account_id)+1,length(c_r.source_account_id))) else to_number(c_r.source_account_id) end
                                             else
+                                                to_number(c_r.source_account_id)
+                                            end                                      
+                                ;
 
-                                                log('                       Bill to site use id not migrated!');
+                                
+                                --account site loop
+                                for c_as in (select
+                                        x_acc_site.cust_acct_site_id
+                                        ,x_acc_site.party_site_id
+                                        ,x_acc_site.source_cust_acct_site_id
+                                        ,x_acc_site.cust_account_id
+                                        from
+                                        xxfn_ws_call_log xx
+                                        ,xmltable(
+                                            xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                            ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                            '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite' passing xx.response_xml columns
+                                            party_site_id number path './ns2:PartySiteId'
+                                            ,cust_account_id number path './ns2:CustomerAccountId'                                    
+                                            ,cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                            ,source_cust_acct_site_id number path './ns2:OrigSystemReference') x_acc_site                                
+                                        where xx.ws_call_id = x_ws_call_id
+                                        and x_acc_site.cust_account_id = c_r.cust_account_id
+                                        ) loop
+                                    
+                                    log('       Customer account site is being stored in log!');               
+                                                                
+                                    update XXDL_HZ_CUST_ACCT_SITES xx
+                                    set xx.process_flag = x_return_status            
+                                    ,xx.cloud_party_site_id = c_as.party_site_id
+                                    ,xx.cloud_cust_acct_site_id = c_as.cust_acct_site_id
+                                    ,xx.CLOUD_CUST_ACCOUNT_ID = c_as.cust_account_id  
+                                    where xx.cust_acct_site_id = case
+                                            when length(c_as.source_cust_acct_site_id)-8=length(xx.cust_acct_site_id) then
+                                                case when length(xx.cust_acct_site_id )!= length(c_as.source_cust_acct_site_id) then to_number(substr(c_as.source_cust_acct_site_id,length(c_as.source_cust_acct_site_id)-length(xx.cust_acct_site_id )+1,length(c_as.source_cust_acct_site_id))) else to_number(c_as.source_cust_acct_site_id) end
+                                            else
+                                                to_number(c_as.source_cust_acct_site_id)
+                                            end                                                                       
+                                    --xx.cust_acct_site_id = c_as.source_cust_acct_site_id
+                                    ;                             
 
-                                                BEGIN
-                                                    SELECT
-                                                        xt.faultcode,
-                                                        xt.faultstring
-                                                    INTO
-                                                        l_fault_code,
-                                                        l_fault_string
-                                                    FROM
-                                                        xxfn_ws_call_log x,
-                                                        XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" ), './/env:Fault' PASSING x.response_xml COLUMNS
-                                                        faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
-                                                    WHERE
-                                                        x.ws_call_id = xb_ws_call_id;
+                                                                    
+                                    --account site use loop
+                                    for c_asu in (select                               
+                                            x_site_use.cust_acct_site_id
+                                            ,x_site_use.cust_acct_site_use_id
+                                            ,x_site_use.site_use_code
+                                            ,x_site_use.set_id
+                                            ,x_site_use.bill_site_to_use_id
+                                            ,x_site_use.source_acct_site_use_id
+                                            from
+                                            xxfn_ws_call_log xx
+                                            ,xmltable(
+                                                xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                                ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                                ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                                '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
+                                                cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                                ,cust_acct_site_use_id number path './ns2:SiteUseId'
+                                                ,site_use_code varchar2(30) path './ns2:SiteUseCode'
+                                                ,set_id number path './ns2:SetId'
+                                                ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
+                                                ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
+                                            where xx.ws_call_id = x_ws_call_id
+                                            and x_site_use.cust_acct_site_id = c_as.cust_acct_site_id
+                                            ) loop
+                                
+                                        log('           Customer account site use is being stored in log!');           
+                                        log('           For account site use:'||c_asu.source_acct_site_use_id||' cloud id is:'||c_asu.cust_acct_site_use_id);           
 
-                                                EXCEPTION
-                                                    WHEN no_data_found THEN
-                                                        BEGIN
-                                                            SELECT
-                                                                nvl(x.response_status_code, 'ERROR'),
-                                                                x.response_reason_phrase
-                                                            INTO
-                                                                l_fault_code,
-                                                                l_fault_string
-                                                            FROM
-                                                                xxfn_ws_call_log x
-                                                            WHERE
-                                                                x.ws_call_id = xb_ws_call_id;
+                                        update XXDL_HZ_CUST_ACCT_SITE_USES xx
+                                        set xx.CLOUD_SITE_USE_ID = c_asu.cust_acct_site_use_id
+                                        ,xx.CLOUD_CUST_ACCT_SITE_ID= c_asu.cust_acct_site_id
+                                        ,xx.CLOUD_PARTY_SITE_ID= c_as.party_site_id
+                                        ,xx.CLOUD_SET_ID= c_asu.set_id
+                                        ,xx.CLOUD_BILL_TO_SITE_USE_ID= c_asu.bill_site_to_use_id
+                                        ,xx.process_flag = 'S'
+                                        where xx.site_use_id = case
+                                            when length(c_asu.source_acct_site_use_id)-8=length(xx.site_use_id) then
+                                                case when length(xx.site_use_id)!= length(c_asu.source_acct_site_use_id) then to_number(substr(c_asu.source_acct_site_use_id,length(c_asu.source_acct_site_use_id)-length(xx.site_use_id)+1,length(c_asu.source_acct_site_use_id))) else to_number(c_asu.source_acct_site_use_id) end  
+                                            else
+                                                to_number(c_asu.source_acct_site_use_id)
+                                            end                                          
+                                        --xx.site_use_id = c_asu.source_acct_site_use_id
+                                        ;
 
-                                                        EXCEPTION
-                                                            WHEN OTHERS THEN
-                                                                l_cust_acct_site_use_rec.error_msg := 'Cannot find env:Fault in ws call results.';
-                                                        END;
-                                                END;             
+                                        --start ship_to bill_to mapping
+                                        if c_asu.site_use_code = 'SHIP_TO' and c_asu.bill_site_to_use_id is null then
+                                        
+                                            log('               Found SHIP_TO site use! Need to update bill_to_site_use_id!');  
+                                            l_cloud_bill_use_id := null;                     
 
-                                                if l_fault_code is not null or l_fault_string is not null then
-                                                    l_error_message := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
+                                            log('               Searching BILL_TO for acct site id:'||c_asu.cust_acct_site_id);
+
+                                            begin
+                                            select x_site_use.cust_acct_site_use_id into l_cloud_bill_use_id
+                                                    from
+                                                    xxfn_ws_call_log xx
+                                                    ,xmltable(
+                                                        xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                                        ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                                        '/env:Envelope/env:Body/ns0:createCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
+                                                        cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                                        ,cust_acct_site_use_id number path './ns2:SiteUseId'
+                                                        ,site_use_code varchar2(30) path './ns2:SiteUseCode'
+                                                        ,set_id number path './ns2:SetId'
+                                                        ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
+                                                        ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
+                                                    where xx.ws_call_id = x_ws_call_id
+                                                    and x_site_use.cust_acct_site_id = c_asu.cust_acct_site_id
+                                                    and x_site_use.site_use_code = 'BILL_TO';
+                                            exception
+                                            when no_data_found then
+                                                l_cloud_bill_use_id := null;
+                                            end;        
+                                    
+                                            log('               Bill to site use id:'||l_cloud_bill_use_id);                        
+                            
+                                            --start bill_use_id update
+                                            if nvl(l_cloud_bill_use_id,0) != 0 then
+
+                                                log('                   Preparing to call SOAP to update bill to use id!');
+                                                l_soap_env := l_empty_clob;
+
+                                                l_bill_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                                                            xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/"
+                                                            xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/"
+                                                            xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/"
+                                                            xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/"
+                                                            xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/"
+                                                            xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/"
+                                                            xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/"
+                                                            xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/"
+                                                            xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/"
+                                                            xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
+                                                            <soapenv:Header/>
+                                                            <soapenv:Body>
+                                                                <typ:updateCustomerAccount>
+                                                                    <typ:customerAccount>
+                                                                        <cus:CustomerAccountId>'||c_r.cust_account_id||'</cus:CustomerAccountId>
+                                                                        <cus:PartyId>'||c_r.party_id||'</cus:PartyId>
+                                                                        <cus:AccountNumber>'||c_r.account_number||'</cus:AccountNumber>
+                                                                        <cus:CustomerAccountSite>
+                                                                            <cus:CustomerAccountSiteId>'||c_as.cust_acct_site_id||'</cus:CustomerAccountSiteId>
+                                                                            <cus:CustomerAccountId>'||c_as.cust_account_id||'</cus:CustomerAccountId>
+                                                                            <cus:PartySiteId>'||c_as.party_site_id||'</cus:PartySiteId>
+                                                                            <cus:CustomerAccountSiteUse>
+                                                                                <cus:SiteUseId>'||c_asu.cust_acct_site_use_id||'</cus:SiteUseId>
+                                                                                <cus:CustomerAccountSiteId>'||c_asu.cust_acct_site_id||'</cus:CustomerAccountSiteId>
+                                                                                <cus:SiteUseCode>SHIP_TO</cus:SiteUseCode>
+                                                                                <cus:BillToSiteUseId>'||l_cloud_bill_use_id||'</cus:BillToSiteUseId>
+                                                                                <cus:SetId>'||c_asu.set_id||'</cus:SetId>
+                                                                            </cus:CustomerAccountSiteUse>
+
+                                                                        </cus:CustomerAccountSite>
+                                                                    </typ:customerAccount>
+                                                                </typ:updateCustomerAccount>
+                                                            </soapenv:Body>
+                                                        </soapenv:Envelope>';
+
+                                                log('                       Soap envelope for bill to use is built!');
+
+                                                
+                                                l_soap_env := l_empty_clob;
+                                                l_soap_env := l_soap_env || to_clob(l_bill_text);
+
+                                                XXFN_CLOUD_WS_PKG.WS_CALL(
+                                                p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
+                                                p_soap_env => l_soap_env,
+                                                p_soap_act => 'createCustomerAccount',
+                                                p_content_type => 'text/xml;charset="UTF-8"',
+                                                x_return_status => xb_return_status,
+                                                x_return_message => xb_return_message,
+                                                x_ws_call_id => xb_ws_call_id);
+
+                                                log('                           Web service finished! ws_call_id:'||xb_ws_call_id);  
+                                                dbms_lob.freetemporary(l_soap_env);
+
+                                                
+
+                                                if xb_return_status = 'S' then
+
+                                                    log('                       Bill to site use id migrated!');
+
+                                                    begin
+                                                    select x_site_use.bill_site_to_use_id into l_cloud_bill_use_id
+                                                            from
+                                                            xxfn_ws_call_log xx
+                                                            ,xmltable(
+                                                                xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"
+                                                                ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/' as "ns0"
+                                                                ,'http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/' as "ns2"),
+                                                                '/env:Envelope/env:Body/ns0:updateCustomerAccountResponse/ns0:result/ns2:Value/ns2:CustomerAccountSite/ns2:CustomerAccountSiteUse' passing xx.response_xml columns
+                                                                cust_acct_site_id number path './ns2:CustomerAccountSiteId'
+                                                                ,cust_acct_site_use_id number path './ns2:SiteUseId'
+                                                                ,site_use_code varchar2(30) path './ns2:SiteUseCode'
+                                                                ,set_id number path './ns2:SetId'
+                                                                ,bill_site_to_use_id number path './ns2:BillToSiteUseId'
+                                                                ,source_acct_site_use_id number path './ns2:OrigSystemReference') x_site_use
+                                                            where xx.ws_call_id = xb_ws_call_id
+                                                            and x_site_use.cust_acct_site_id = c_asu.cust_acct_site_id
+                                                            and x_site_use.site_use_code = 'SHIP_TO';
+                                                    exception
+                                                    when no_data_found then
+                                                        l_cloud_bill_use_id := null;
+                                                    end;    
+
+                                                    log('                       Bill to site use id:'||l_cloud_bill_use_id);
+
+                                                    update XXDL_HZ_CUST_ACCT_SITE_USES xx
+                                                    set xx.CLOUD_BILL_TO_SITE_USE_ID = l_cloud_bill_use_id
+                                                    ,xx.process_flag = 'S'
+                                                    where xx.cloud_site_use_id = c_asu.cust_acct_site_use_id;    
+
+                                                else
+
+                                                    log('                       Bill to site use id not migrated!');
+
+                                                    BEGIN
+                                                        SELECT
+                                                            xt.faultcode,
+                                                            xt.faultstring
+                                                        INTO
+                                                            l_fault_code,
+                                                            l_fault_string
+                                                        FROM
+                                                            xxfn_ws_call_log x,
+                                                            XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" ), './/env:Fault' PASSING x.response_xml COLUMNS
+                                                            faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
+                                                        WHERE
+                                                            x.ws_call_id = xb_ws_call_id;
+
+                                                    EXCEPTION
+                                                        WHEN no_data_found THEN
+                                                            BEGIN
+                                                                SELECT
+                                                                    nvl(x.response_status_code, 'ERROR'),
+                                                                    x.response_reason_phrase
+                                                                INTO
+                                                                    l_fault_code,
+                                                                    l_fault_string
+                                                                FROM
+                                                                    xxfn_ws_call_log x
+                                                                WHERE
+                                                                    x.ws_call_id = xb_ws_call_id;
+
+                                                            EXCEPTION
+                                                                WHEN OTHERS THEN
+                                                                    l_cust_acct_site_use_rec.error_msg := 'Cannot find env:Fault in ws call results.';
+                                                            END;
+                                                    END;             
+
+                                                    if l_fault_code is not null or l_fault_string is not null then
+                                                        l_error_message := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
+                                                    end if;
+                                                    log('   '||l_error_message);
+
+                                                    update XXDL_HZ_CUST_ACCT_SITE_USES xx
+                                                    set xx.ERROR_MSG = l_error_message
+                                                    ,xx.process_flag = 'E'
+                                                    where xx.cloud_site_use_id = c_asu.cust_acct_site_use_id;   
+
                                                 end if;
-                                                log('   '||l_error_message);
-
-                                                update XXDL_HZ_CUST_ACCT_SITE_USES xx
-                                                set xx.ERROR_MSG = l_error_message
-                                                ,xx.process_flag = 'E'
-                                                where xx.cloud_site_use_id = c_asu.cust_acct_site_use_id;   
 
                                             end if;
+                                            --end bill_use_id update
 
                                         end if;
-                                        --end bill_use_id update
+                                        --end ship_to bill_to mapping    
 
-                                    end if;
-                                    --end ship_to bill_to mapping    
+                                    end loop;    
+                                    --end account site use loop
 
-                                end loop;    
-                                --end account site use loop
+                                end loop;
+                                --end account site loop     
+                                log('       Calling update tax reference for cust acc!');
 
-                            end loop;
-                            --end account site loop     
-                            log('       Calling update tax reference for cust acc!');
+                                update_cust_site_tax_ref(c_p.party_id,c_r.cust_account_id,'PARTY_SITE');      
 
-                            update_cust_site_tax_ref(c_p.party_id,c_r.cust_account_id);      
-
-                        end loop;    
-                        --end account loop       
+                            end loop;    
+                            --end account loop       
+                                
+                            commit;    
                             
-                        commit;    
-                         
-                    else
+                        else
 
-                        log('           Customer account not migrated!');
+                            log('           Customer account not migrated!');
 
-                        BEGIN
-                            SELECT
-                                xt.faultcode,
-                                xt.faultstring
-                            INTO
-                            l_fault_code,
-                                l_fault_string
-                            FROM
-                            xxfn_ws_call_log x,
-                            XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" ), './/env:Fault' PASSING x.response_xml COLUMNS
-                            faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
-                            WHERE
-                                x.ws_call_id = x_ws_call_id;
+                            BEGIN
+                                SELECT
+                                    xt.faultcode,
+                                    xt.faultstring
+                                INTO
+                                l_fault_code,
+                                    l_fault_string
+                                FROM
+                                xxfn_ws_call_log x,
+                                XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" ), './/env:Fault' PASSING x.response_xml COLUMNS
+                                faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
+                                WHERE
+                                    x.ws_call_id = x_ws_call_id;
 
-                        EXCEPTION
-                            WHEN no_data_found THEN
-                                BEGIN
-                                    SELECT
-                                        nvl(x.response_status_code, 'ERROR'),
-                                        x.response_reason_phrase
-                                    INTO
-                                        l_fault_code,
-                                        l_fault_string
-                                    FROM
-                                        xxfn_ws_call_log x
-                                    WHERE
-                                        x.ws_call_id = x_ws_call_id;
                             EXCEPTION
-                                    WHEN OTHERS THEN
-                                        l_cust_acct_rec.error_msg := 'Cannot find env:Fault in ws call results.';
-                                END;
-                        END;             
+                                WHEN no_data_found THEN
+                                    BEGIN
+                                        SELECT
+                                            nvl(x.response_status_code, 'ERROR'),
+                                            x.response_reason_phrase
+                                        INTO
+                                            l_fault_code,
+                                            l_fault_string
+                                        FROM
+                                            xxfn_ws_call_log x
+                                        WHERE
+                                            x.ws_call_id = x_ws_call_id;
+                                EXCEPTION
+                                        WHEN OTHERS THEN
+                                            l_cust_acct_rec.error_msg := 'Cannot find env:Fault in ws call results.';
+                                    END;
+                            END;             
 
-                        if l_fault_code is not null or l_fault_string is not null then
-                            l_error_message := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
+                            if l_fault_code is not null or l_fault_string is not null then
+                                l_error_message := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
+                            end if;
+                            log('   '||l_error_message);
+
+                            update XXDL_HZ_CUST_ACCOUNTS xx
+                            set xx.ERROR_MSG = l_error_message
+                            ,xx.process_flag = 'E'
+                            where xx.cust_account_id = l_cust_acct_rec.cust_account_id;                    
+                                            
+                        
                         end if;
-                        log('   '||l_error_message);
 
-                        update XXDL_HZ_CUST_ACCOUNTS xx
-                        set xx.ERROR_MSG = l_error_message
-                        ,xx.process_flag = 'E'
-                        where xx.cust_account_id = l_cust_acct_rec.cust_account_id;                    
-                                        
+
+                    end loop;
+
+
+                    /*update xxfn_ws_call_log xx 
+                    set xx.response_xml = null
+                    ,xx.response_clob = null
+                    ,xx.response_blob = null
+                    ,xx.ws_payload_xml = null
+                    where ws_call_id = x_ws_call_id;*/
                     
-                    end if;
+                    
+                    log('   Soap payload:');
+                    log(l_text);
 
-
-                end loop;
-
-
-                /*update xxfn_ws_call_log xx 
-                set xx.response_xml = null
-                ,xx.response_clob = null
-                ,xx.response_blob = null
-                ,xx.ws_payload_xml = null
-                where ws_call_id = x_ws_call_id;*/
-                
-                
-                log('   Soap payload:');
-                log(l_text);
-                
+                end if;
+                --end if party site created
+                    
 
             else
                 log('   Error! Customer not migrated!');
@@ -2472,12 +3198,13 @@
                             if nvl(c_loc.address_id,0) > 0 then            
                                 update xxdl_hz_locations xx
                                 set xx.process_flag = 'E'
-                                where '9999999'||xx.location_id = substr(c_loc.source_address_id,instr(c_loc.source_address_id,';',1,1)+1,length(c_loc.source_address_id));
+                                where '99999999'||xx.location_id = substr(c_loc.source_address_id,instr(c_loc.source_address_id,';',1,1)+1,length(c_loc.source_address_id));
                             end if;                
                 end loop;
               
             end;
 
+            update_cust_site_tax_ref(c_p.party_id,null,'PARTY');
 
         else
             log('   Already exists!');
@@ -2496,10 +3223,11 @@
 
             END;
 
+            update_cust_site_tax_ref(c_p.party_id,null,'PARTY');
+
             update xxdl_hz_parties xx
             SET xx.cloud_party_id = l_cloud_party_id
             ,xx.process_flag = 'S'
-            ,xx.error_msg = null
             WHERE
                 xx.party_id = l_party_rec.party_id;
 
@@ -2585,7 +3313,7 @@
 
 
     l_app_url := get_config('ServiceRootURL');
-
+    --l_app_url := get_config('EwhaTestServiceRootURL');
         log('   Building find customer call!');
 
         l_find_text := ' ';  
@@ -2597,7 +3325,7 @@
 
         log('   Calling web service.');
         XXFN_CLOUD_WS_PKG.WS_REST_CALL(
-        p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/?q=PartyNumber='||p_party_number,
+        p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations?q=PartyNumber='||p_party_number,
         p_rest_env => l_soap_env,
         p_rest_act => 'GET',
         p_content_type => 'application/json;charset="UTF-8"',
@@ -2677,6 +3405,7 @@
 
 
     l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
 
         log('   Building find customer address call!');
 
@@ -2689,7 +3418,7 @@
 
         log('   Calling web service.');
         XXFN_CLOUD_WS_PKG.WS_REST_CALL(
-        p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||p_party_number||'/child/Address',
+        p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||p_party_number||'/child/Address?onlyData=true&limit=500&fields=PartyId,PartyNumber,AddressId,AddressType,SourceSystemReferenceValue,PartySourceSystemReferenceValue,LocationId',
         p_rest_env => l_soap_env,
         p_rest_act => 'GET',
         p_content_type => 'application/json;charset="UTF-8"',
@@ -2721,7 +3450,8 @@
     ============================================================================+*/
     procedure update_cust_site_tax_ref(
         p_party_id in varchar2
-        ,p_cust_account_id in varchar2) is
+        ,p_cust_account_id in varchar2
+        ,p_type in varchar2) is
 
         l_fault_code          varchar2(4000);
         l_fault_string        varchar2(4000); 
@@ -2738,26 +3468,45 @@
         l_cloud_party_id number:=0;     
         l_app_url varchar2(300);
         
-        l_cloud_tax_profile_id number;
+        l_cloud_tax_profile_id number;  
+        l_cloud_party_profile_id number;
         l_code_assignment_id number;
+
+        cursor c_party is 
+        select DISTINCT
+        xhp.party_name,
+        xhp.party_number,
+        xhp.party_id,
+        xhp.taxpayer_id,
+        decode(xhl.country,'CS','XK',xhl.country) country,
+        xhl.country||xhp.taxpayer_id tax_registration_num,
+        xhp.cloud_tax_profile_id
+        from
+        xxdl_hz_parties xhp
+        ,xxdl_hz_party_sites xhps
+        ,xxdl_hz_locations xhl 
+        where xhp.party_id = p_party_id
+        and xhp.party_id = xhps.party_id
+        and xhps.location_id = xhl.location_id
+        ;
         
         cursor c_sites is 
         select distinct
         xx.cloud_party_site_id
         ,hp.party_name
-        ,'9999999'||hp.party_number party_number
+        ,'99999999'||hp.party_number party_number
         ,xx.cloud_party_site_number
         ,xx.party_site_id
         ,case
             when hl.country = 'HR' then
                 case 
                     when hl.country != hl.state then
-                        hl.state
+                        decode(hl.state,'CS','XK',hl.state)
                     else
-                        hl.country
+                        decode(hl.country,'CS','XK',hl.country)
                 end    
         else
-            hl.country
+            decode(hl.country,'CS','XK',hl.country)
         end country                
         ,eu.territory_code
         ,hcas.cust_account_id
@@ -2832,16 +3581,16 @@
         and xx.cloud_cust_account_id like nvl(p_cust_account_id,'%')
         and hps.location_id = hl.location_id
         and case
-                when hl.country = 'HR' then
-                    case 
-                        when hl.country != hl.state then
-                            hl.state
-                        else
-                            hl.country
-                    end
-                else
-                    hl.country
-                end = eu.territory_code(+)
+            when hl.country = 'HR' then
+                case 
+                    when hl.country != hl.state then
+                        decode(hl.state,'CS','XK',hl.state)
+                    else
+                        decode(hl.country,'CS','XK',hl.country)
+                end    
+            else
+                decode(hl.country,'CS','XK',hl.country)
+        end = eu.territory_code(+)
         and xx.cust_account_id = xx_hca.cust_account_id
         and xx.cloud_set_id = xx_ref.reference_data_set_id
         and xx_ref.ebs_org_id = hcas.org_id
@@ -2853,255 +3602,58 @@
 
 
     l_app_url := get_config('ServiceRootURL');
-
-    log('   Preparing tax profile for party_id:'||p_party_id);
-    log('   Preparing tax profile for cust_account_id:'||p_cust_account_id);
+    --l_app_url := get_config('EwhaTestServiceRootURL');
 
 
-    for c_s in c_sites loop
-    
-    log(' Found party number:'||c_s.party_number);
+    if p_type = 'PARTY' then
 
-    log(' Getting cloud adresses!');
+        log('   Preparing tax profile for party_id:'||p_party_id);
 
-    l_find_text := ' '; --dummy, empty for get REST call
-    l_soap_env := l_empty_clob;
 
-    l_soap_env := l_soap_env||to_clob(l_find_text);
+        for c_p in c_party loop
 
-    log ('    Calling web service:');
-
-    XXFN_CLOUD_WS_PKG.WS_REST_CALL(
-        p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_s.party_number||'/child/Address',
-        p_rest_env => l_soap_env,
-        p_rest_act => 'GET',
-        p_content_type => 'application/json;charset="UTF-8"',
-        x_return_status => x_return_status,
-        x_return_message => x_return_message,
-        x_ws_call_id => x_ws_call_id);
-        
-    log('     Web service status:'||x_return_status);
-    log('     Web service call:'||x_ws_call_id);
-
-    dbms_lob.freetemporary(l_soap_env);
-
-    if x_return_status = 'S' then
-
-        log('       Now getting ready for tax profile!');
-
-        for c_a in (   
-            select distinct
-                hps.party_site_id
-                ,jt.address_id cloud_address_id
-                ,jt.address_number
-                ,jt.cloud_party_id
-                ,jt.cloud_party_number
-                ,jt.cloud_party_site_number
-                from
-                apps.hz_parties@ebsprod hp
-                ,apps.hz_party_sites@ebsprod hps
-                ,apps.hz_cust_accounts@ebsprod hca
-                ,apps.HZ_CUST_ACCT_SITES_ALL@ebsprod HCSA
-                ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
-                ,apps.hz_locations@ebsprod hl
-                ,(
-                select
-                cloud_party_id
-                ,cloud_party_number
-                ,address_id
-                ,address_type
-                ,address_number
-                ,source_address_id
-                ,source_party_id
-                ,xx.ws_call_id
-                ,cloud_party_site_number
-                from
-                xxfn_ws_call_log xx,
-                json_table(xx.response_json,'$'
-                    columns(
-                                    cloud_party_id number path '$.PartyId',
-                                    cloud_party_number varchar2(100) path '$.PartyNumber',
-                                    address_id number path '$.AddressId',
-                                    address_type varchar2(30) path '$.AddressType',
-                                    address_number varchar2(100) path '$.AddressNumber',
-                                    source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
-                                    source_party_id number path '$.PartySourceSystemReferenceValue',
-                                    cloud_party_site_number number path '$.AddressNumber'))
-                where xx.ws_call_id = x_ws_call_id
-                union all
-                select
-                cloud_party_id
-                ,cloud_party_number
-                ,address_id
-                ,address_type
-                ,address_number
-                ,source_address_id
-                ,source_party_id
-                ,xx.ws_call_id
-                ,cloud_party_site_number
-                from
-                xxfn_ws_call_log xx,
-                json_table(xx.response_json, '$'
-                    columns(nested path '$.items[*]'
-                                columns(
-                                    cloud_party_id number path '$.PartyId',
-                                    cloud_party_number varchar2(100) path '$.PartyNumber',
-                                    address_id number path '$.AddressId',
-                                    address_type varchar2(30) path '$.AddressType',
-                                    address_number varchar2(100) path '$.AddressNumber',
-                                    source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
-                                    source_party_id number path '$.PartySourceSystemReferenceValue',
-                                    cloud_party_site_number number path '$.AddressNumber')))                   
-                where xx.ws_call_id = x_ws_call_id
-                ) jt
-                where 1=1
-                and hp.party_id = hca.party_id(+)
-                and hp.party_id = hps.party_id(+)
-                and hca.cust_account_id = hcsa.cust_account_id
-                and hps.party_site_id = hcsa.party_site_id(+)
-                and hcsa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
-                and hps.location_id = hl.location_id(+)
-                and hcsu.site_use_code is not null
-                and hca.cust_account_id = c_s.cust_account_id
-                and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
-                and hps.party_site_id = case when length(hps.party_site_id)!=length(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1)) then to_number(substr(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1),(length(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1))-length(hps.party_site_id))+1,length(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1)))) else to_number(substr(jt.source_address_id,1,instr(jt.source_address_id,';',1,1)-1)) end
-                and hps.party_site_id = c_s.party_site_id
-                and hcsa.org_id in (102,531,532,582,2068,2288)
-                and jt.ws_call_id = x_ws_call_id) loop
-            log('       Found party number: '||c_s.party_number);                
-            log('	    Found party site number:'||c_a.address_number);
-
-            log('       First creating tax profile on site!');
-
-            l_soap_env := l_empty_clob;
-
-            l_text := '{
-                "PartyTypeCode": "THIRD_PARTY_SITE",
-                "PartyName":"'||c_s.party_name||'",
-                "PartyNumber":"'||c_s.party_number||'",
-                "RoundingLevelCode": "HEADER",
-                "RoundingRuleCode": "NEAREST",
-                "CustomerFlag": "Y",
-                "SiteFlag": "Y",
-                "SupplierFlag": "N",
-                "PartySiteNumber": "'||c_a.cloud_party_site_number||'",
-                "AllowOffsetTaxFlag": "N",
-                "ProcessForApplicabilityFlag": "Y",
-                "UseLeAsSubscriberFlag": "N",
-                "WhtDateBasis": "GL_DATE",
-                "WhtRoundingLevelCode": "HEADER",
-                "WhtRoundingRuleCode": "UP",
-                "WhtUseLeAsSubscriberFlag": "N"
-            }';
-
-            l_soap_env := l_soap_env||to_clob(l_text);
-
-            log('       Calling web service to create tax profile for party site!');
+            if nvl(c_p.cloud_tax_profile_id,0) = 0 then
             
-            XXFN_CLOUD_WS_PKG.WS_REST_CALL(
-                p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/partyTaxProfiles',
-                p_rest_env => l_soap_env,
-                p_rest_act => 'POST',
-                p_content_type => 'application/json;charset="UTF-8"',
-                x_return_status => x_return_status,
-                x_return_message => x_return_message,
-                x_ws_call_id => xf_ws_call_id);         
-            
-            log('       Web service status:'||x_return_status);
-            log('       Web service call:'||xf_ws_call_id);
+                log('       First creating tax profile for party!');
 
-            dbms_lob.freetemporary(l_soap_env);   
-
-            l_text:=''; 
-
-            if x_return_status = 'S' then
-
-                log('           Tax profile succesfully created for party_site_number: '||c_a.address_number);
-
-                
-                begin
-                with json_response as
-                    (
-                    (
-                        select
-                        cloud_party_id
-                        ,cloud_party_number
-                        ,cloud_party_site_number
-                        ,CLOUD_TAX_PROFILE_ID
-                        from
-                        xxfn_ws_call_log xx,
-                        json_table(xx.response_json,'$'
-                            columns(
-                                            cloud_party_id number path '$.PartyId',
-                                            cloud_party_number varchar2(100) path '$.PartyNumber',
-                                            cloud_party_site_number number path '$.PartySiteNumber',
-                                            CLOUD_TAX_PROFILE_ID number path '$.PartyTaxProfileId'))
-                        where xx.ws_call_id = xf_ws_call_id
-                        union all
-                        select
-                        cloud_party_id
-                        ,cloud_party_number
-                        ,cloud_party_site_number
-                        ,CLOUD_TAX_PROFILE_ID
-                        from
-                        xxfn_ws_call_log xx,
-                        json_table(xx.response_json, '$'
-                            columns(nested path '$.items[*]'
-                                       columns(
-                                            cloud_party_id number path '$.PartyId',
-                                            cloud_party_number varchar2(100) path '$.PartyNumber',
-                                            cloud_party_site_number number path '$.PartySiteNumber',
-                                            CLOUD_TAX_PROFILE_ID number path '$.PartyTaxProfileId')))                   
-                        where xx.ws_call_id = xf_ws_call_id
-                        )
-                    )
-                    select
-                    nvl(jt.CLOUD_TAX_PROFILE_ID,0)
-                    into l_cloud_tax_profile_id
-                    from
-                    json_response jt
-                    where rownum = 1
-                    and jt.cloud_tax_profile_id is not null;
-
-                    exception
-                    when no_data_found then
-                        l_cloud_tax_profile_id := 0;
-
-                end;
-
-                update xxdl_hz_cust_acct_sites
-                    set cloud_tax_profile_id = l_cloud_tax_profile_id
-                    where cloud_party_site_id = c_s.cloud_party_site_id;
-
-
-                log('           Creating tax classification!');
-            
-            
                 l_soap_env := l_empty_clob;
+                dbms_lob.createtemporary(l_soap_env, TRUE);
 
                 l_text := '{
-                    "ClassTypeCode": "XXDL_TIP_PARTNERA",
-                    "ClassCode": "'||c_s.class_code||'",
-                    "StartDateActive": "'||to_char(sysdate,'YYYY-MM-DD')||'",
-                    "PartySiteNumber": "'||c_a.cloud_party_site_number||'",
-                    "PartyNumber": "'||c_s.party_number||'"
+                    "PartyTypeCode": "THIRD_PARTY",
+                    "PartyName":"'||c_p.party_name||'",
+                    "PartyNumber":"'||c_p.party_number||'",
+                    "RoundingLevelCode": "HEADER",
+                    "RoundingRuleCode": "NEAREST",
+                    "CustomerFlag": "Y",
+                    "SiteFlag": "N",
+                    "SupplierFlag": "N",
+                    "AllowOffsetTaxFlag": "N",
+                    "ProcessForApplicabilityFlag": "Y",
+                    "UseLeAsSubscriberFlag": "N",
+                    "WhtDateBasis": "GL_DATE",
+                    "WhtRoundingLevelCode": "HEADER",
+                    "WhtRoundingRuleCode": "UP",
+                    "WhtUseLeAsSubscriberFlag": "N",
+                    "RepresentativeRegistrationNumber": "'||c_p.tax_registration_num||'",
+                    "CountryCode": "'||c_p.country||'"
                 }';
 
-                l_soap_env := l_soap_env||to_clob(l_text);       
+                l_soap_env := l_soap_env||to_clob(l_text);
 
-                log('           Calling web service to create classification');
-
+                log('       Calling web service to create tax profile party!');
+                
                 XXFN_CLOUD_WS_PKG.WS_REST_CALL(
-                    p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/thirdPartySiteFiscalClassifications',
+                    p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/partyTaxProfiles',
                     p_rest_env => l_soap_env,
                     p_rest_act => 'POST',
                     p_content_type => 'application/json;charset="UTF-8"',
                     x_return_status => x_return_status,
                     x_return_message => x_return_message,
-                    x_ws_call_id => xt_ws_call_id);         
+                    x_ws_call_id => xf_ws_call_id);         
                 
-                log('           Web service status:'||x_return_status);
-                log('           Web service call:'||xt_ws_call_id);
+                log('       Web service status:'||x_return_status);
+                log('       Web service call:'||xf_ws_call_id);
 
                 dbms_lob.freetemporary(l_soap_env);   
 
@@ -3109,75 +3661,411 @@
 
                 if x_return_status = 'S' then
 
-                    log('           Classification code updated!');
+                    log('       Tax profile created for party!');
+
+                    begin
+                    with json_response as
+                        (
+                        (
+                            select
+                            cloud_party_id
+                            ,cloud_party_number
+                            ,CLOUD_TAX_PROFILE_ID
+                            from
+                            xxfn_ws_call_log xx,
+                            json_table(xx.response_json,'$'
+                                columns(
+                                                cloud_party_id number path '$.PartyId',
+                                                cloud_party_number varchar2(100) path '$.PartyNumber',
+                                                CLOUD_TAX_PROFILE_ID number path '$.PartyTaxProfileId'))
+                            where xx.ws_call_id = xf_ws_call_id
+                            union all
+                            select
+                            cloud_party_id
+                            ,cloud_party_number
+                            ,CLOUD_TAX_PROFILE_ID
+                            from
+                            xxfn_ws_call_log xx,
+                            json_table(xx.response_json, '$'
+                                columns(nested path '$.items[*]'
+                                        columns(
+                                                cloud_party_id number path '$.PartyId',
+                                                cloud_party_number varchar2(100) path '$.PartyNumber',
+                                                CLOUD_TAX_PROFILE_ID number path '$.PartyTaxProfileId')))                   
+                            where xx.ws_call_id = xf_ws_call_id
+                            )
+                        )
+                        select
+                        nvl(jt.CLOUD_TAX_PROFILE_ID,0)
+                        into l_cloud_party_profile_id
+                        from
+                        json_response jt
+                        where rownum = 1
+                        and jt.cloud_tax_profile_id is not null;
+
+                        exception
+                        when no_data_found then
+                            l_cloud_party_profile_id := 0;
+
+                    end;
+
+                    log('       Party Id:'||c_p.party_id);
+                    log('       Party Tax Profile Id:'||l_cloud_party_profile_id);
+
+                    update xxdl_hz_parties
+                        set cloud_tax_profile_id = l_cloud_party_profile_id
+                        where party_id = c_p.party_id;
+
+                    commit;    
+
+
+                else
+                    log('Tax party profile creation failed!');
+                    log('Error message: '||x_return_message);
+
+                    update xxdl_hz_parties
+                        set error_msg = x_return_message
+                        where party_id = c_p.party_id;
+                end if;
+            else
+                log('   Already has a party tax profile!');
+
+            end if;    
+        
+        
+        end loop;
+    end if;
+
+    if p_type = 'PARTY_SITE' then
+
+        log('   Preparing tax profile for cust_account_id:'||p_cust_account_id);
+
+
+        for c_s in c_sites loop
+        
+        log(' Found party number:'||c_s.party_number);
+
+        log(' Getting cloud adresses!');
+
+        l_find_text := ' '; --dummy, empty for get REST call
+        l_soap_env := l_empty_clob;
+        dbms_lob.createtemporary(l_soap_env, TRUE);
+
+        l_soap_env := l_soap_env||to_clob(l_find_text);
+
+        log ('    Calling web service:');
+
+        XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+            p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_s.party_number||'/child/Address?onlyData=true&limit=500&fields=PartyId,PartyNumber,AddressId,AddressType,SourceSystemReferenceValue,PartySourceSystemReferenceValue,LocationId',
+            p_rest_env => l_soap_env,
+            p_rest_act => 'GET',
+            p_content_type => 'application/json;charset="UTF-8"',
+            x_return_status => x_return_status,
+            x_return_message => x_return_message,
+            x_ws_call_id => x_ws_call_id);
+            
+        log('     Web service status:'||x_return_status);
+        log('     Web service call:'||x_ws_call_id);
+
+        dbms_lob.freetemporary(l_soap_env);
+
+        if x_return_status = 'S' then
+
+            log('       Now getting ready for tax profile!');
+
+            for c_a in (   
+                select distinct
+                    hps.party_site_id
+                    ,jt.address_id cloud_address_id
+                    ,jt.address_number
+                    ,jt.cloud_party_id
+                    ,jt.cloud_party_number
+                    ,jt.cloud_party_site_number
+                    from
+                    apps.hz_parties@ebsprod hp
+                    ,apps.hz_party_sites@ebsprod hps
+                    ,apps.hz_cust_accounts@ebsprod hca
+                    ,apps.HZ_CUST_ACCT_SITES_ALL@ebsprod HCSA
+                    ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
+                    ,apps.hz_locations@ebsprod hl
+                    ,(
+                    select
+                    cloud_party_id
+                    ,cloud_party_number
+                    ,address_id
+                    ,address_type
+                    ,address_number
+                    ,source_address_id
+                    ,source_party_id
+                    ,xx.ws_call_id
+                    ,cloud_party_site_number
+                    from
+                    xxfn_ws_call_log xx,
+                    json_table(xx.response_json,'$'
+                        columns(
+                                        cloud_party_id number path '$.PartyId',
+                                        cloud_party_number varchar2(100) path '$.PartyNumber',
+                                        address_id number path '$.AddressId',
+                                        address_type varchar2(30) path '$.AddressType',
+                                        address_number varchar2(100) path '$.AddressNumber',
+                                        source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
+                                        source_party_id number path '$.PartySourceSystemReferenceValue',
+                                        cloud_party_site_number number path '$.AddressNumber'))
+                    where xx.ws_call_id = x_ws_call_id
+                    union all
+                    select
+                    cloud_party_id
+                    ,cloud_party_number
+                    ,address_id
+                    ,address_type
+                    ,address_number
+                    ,source_address_id
+                    ,source_party_id
+                    ,xx.ws_call_id
+                    ,cloud_party_site_number
+                    from
+                    xxfn_ws_call_log xx,
+                    json_table(xx.response_json, '$'
+                        columns(nested path '$.items[*]'
+                                    columns(
+                                        cloud_party_id number path '$.PartyId',
+                                        cloud_party_number varchar2(100) path '$.PartyNumber',
+                                        address_id number path '$.AddressId',
+                                        address_type varchar2(30) path '$.AddressType',
+                                        address_number varchar2(100) path '$.AddressNumber',
+                                        source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
+                                        source_party_id number path '$.PartySourceSystemReferenceValue',
+                                        cloud_party_site_number number path '$.AddressNumber')))                   
+                    where xx.ws_call_id = x_ws_call_id
+                    ) jt
+                    where 1=1
+                    and hp.party_id = hca.party_id(+)
+                    and hp.party_id = hps.party_id(+)
+                    and hca.cust_account_id = hcsa.cust_account_id
+                    and hps.party_site_id = hcsa.party_site_id(+)
+                    and hcsa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
+                    and hps.location_id = hl.location_id(+)
+                    and hcsu.site_use_code is not null
+                    and hca.cust_account_id = c_s.cust_account_id
+                    --and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
+                    and hps.party_site_id = case when length(hps.party_site_id)!=length(jt.source_address_id) then to_number(substr(jt.source_address_id,(length(jt.source_address_id)-length(hps.party_site_id))+1,length(jt.source_address_id))) else to_number(jt.source_address_id) end
+                    and hps.party_site_id = c_s.party_site_id
+                    and hcsa.org_id in (102,531,532,663,1486,2068,2288)
+                    and jt.ws_call_id = x_ws_call_id) loop
+                log('       Found party number: '||c_s.party_number);                
+                log('	    Found party site number:'||c_a.address_number);
+
+                log('       First creating tax profile on site!');
+
+                l_soap_env := l_empty_clob;
+                dbms_lob.createtemporary(l_soap_env, TRUE);
+
+                l_text := '{
+                    "PartyTypeCode": "THIRD_PARTY_SITE",
+                    "PartyName":"'||c_s.party_name||'",
+                    "PartyNumber":"'||c_s.party_number||'",
+                    "RoundingLevelCode": "HEADER",
+                    "RoundingRuleCode": "NEAREST",
+                    "CustomerFlag": "Y",
+                    "SiteFlag": "Y",
+                    "SupplierFlag": "N",
+                    "PartySiteNumber": "'||c_a.cloud_party_site_number||'",
+                    "AllowOffsetTaxFlag": "N",
+                    "ProcessForApplicabilityFlag": "Y",
+                    "UseLeAsSubscriberFlag": "N",
+                    "WhtDateBasis": "GL_DATE",
+                    "WhtRoundingLevelCode": "HEADER",
+                    "WhtRoundingRuleCode": "UP",
+                    "WhtUseLeAsSubscriberFlag": "N"
+                }';
+
+                l_soap_env := l_soap_env||to_clob(l_text);
+
+                log('       Calling web service to create tax profile for party site!');
+                
+                XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+                    p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/partyTaxProfiles',
+                    p_rest_env => l_soap_env,
+                    p_rest_act => 'POST',
+                    p_content_type => 'application/json;charset="UTF-8"',
+                    x_return_status => x_return_status,
+                    x_return_message => x_return_message,
+                    x_ws_call_id => xf_ws_call_id);         
+                
+                log('       Web service status:'||x_return_status);
+                log('       Web service call:'||xf_ws_call_id);
+
+                dbms_lob.freetemporary(l_soap_env);   
+
+                l_text:=''; 
+
+                if x_return_status = 'S' then
+
+                    log('           Tax profile succesfully created for party_site_number: '||c_a.address_number);
+
                     
                     begin
                     with json_response as
                         (
                         (
                             select
-                            code_assignment_id
+                            cloud_party_id
+                            ,cloud_party_number
+                            ,cloud_party_site_number
+                            ,CLOUD_TAX_PROFILE_ID
                             from
                             xxfn_ws_call_log xx,
                             json_table(xx.response_json,'$'
                                 columns(
-                                                code_assignment_id number path '$.CodeAssignmentId'))
-                            where xx.ws_call_id = xt_ws_call_id
+                                                cloud_party_id number path '$.PartyId',
+                                                cloud_party_number varchar2(100) path '$.PartyNumber',
+                                                cloud_party_site_number number path '$.PartySiteNumber',
+                                                CLOUD_TAX_PROFILE_ID number path '$.PartyTaxProfileId'))
+                            where xx.ws_call_id = xf_ws_call_id
                             union all
                             select
-                            code_assignment_id
+                            cloud_party_id
+                            ,cloud_party_number
+                            ,cloud_party_site_number
+                            ,CLOUD_TAX_PROFILE_ID
                             from
                             xxfn_ws_call_log xx,
                             json_table(xx.response_json, '$'
                                 columns(nested path '$.items[*]'
                                         columns(
-                                                code_assignment_id number path '$.CodeAssignmentId')))                   
-                            where xx.ws_call_id = xt_ws_call_id
+                                                cloud_party_id number path '$.PartyId',
+                                                cloud_party_number varchar2(100) path '$.PartyNumber',
+                                                cloud_party_site_number number path '$.PartySiteNumber',
+                                                CLOUD_TAX_PROFILE_ID number path '$.PartyTaxProfileId')))                   
+                            where xx.ws_call_id = xf_ws_call_id
                             )
                         )
                         select
-                        nvl(jt.code_assignment_id,0)
-                        into l_code_assignment_id
+                        nvl(jt.CLOUD_TAX_PROFILE_ID,0)
+                        into l_cloud_tax_profile_id
                         from
                         json_response jt
                         where rownum = 1
-                        and jt.code_assignment_id is not null;
+                        and jt.cloud_tax_profile_id is not null;
 
                         exception
                         when no_data_found then
-                            l_code_assignment_id := 0;
+                            l_cloud_tax_profile_id := 0;
 
                     end;
 
                     update xxdl_hz_cust_acct_sites
-                    set cloud_code_assignment_id = l_code_assignment_id
-                    ,CLOUD_PARTY_FISCAL_CODE = c_s.class_code
-                    where cloud_party_site_id = c_s.cloud_party_site_id;
+                        set cloud_tax_profile_id = l_cloud_tax_profile_id
+                        where cloud_party_site_id = c_s.cloud_party_site_id;
+
+
+                    log('           Creating tax classification!');
+                
+                
+                    l_soap_env := l_empty_clob;
+                    dbms_lob.createtemporary(l_soap_env, TRUE);
+
+                    l_text := '{
+                        "ClassTypeCode": "XXDL_TIP_PARTNERA",
+                        "ClassCode": "'||c_s.class_code||'",
+                        "StartDateActive": "'||to_char(sysdate,'YYYY-MM-DD')||'",
+                        "PartySiteNumber": "'||c_a.cloud_party_site_number||'",
+                        "PartyNumber": "'||c_s.party_number||'"
+                    }';
+
+                    l_soap_env := l_soap_env||to_clob(l_text);       
+
+                    log('           Calling web service to create classification');
+
+                    XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+                        p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/thirdPartySiteFiscalClassifications',
+                        p_rest_env => l_soap_env,
+                        p_rest_act => 'POST',
+                        p_content_type => 'application/json;charset="UTF-8"',
+                        x_return_status => x_return_status,
+                        x_return_message => x_return_message,
+                        x_ws_call_id => xt_ws_call_id);         
+                    
+                    log('           Web service status:'||x_return_status);
+                    log('           Web service call:'||xt_ws_call_id);
+
+                    dbms_lob.freetemporary(l_soap_env);   
+
+                    l_text:=''; 
+
+                    if x_return_status = 'S' then
+
+                        log('           Classification code updated!');
+                        
+                        begin
+                        with json_response as
+                            (
+                            (
+                                select
+                                code_assignment_id
+                                from
+                                xxfn_ws_call_log xx,
+                                json_table(xx.response_json,'$'
+                                    columns(
+                                                    code_assignment_id number path '$.CodeAssignmentId'))
+                                where xx.ws_call_id = xt_ws_call_id
+                                union all
+                                select
+                                code_assignment_id
+                                from
+                                xxfn_ws_call_log xx,
+                                json_table(xx.response_json, '$'
+                                    columns(nested path '$.items[*]'
+                                            columns(
+                                                    code_assignment_id number path '$.CodeAssignmentId')))                   
+                                where xx.ws_call_id = xt_ws_call_id
+                                )
+                            )
+                            select
+                            nvl(jt.code_assignment_id,0)
+                            into l_code_assignment_id
+                            from
+                            json_response jt
+                            where rownum = 1
+                            and jt.code_assignment_id is not null;
+
+                            exception
+                            when no_data_found then
+                                l_code_assignment_id := 0;
+
+                        end;
+
+                        update xxdl_hz_cust_acct_sites
+                        set cloud_code_assignment_id = l_code_assignment_id
+                        ,CLOUD_PARTY_FISCAL_CODE = c_s.class_code
+                        where cloud_party_site_id = c_s.cloud_party_site_id;
+
+                    else
+                        log('   Classification update failed!');
+                    end if;
+
+                
 
                 else
-                    log('   Classification update failed!');
+
+                    log('Tax profile creation failed!');
+
+                    update xxdl_hz_cust_acct_sites
+                        set CLOUD_PARTY_FISCAL_CODE = null
+                        ,error_msg = x_return_message
+                        where cloud_party_site_id = c_s.cloud_party_site_id;
+
                 end if;
+                
+            end loop;
+        else
+            log('   Get adress request failed!');
+        end if;
 
-            
-
-            else
-
-                log('Tax profile creation failed!');
-
-                update xxdl_hz_cust_acct_sites
-                    set CLOUD_PARTY_FISCAL_CODE = null
-                    ,error_msg = x_return_message
-                    where cloud_party_site_id = c_s.cloud_party_site_id;
-
-            end if;
-            
+            l_find_text:='';
         end loop;
-    else
-        log('   Get adress request failed!');
-    end if;
 
-        l_find_text:='';
-    end loop;
+    end if;    
 
     exception
         when others then
@@ -3223,6 +4111,9 @@
             ,xtax_head.cloud_tax_code vat_head
             ,xps.supplier_number
             ,xhp.party_number
+            ,xhp.taxpayer_id
+            ,decode(xhl.country,'CS','XK',xhl.country) country
+            ,decode(xhl.country,'CS','XK',xhl.country)||xhp.taxpayer_id tax_registration_num
         FROM
             xxdl_poz_suppliers               xps,
             xxdl_poz_supplier_sites          xpss,
@@ -3235,7 +4126,9 @@
             xxdl_hz_cust_accounts xhca,
             xxdl_hz_parties xhp,
             xxdl_cloud_tax_code_mapping xtax_head,
-            xxdl_cloud_tax_code_mapping xtax_site
+            xxdl_cloud_tax_code_mapping xtax_site,
+            xxdl_hz_party_sites xhps,
+            xxdl_hz_locations xhl
         WHERE
             xps.vendor_id = xpss.vendor_id 
             and xps.supplier_number like nvl(p_supplier_number,'%')
@@ -3253,6 +4146,8 @@
             and xhca.party_id = xhp.party_id
             and pv.vat_code = xtax_head.ebs_tax_code(+)
             and pvs.vat_code = xtax_site.ebs_tax_code(+)
+            and xhp.party_id = xhps.party_id
+            and xhps.location_id = xhl.location_id
             and (nvl(xtax_head.ebs_tax_code,'X') != 'X' or nvl(xtax_site.ebs_tax_code,'X') != 'X')
         ;
         
@@ -3260,6 +4155,7 @@
 
 
     l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
 
     log('   Preparing tax profile for supplier number:'||p_supplier_number);
 
@@ -3340,7 +4236,9 @@
 
             if c_a.party_type_code = 'THIRD_PARTY' then
                 l_text := '{
-                    "TaxClassificationCode": "'||c_s.vat_head||'"
+                    "TaxClassificationCode": "'||c_s.vat_head||'",                    
+                    "RepresentativeRegistrationNumber": "'||c_s.tax_registration_num||'",
+                    "CountryCode": "'||c_s.country||'"
                 }';
 
             else
@@ -3399,6 +4297,218 @@
             log('   Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
             log('   Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
     end update_supplier_tax_ref;
+
+     /*===========================================================================+
+    -- Name    : update_supplier_payment_method
+    -- Desc    : Update supplier payment method
+    -- Usage   : 
+    -- Parameters
+    ============================================================================+*/
+    procedure update_supplier_payment_method(
+        p_supplier_number in varchar2) is
+
+        l_fault_code          varchar2(4000);
+        l_fault_string        varchar2(4000); 
+        l_soap_env clob;
+        l_empty_clob clob;
+        l_text varchar2(32000);
+        l_find_text varchar2(32000);
+        x_return_status varchar2(500);
+        x_return_message varchar2(32000);
+        x_ws_call_id number;
+        xt_ws_call_id number;
+        xf_ws_call_id number;
+        l_cnt number := 0;
+        l_cloud_party_id number:=0;     
+        l_app_url varchar2(300);
+        
+        l_cloud_tax_profile_id number;
+        l_code_assignment_id number;
+        
+        cursor c_sup_sites is 
+            SELECT DISTINCT
+            xps.vendor_name,
+            xpss.vendor_site_code,
+            xps.supplier_number,
+            xps.party_id,
+            xpss.vendor_site_id,
+            xpss.party_site_id,
+            xxhcas.party_site_name,
+            pvs.payment_method_lookup_code
+        FROM
+            xxdl_poz_suppliers               xps,
+            xxdl_poz_supplier_sites          xpss,
+            xxdl_poz_supplier_addresses      xpsa,
+            xxdl_hz_cust_acct_sites          xxhcas,
+            apps.hz_party_sites@ebsprod      hps,
+            apps.po_vendor_sites_all@ebsprod pvs,
+            apps.po_vendors@ebsprod          pv,
+            xxdl_cloud_reference_sets        xx_set,
+            xxdl_hz_cust_accounts xhca,
+            xxdl_hz_parties xhp,
+            xxdl_hz_party_sites xhps,
+            xxdl_hz_locations xhl
+        WHERE
+            xps.vendor_id = xpss.vendor_id 
+            and xps.supplier_number like nvl(p_supplier_number,'%')
+            AND xpss.vendor_id = xpsa.vendor_id (+)
+            AND xpss.party_site_id = xpsa.party_site_id (+)
+            AND xpss.vendor_site_id = xpsa.vendor_site_id (+)
+            AND xpss.party_site_id = xxhcas.cloud_party_site_id
+            AND xpss.bu_name = xx_set.business_unit_name
+            AND xx_set.reference_data_set_id = xxhcas.cloud_set_id
+            AND xxhcas.party_site_id = hps.party_site_id
+            AND to_number(hps.party_site_number) = pvs.attribute3
+            AND pvs.org_id = xx_set.ebs_org_id
+            AND pvs.vendor_id = pv.vendor_id (+)
+            and xxhcas.cust_account_id = xhca.cust_account_id
+            and xhca.party_id = xhp.party_id
+            and xhp.party_id = xhps.party_id
+            and xhps.location_id = xhl.location_id
+            and nvl(xpss.cloud_payee_id,0)=0
+            and xps.vendor_name not like 'XX%'
+        ;
+        
+    begin
+
+
+    l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
+
+    log('   Preparing tax profile for supplier number:'||p_supplier_number);
+
+
+    for c_s in c_sup_sites loop
+    
+    log(' Found supplier number:'||c_s.supplier_number);
+
+    log(' Getting cloud Payee id!');
+
+    l_find_text := ' '; --dummy, empty for get REST call
+    l_soap_env := l_empty_clob;
+
+    l_soap_env := l_soap_env||to_clob(l_find_text);
+
+    log ('    Calling web service:');
+
+    XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+        p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/paymentsExternalPayees?finder=ExternalPayeeSearch;PayeePartyIdentifier='||c_s.party_id||',Intent=Supplier,SupplierSiteIdentifier='||c_s.vendor_site_id,
+        p_rest_env => l_soap_env,
+        p_rest_act => 'GET',
+        p_content_type => 'application/json;charset="UTF-8"',
+        x_return_status => x_return_status,
+        x_return_message => x_return_message,
+        x_ws_call_id => x_ws_call_id);
+        
+    log('     Web service status:'||x_return_status);
+    log('     Web service call:'||x_ws_call_id);
+
+    dbms_lob.freetemporary(l_soap_env);
+
+    if x_return_status = 'S' then
+
+        log('       Now getting ready for payment method!');
+
+        for c_a in (   
+            select jt.payee_id,jt.party_name
+                from
+                (
+                select
+                payee_id,
+                party_name
+                from
+                xxfn_ws_call_log xx,
+                json_table(xx.response_json,'$'
+                    columns(
+                                    payee_id number path '$.PayeeId',
+                                    party_name varchar2 path '$.PartyName'))
+                where xx.ws_call_id = x_ws_call_id
+                and payee_id is not null
+                union all
+                select
+                payee_id,
+                party_name
+                from
+                xxfn_ws_call_log xx,
+                json_table(xx.response_json, '$'
+                    columns(nested path '$.items[*]'
+                                columns(
+                                    payee_id number path '$.PayeeId',
+                                    party_name varchar2 path '$.PartyName')))                   
+                where xx.ws_call_id = x_ws_call_id
+                and payee_id is not null
+                ) jt
+                ) loop
+            log('       Found Payee Id: '||c_a.payee_id);    
+
+            if nvl(c_a.payee_id,0) != 0 then
+            
+                l_text := '{
+                    "PaymentMethodCode": "'||c_s.payment_method_lookup_code||'"              
+                }';
+
+                 l_soap_env := l_empty_clob;
+
+                    
+                l_soap_env := l_soap_env||to_clob(l_text);
+
+                log('       Calling web service to create payee payment method!');
+                
+                XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+                    p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/paymentsExternalPayees/'||c_a.payee_id||'/child/externalPartyPaymentMethods/',
+                    p_rest_env => l_soap_env,
+                    p_rest_act => 'POST',
+                    p_content_type => 'application/json;charset="UTF-8"',
+                    x_return_status => x_return_status,
+                    x_return_message => x_return_message,
+                    x_ws_call_id => xf_ws_call_id);         
+                
+                log('       Web service status:'||x_return_status);
+                log('       Web service call:'||xf_ws_call_id);
+
+                dbms_lob.freetemporary(l_soap_env);   
+
+                l_text:=''; 
+
+                if x_return_status = 'S' then
+
+                    log('           Payment method created for: '||c_a.party_name);   
+
+                    update xxdl_poz_supplier_sites
+                    set cloud_payee_id = c_a.payee_id
+                    ,payment_method_code = c_s.payment_method_lookup_code
+                    where vendor_site_id = c_s.vendor_site_id;       
+
+                else
+
+                    log('           Payment method error!');
+                    log(x_return_message);
+
+                end if;
+
+
+            else
+
+                Log('   Payee cannot be found!');
+                log(x_return_message);
+
+            end if;       
+
+
+        end loop;
+    else
+        log('   Get payee id request failed!');
+        log(x_return_message);
+    end if;
+
+        l_find_text:='';
+    end loop;
+
+    exception
+        when others then
+            log('   Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
+            log('   Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
+    end update_supplier_payment_method;
     
 
     /*===========================================================================+
@@ -3443,6 +4553,7 @@
 
 
     l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
 
 
     for c_ca in c_cust_accounts loop
@@ -3655,6 +4766,7 @@
     --execute immediate 'alter session set NLS_TIMESTAMP_FORMAT= ''YYYY-MM-DD"T"HH24:MI:SS.FF3''';
 
     l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
 
     l_text :='<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
     <soap:Header/>
@@ -4016,7 +5128,16 @@
                 where xx.vendor_contact_id = cur_rec.vendor_contact_id;
             end;
         end loop;
-        log('End of suppliers contacts download');      
+        log('End of suppliers contacts download');   
+
+         update xxfn_ws_call_log xx 
+                set xx.response_xml = null
+                ,xx.response_clob = null
+                ,xx.response_blob = null
+                ,xx.ws_payload_xml = null
+                where ws_call_id = x_ws_call_id;
+
+        log('Cleared xxfn_ws_call_log table!');           
         
     end if;
     return x_return_status;
@@ -4405,6 +5526,7 @@
             'German'
           else 'American English'  
         end language
+        ,pv.vendor_type_lookup_code
         from
         XXDL_POZ_SUPPLIER_ADDRESSES XX_PSA
         ,xxdl_hz_cust_acct_sites xx_cust_site
@@ -4414,6 +5536,7 @@
         ,apps.hz_party_sites@ebsprod hps
         ,apps.po_vendor_sites_all@ebsprod pvs
         ,xxdl_cloud_reference_sets xx_set
+        ,apps.po_vendors@ebsprod pv
         WHERE
         xx_psa.party_site_id = xx_cust_site.cloud_party_site_id
         and xx_cust_site.cust_account_id = xx_hca.cust_account_id
@@ -4423,6 +5546,7 @@
         and to_char(hps.party_site_number) = pvs.attribute3
         and xx_cust_site.org_id = pvs.org_id
         and xx_hp.party_number like nvl(p_party_number,'%')  
+        and pvs.vendor_id = pv.vendor_id
         and xx_cust_site.cloud_set_id =  xx_set.reference_data_set_id(+)
         ;
 
@@ -4539,6 +5663,7 @@
 
 
     l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
 
 
     for c_sa in c_supplier_address loop
@@ -4552,7 +5677,10 @@
 
         l_find_text := '{
             "TaxRegistrationCountryCode" : "'||c_sa.country||'",
-            "TaxRegistrationNumber" : "'||c_sa.country||c_sa.taxpayer_id||'"
+            "TaxRegistrationNumber" : "'||c_sa.country||c_sa.taxpayer_id||'",
+            "SupplierTypeCode" : "'||c_sa.vendor_type_lookup_code||'",
+            "TaxpayerCountryCode" :"'||c_sa.country||'",
+            "TaxpayerId" : "'||c_sa.taxpayer_id||'"
         }';
 
         l_soap_env := l_soap_env||to_clob(l_find_text);
@@ -4878,7 +6006,7 @@
 
                             log('           Assign konto to supplier site DFF');
 
-                            select substr(l_prepay_acc,instr(l_prepay_acc,'.',1,1)+1,instr(l_prepay_acc,'.',1,2)-7)
+                            select substr(l_prepay_acc,instr(l_prepay_acc,'.',1,1)+1,instr(l_prepay_acc,'.',1,2)-4)   --pazi na ovo, uvijek na kraju mora biti -4 to mozes zeznut ako ponavljaš migracije i pokusavas kratit party_numbere
                               into l_prepay_dff
                               from dual;
                             l_text := '';
@@ -5133,7 +6261,7 @@
                         ,xx_bank.branch_party_id cloud_bank_id
                         ,bank_acc.bank_branch_id
                         ,bank_acc.bank_account_name
-                        ,'9999999 '||bank_acc.bank_account_num bank_account_num
+                        ,'99999999 '||bank_acc.bank_account_num bank_account_num
                         ,bank_acc.address_line1
                         ,bank_acc.iban_number
                         ,bank_acc.country bank_country            
@@ -5708,6 +6836,7 @@
         close c_supplier_sites;
 
         update_supplier_tax_ref(c_sa.supplier_number);
+        update_supplier_payment_method(c_sa.supplier_number);
     else
         log('   Update address request failed!');
         --log('   Message:'||x_return_message);
@@ -5727,6 +6856,196 @@
             log('   Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
             log('   Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
     end migrate_suppliers_cloud;
+
+/*===========================================================================+
+    -- Name    : reset_cust_mig
+    -- Desc    : Update customer acct profile
+    -- Usage   : 
+    -- Parameters
+    ============================================================================+*/
+    procedure reset_cust_mig(
+        p_party_number in varchar2) is
+
+        l_fault_code          varchar2(4000);
+        l_fault_string        varchar2(4000); 
+        l_soap_env clob;
+        l_empty_clob clob;
+        l_text varchar2(32000);
+        l_find_text varchar2(32000);
+        x_return_status varchar2(500);
+        x_return_message varchar2(32000);
+        l_error_message varchar2(32000);
+        x_ws_call_id number;
+        xt_ws_call_id number;
+        xf_ws_call_id number;
+        l_cnt number := 0;
+        l_cloud_party_id number:=0;     
+        l_app_url varchar2(300);
+        
+        cursor c_cust is 
+        select
+        xhp.*
+        from
+        xxdl_hz_parties_22112022 xhp
+        where xhp.party_number like nvl(p_party_number,'%')
+        and xhp.cloud_party_id > 0 
+        ;
+
+
+    begin
+
+
+    l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
+
+
+    for c_c in c_cust loop
+    
+    log(' Found cust number:'||c_c.party_number);
+
+    log(' Building soap call!');
+    l_soap_env := l_empty_clob;
+
+    dbms_lob.createtemporary(l_soap_env, TRUE);
+
+    l_find_text := '{
+        "OrganizationName": "XX Testiranje migracije '||c_c.party_name||'"
+    }'; 
+
+    l_soap_env := l_soap_env||to_clob(l_find_text);
+
+    log ('    Calling web service:');
+
+    XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+        p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_c.party_number,
+        p_rest_env => l_soap_env,
+        p_rest_act => 'PATCH',
+        p_content_type => 'application/json;charset="UTF-8"',
+        x_return_status => x_return_status,
+        x_return_message => x_return_message,
+        x_ws_call_id => x_ws_call_id);
+        
+    log('     Web service status:'||x_return_status);
+    log('     Web service call:'||x_ws_call_id);
+
+    dbms_lob.freetemporary(l_soap_env);
+
+    if x_return_status = 'S' then
+
+        log('       Customer name reset!');
+        
+            
+    else
+        log('       Customer name failed!');
+       
+    end if;
+
+        l_find_text:='';
+    end loop;
+
+    exception
+        when others then
+            log('   Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
+            log('   Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
+    end reset_cust_mig;
+
+    /*===========================================================================+
+    -- Name    : reset_cust_mig
+    -- Desc    : Update customer acct profile
+    -- Usage   : 
+    -- Parameters
+    ============================================================================+*/
+    procedure reset_sup_mig(
+        p_supplier_number in varchar2) is
+
+        l_fault_code          varchar2(4000);
+        l_fault_string        varchar2(4000); 
+        l_soap_env clob;
+        l_empty_clob clob;
+        l_text varchar2(32000);
+        l_find_text varchar2(32000);
+        x_return_status varchar2(500);
+        x_return_message varchar2(32000);
+        l_error_message varchar2(32000);
+        x_ws_call_id number;
+        xt_ws_call_id number;
+        xf_ws_call_id number;
+        l_cnt number := 0;
+        l_cloud_party_id number:=0;     
+        l_app_url varchar2(300);
+        
+        cursor c_sup is 
+        select
+        xps.*
+        from
+        xxdl_poz_suppliers_13122022 xps
+        where xps.supplier_number like nvl(p_supplier_number,'%')
+        and xps.vendor_id > 0 
+        ;
+
+
+    begin
+
+
+    l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
+
+
+    for c_s in c_sup loop
+    
+    log(' Found supplier number:'||c_s.supplier_number);
+
+    log(' Building soap call!');
+
+    l_soap_env := l_empty_clob;
+
+    dbms_lob.createtemporary(l_soap_env, TRUE);
+
+    l_find_text := '{
+        "Supplier": "XX Testiranje migracije 13122022 '||c_s.vendor_name||'",
+        "TaxRegistrationCountryCode" : "",
+        "TaxRegistrationNumber" : "",
+        "InactiveDate" : "2022-12-23"
+    }'; 
+
+    l_soap_env := l_soap_env||to_clob(l_find_text);
+
+    log ('    Calling web service:');
+
+    XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+        p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/suppliers/'||c_s.vendor_id,
+        p_rest_env => l_soap_env,
+        p_rest_act => 'PATCH',
+        p_content_type => 'application/json;charset="UTF-8"',
+        x_return_status => x_return_status,
+        x_return_message => x_return_message,
+        x_ws_call_id => x_ws_call_id);
+        
+    log('     Web service status:'||x_return_status);
+    log('     Web service call:'||x_ws_call_id);
+
+    dbms_lob.freetemporary(l_soap_env);
+
+    if x_return_status = 'S' then
+
+        log('       Supplier name and tax reg num reset!');
+        
+            
+    else
+        log('       Supplier name update failed profile creation error!');
+        log('       Err:'||x_return_message);
+       
+    end if;
+
+        l_find_text:='';
+    end loop;
+
+    exception
+        when others then
+            log('   Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
+            log('   Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
+    end reset_sup_mig;
+
 
 
 
