@@ -289,6 +289,7 @@
                     TRG VARCHAR2(3) PATH 'BU',
                     IZVOR_OM VARCHAR2(25) PATH 'SO_DESCRIPTION',
                     OPIS_OM VARCHAR2(240) PATH 'SUPPLY_ORDER_REFERENCE_NUMBER',
+                    OTNA VARCHAR2(80) PATH 'ATEST',
                     CREATION_DATE VARCHAR2(35) PATH 'CREATION_DATE',
                     LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE'
                 ) xt)
@@ -315,6 +316,7 @@
             l_req_head_rec.TRG := cur_rec.TRG;
             l_req_head_rec.IZVOR_OM := cur_rec.IZVOR_OM;
             l_req_head_rec.OPIS_OM := cur_rec.OPIS_OM;
+            l_req_head_rec.OTNA := cur_rec.OTNA;
             l_req_head_rec.creation_date := cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
             l_req_head_rec.last_update_date := cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
             l_req_head_rec.transf_creation_date := sysdate;
@@ -335,6 +337,7 @@
                 ,xx.TRG = cur_rec.TRG
                 ,xx.IZVOR_OM = cur_rec.IZVOR_OM
                 ,xx.OPIS_OM = cur_rec.OPIS_OM
+                ,xx.OTNA = cur_rec.OTNA
                 ,xx.creation_date = cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
                 ,xx.last_update_date =cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
                 ,xx.transf_last_update = sysdate
