@@ -23,6 +23,8 @@ values ('XXDL_CC_FROM_SALES_ORDER', 'Cost Management', 'Mjesto troska', 'Y');
 insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled)
 values ('XXDL_CC_FROM_AR_INVOICE_PROJ', 'Receivables', 'Mjesto troska', 'Y');
 insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled)
+values ('XXDL_CC_FROM_AR_CM_PROJ', 'Receivables', 'Mjesto troska', 'Y');
+insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled)
 values ('XXDL_CC_FROM_SO_NUMBER', 'Purchasing', 'Mjesto troska', 'Y');
 insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled)
 values ('XXDL_CC_FROM_AP_PROJ_TASK', 'Payables', 'Mjesto troska', 'Y');

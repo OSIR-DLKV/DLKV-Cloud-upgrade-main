@@ -5,14 +5,15 @@ create or replace package body xxdl_inv_integration_pkg is
   Object      : XXDL_INV_INTEGRATION_PKG
   Description : Package to Inventory integrations 
   History     :
-  v1.0 15.7.2022 Marko Sladoljev: Inicijalna verzija
+  v1.0 15.07.2022 Marko Sladoljev: Inicijalna verzija
+  v1.1 22.12.2022 Marko Sladoljev: Verzija za PROD
   ============================================================================+*/
 
   -- Log variables
   c_module constant varchar2(100) := 'XXDL_INV_INTEGRATION_PKG';
   g_log_level varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
   --g_log_level    varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
-  g_last_message varchar2(2000);
+  g_last_message varchar2(32000);
   g_report_id    number := -1;
 
   e_processing_exception exception;
@@ -27,7 +28,7 @@ create or replace package body xxdl_inv_integration_pkg is
   begin
     g_last_message := p_text;
     if g_log_level = xxdl_log_pkg.g_level_statement then
-      dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
+      --dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
       xxdl_log_pkg.log(p_module => c_module, p_log_level => xxdl_log_pkg.g_level_statement, p_message => p_text);
     end if;
   end;
@@ -202,6 +203,8 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
@@ -286,6 +289,9 @@ create or replace package body xxdl_inv_integration_pkg is
     
     end loop;
   
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+  
     xout('Item costs downloaded: ' || l_count);
     xout('*** End of report ***');
   
@@ -351,7 +357,7 @@ create or replace package body xxdl_inv_integration_pkg is
     if l_last_creation_date is null then
       l_last_creation_date := to_timestamp('1-1-1900', 'dd-mm-yyyy');
     end if;
-    
+  
     -- To force dowbnloading all transactions
     --l_last_creation_date := to_timestamp('1-1-1900', 'dd-mm-yyyy');
   
@@ -394,6 +400,8 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_status  => l_return_status,
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
+  
+    xlog('l_ws_call_id: ' || l_ws_call_id);
   
     dbms_lob.freetemporary(l_soap_env);
   
@@ -507,6 +515,9 @@ create or replace package body xxdl_inv_integration_pkg is
     
     end loop;
   
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+  
     xout('Transactions downloaded: ' || l_count);
     xout('*** End of report ***');
   
@@ -612,11 +623,13 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
     if (l_return_status != 'S') then
-      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('Error getting data from BI report for Inventory orgs');
       xlog('l_return_message: ' || l_return_message);
       raise e_processing_exception;
     end if;
@@ -679,6 +692,9 @@ create or replace package body xxdl_inv_integration_pkg is
       insert into xxdl_inv_organizations values l_row;
     
     end loop;
+  
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
   
     xout('Organizations downloaded: ' || l_count);
     xout('*** End of report ***');
@@ -783,6 +799,8 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
@@ -868,6 +886,9 @@ create or replace package body xxdl_inv_integration_pkg is
     
     end loop;
   
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+  
     xout('Items downloaded: ' || l_count);
     xout('*** End of report ***');
   
@@ -892,6 +913,8 @@ create or replace package body xxdl_inv_integration_pkg is
   Arguments   : 
   ============================================================================+*/
   procedure process_transactions_interface(p_batch_id number) as
+    -- Potrebno da se moze iz triggera pozivati
+    pragma autonomous_transaction;
   
     cursor cur_transactions is
       select *
@@ -1077,6 +1100,9 @@ create or replace package body xxdl_inv_integration_pkg is
       
         l_trans_status := 'PROCESSED';
       
+        -- Delete lobs after successful call
+        xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+      
       exception
         when e_processing_exception then
           xlog('e_processing_exception');
@@ -1204,11 +1230,13 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
     if (l_return_status != 'S') then
-      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('Error getting data from BI report for Inventory trx types');
       xlog('l_return_message: ' || l_return_message);
       raise e_processing_exception;
     end if;
@@ -1276,6 +1304,9 @@ create or replace package body xxdl_inv_integration_pkg is
       insert into xxdl_inv_transaction_types values l_row;
     
     end loop;
+  
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
   
     xout('Transaction types downloaded: ' || l_count);
     xout('*** End of report ***');
@@ -1382,11 +1413,13 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
     if (l_return_status != 'S') then
-      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('Error getting data from BI report for item relations');
       xlog('l_return_message: ' || l_return_message);
       raise e_processing_exception;
     end if;
@@ -1460,6 +1493,9 @@ create or replace package body xxdl_inv_integration_pkg is
       insert into xxdl_egp_item_relations values l_row;
     
     end loop;
+  
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
   
     xout('Item relations downloaded: ' || l_count);
     xout('*** End of report ***');
@@ -1564,11 +1600,13 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
     if (l_return_status != 'S') then
-      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('Error getting data from BI report for CST accounting');
       xlog('l_return_message: ' || l_return_message);
       raise e_processing_exception;
     end if;
@@ -1670,6 +1708,9 @@ create or replace package body xxdl_inv_integration_pkg is
       insert into xxdl_cst_accounting values l_row;
     
     end loop;
+  
+    -- Delete lobs after successful call
+    xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
   
     xout('Cost accounting lines downloaded: ' || l_count);
     xout('*** End of report ***');
