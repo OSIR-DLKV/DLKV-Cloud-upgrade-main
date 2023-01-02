@@ -15,6 +15,7 @@ create or replace package body xxdl_mig_items_pkg as
    -- 28-04-22 120.00 zkovac       Initial creation 
    -- 18-10-22 1.1    msladoljev   New package XXDL_MIG_ITEMS_PKG  
    -- 22-11-22 1.2    msladoljev   Verzija nakon mapiranja nabavnih kategorija
+   -- 28-12-22 1.3    msladoljev   Dodane vrijednosti iz template-a
   =============================================================================*/
   --c_log_module constant varchar2(300) := $$plsql_unit;
   e_processing_exception exception;
@@ -29,7 +30,7 @@ create or replace package body xxdl_mig_items_pkg as
   ============================================================================+*/
   procedure xlog(p_text in varchar2) as
   begin
-    --dbms_output.put_line(p_text);
+    --dbms_output.put_line(p_text); -- TODO: Logging?
     null;
   
   end;
@@ -102,6 +103,52 @@ create or replace package body xxdl_mig_items_pkg as
     end if;
   
     return l_result;
+  
+  end;
+
+  /*===========================================================================+
+      Procedure   : is_sales_org
+      Description : Prodajne organizacije
+  ============================================================================+*/
+  function is_sales_org(p_org_code varchar2) return boolean as
+  
+  begin
+    if p_org_code in ('MT1', 'MPR', 'PMK', 'DLK', 'T01', 'POS', 'SPR', 'ST1', 'EMU', 'ET1') then
+      return true;
+    else
+      return false;
+    end if;
+  
+  end;
+
+  /*===========================================================================+
+      Procedure   : is_insp_routing_org
+      Description : Proizvodne organizacije koje nisu troskovne i nije gradiliste
+  ============================================================================+*/
+  function is_insp_routing_org(p_org_code varchar2) return boolean as
+  
+  begin
+    if p_org_code in
+       ('MK1', 'MP1', 'MPR', 'MS1', 'MT1', 'MTR', 'OA3', 'SO1', 'AO1', 'AO2', 'AO3', 'KO1', 'OO1', 'OO2', 'SP1', 'SPR', 'SS1', 'ST1', 'STR') then
+      return true;
+    else
+      return false;
+    end if;
+  
+  end;
+
+  /*===========================================================================+
+      Procedure   : is_expense_org
+      Description : 
+  ============================================================================+*/
+  function is_expense_org(p_org_code varchar2) return boolean as
+  
+  begin
+    if p_org_code in ('DLK', 'PMK', 'POS', 'NUF', 'SVE', 'PRO', 'EMU') then
+      return true;
+    else
+      return false;
+    end if;
   
   end;
 
@@ -451,6 +498,22 @@ create or replace package body xxdl_mig_items_pkg as
   end;
 
   --/*-----------------------------------------------------------------------------
+  -- Name    :get_item_type
+  -- Desc    :TRanslation for item type
+  -------------------------------------------------------------------------------*/
+  function get_item_type(p_old_item_type varchar2) return varchar as
+    l_new_item_type varchar2(100);
+  begin
+    if p_old_item_type = 'XXDL_GORIVOXXDL_GORIVO' then
+      l_new_item_type := 'XXDL_GORIVO';
+    else
+      l_new_item_type := p_old_item_type;
+    end if;
+    return l_new_item_type;
+  
+  end;
+
+  --/*-----------------------------------------------------------------------------
   -- Name    :get_po_category
   -- Desc    :TRanslation PO Category according to xxdl_nab_cat_old_new
   -------------------------------------------------------------------------------*/
@@ -469,7 +532,7 @@ create or replace package body xxdl_mig_items_pkg as
     if l_new_category is not null then
       return l_new_category;
     end if;
-    
+  
     -- Check xxdl_nab_cat_old_new for category mapping
     begin
       select trim(cat_new) into l_new_category from xxdl.xxdl_nab_cat_old_new@ebsprod where cat_old = p_category_code_old;
@@ -671,6 +734,8 @@ create or replace package body xxdl_mig_items_pkg as
              msi.description description,
              msi.long_description,
              muom.unit_of_measure_tl primary_uom_code,
+             typ.meaning item_type_name,
+             msi.item_type,
              msi.list_price_per_unit,
              msi.purchasing_item_flag,
              msi.purchasing_enabled_flag,
@@ -692,11 +757,15 @@ create or replace package body xxdl_mig_items_pkg as
              msi.source_subinventory
         from apps.mtl_system_items_vl@ebsprod     msi,
              apps.mtl_parameters@ebsprod          mp,
-             apps.mtl_units_of_measure_tl@ebsprod muom
+             apps.mtl_units_of_measure_tl@ebsprod muom,
+             apps.fnd_lookup_values@ebsprod       typ
        where msi.organization_id = mp.organization_id
          and msi.segment1 = nvl(p_item_seg, msi.segment1)
          and msi.primary_uom_code = muom.uom_code
          and muom.language = 'US'
+         and msi.item_type = typ.lookup_code
+         and typ.lookup_type = 'ITEM_TYPE'
+         and typ.language = 'US'
          and not exists (select 1
                 from xxdl_mtl_system_items_mig xx
                where xx.inventory_item_id = msi.inventory_item_id
@@ -798,10 +867,7 @@ create or replace package body xxdl_mig_items_pkg as
     l_weight_uom        varchar2(10);
     l_unit_weight       number;
   
-    l_purchasable_flag            varchar2(10);
-    l_purchasing_flag             varchar2(10);
-    l_customer_order_flag         varchar2(10);
-    l_customer_order_enabled_flag varchar2(10);
+    --l_ITEM_TYPE varchar2(100);
   
     l_app_url varchar2(100);
   
@@ -816,6 +882,27 @@ create or replace package body xxdl_mig_items_pkg as
     l_item_org_xml    varchar2(32000);
   
     l_source_organization_name varchar2(200);
+  
+    l_purchasable_flag                  varchar2(10);
+    l_purchasing_flag                   varchar2(10);
+    l_customer_order_flag               varchar2(10);
+    l_customer_order_enabled_flag       varchar2(10);
+    l_shippable_flag                    varchar2(100);
+    l_internal_order_flag               varchar2(100);
+    l_internal_order_enabled_flag       varchar2(100);
+    l_inventory_item_flag               varchar2(100);
+    l_inventory_asset_flag              varchar2(100);
+    l_material_transaction_enabled_flag varchar2(100);
+    l_stock_enabled_flag                varchar2(100);
+    l_returnable_flag                   varchar2(100);
+    l_receipt_rounting_value            varchar2(100);
+    l_reservable_flag                   varchar2(100);
+    l_invoiced_flag                     varchar2(100);
+    l_invoice_enabled_flag              varchar2(100);
+    l_costing_enabled_flag              varchar2(100);
+    l_match_approval_level_value        varchar2(100);
+    l_invoice_match_option_value        varchar2(100);
+    l_so_transaction_enabled_flag       varchar2(100);
   
   begin
   
@@ -835,15 +922,32 @@ create or replace package body xxdl_mig_items_pkg as
               <typ:item xmlns:ns2="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/">
                   <item:OrganizationCode>[ORGANIZATION_CODE]</item:OrganizationCode>
                   <item:Template>[TEMPLATE]</item:Template>
+                  <item:ItemType>[ITEM_TYPE]</item:ItemType>
                   <item:ItemNumber>[ITEM_NUMBER]</item:ItemNumber>
                   <item:ItemClass>Root Item Class</item:ItemClass>
                   <item:ItemDescription>[DESCRIPTION]</item:ItemDescription>
                   <item:LongDescription>[LONG_DESCRIPTION]</item:LongDescription>
                   <item:PrimaryUOMValue>[PRIMARY_UOM_VALUE]</item:PrimaryUOMValue>
+                  <item:ShippableFlag>[SHIPPABLE_FLAG]</item:ShippableFlag>
+                  <item:InternalOrderFlag>[INTERNAL_ORDER_FLAG]</item:InternalOrderFlag>
+                  <item:InternalOrderEnabledFlag>[INTERNAL_ORDER_ENABLED_FLAG]</item:InternalOrderEnabledFlag>
+                  <item:InventoryItemFlag>[INVENTORY_ITEM_FLAG]</item:InventoryItemFlag>
+                  <item:InventoryAssetFlag>[INVENTORY_ASSET_FLAG]</item:InventoryAssetFlag>
+                  <item:MaterialTransactionEnabledFlag>[MATERIAL_TRANSACTION_ENABLED_FLAG]</item:MaterialTransactionEnabledFlag>
+                  <item:StockEnabledFlag>[STOCK_ENABLED_FLAG]</item:StockEnabledFlag>
+                  <item:ReturnableFlag>[RETURNABLE_FLAG]</item:ReturnableFlag>
+                  <item:ReceiptRountingValue>[RECEIPT_ROUNTING_VALUE]</item:ReceiptRountingValue>
+                  <item:ReservableFlag>[RESERVABLE_FLAG]</item:ReservableFlag>
+                  <item:InvoicedFlag>[INVOICED_FLAG]</item:InvoicedFlag>
+                  <item:InvoiceEnabledFlag>[INVOICE_ENABLED_FLAG]</item:InvoiceEnabledFlag>
+                  <item:CostingEnabledFlag>[COSTING_ENABLED_FLAG]</item:CostingEnabledFlag>
+                  <item:MatchApprovalLevelValue>[MATCH_APPROVAL_LEVEL_VALUE]</item:MatchApprovalLevelValue>
+                  <item:InvoiceMatchOptionValue>[INVOICE_MATCH_OPTION_VALUE]</item:InvoiceMatchOptionValue>
                   <item:PurchasableFlag>[PURCHASABLE_FLAG]</item:PurchasableFlag>
                   <item:PurchasingFlag>[PURCHASING_FLAG]</item:PurchasingFlag>
                   <item:CustomerOrderFlag>[CUSTOMER_ORDER_FLAG]</item:CustomerOrderFlag>
                   <item:CustomerOrderEnabledFlag>[CUSTOMER_ORDER_ENABLED_FLAG]</item:CustomerOrderEnabledFlag>
+                  <item:TransactionEnabledFlag>[SO_TRANSACTION_ENABLED_FLAG]</item:TransactionEnabledFlag>
                   <item:ListPrice>[LIST_PRICE]</item:ListPrice>
                   <item:UnitWeightQuantity>[UNIT_WEIGHT_QUANTITY]</item:UnitWeightQuantity>
                   <item:WeightUOMValue>[WEIGHT_UOM]</item:WeightUOMValue>
@@ -872,15 +976,31 @@ create or replace package body xxdl_mig_items_pkg as
           <typ:createItem>
               <typ:item xmlns:ns2="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/">
                   <item:OrganizationCode>[ORGANIZATION_CODE]</item:OrganizationCode>
-                  <item:Template>[TEMPLATE]</item:Template>
+                  <item:ItemType>[ITEM_TYPE]</item:ItemType>                  
                   <item:ItemNumber>[ITEM_NUMBER]</item:ItemNumber>
                   <item:ItemClass>Root Item Class</item:ItemClass>
                   <item:ItemDescription>[DESCRIPTION]</item:ItemDescription>
                   <item:PrimaryUOMValue>[PRIMARY_UOM_VALUE]</item:PrimaryUOMValue>
+                  <item:ShippableFlag>[SHIPPABLE_FLAG]</item:ShippableFlag>
+                  <item:InternalOrderFlag>[INTERNAL_ORDER_FLAG]</item:InternalOrderFlag>
+                  <item:InternalOrderEnabledFlag>[INTERNAL_ORDER_ENABLED_FLAG]</item:InternalOrderEnabledFlag>
+                  <item:InventoryItemFlag>[INVENTORY_ITEM_FLAG]</item:InventoryItemFlag>
+                  <item:InventoryAssetFlag>[INVENTORY_ASSET_FLAG]</item:InventoryAssetFlag>
+                  <item:MaterialTransactionEnabledFlag>[MATERIAL_TRANSACTION_ENABLED_FLAG]</item:MaterialTransactionEnabledFlag>
+                  <item:StockEnabledFlag>[STOCK_ENABLED_FLAG]</item:StockEnabledFlag>
+                  <item:ReturnableFlag>[RETURNABLE_FLAG]</item:ReturnableFlag>
+                  <item:ReceiptRountingValue>[RECEIPT_ROUNTING_VALUE]</item:ReceiptRountingValue>
+                  <item:ReservableFlag>[RESERVABLE_FLAG]</item:ReservableFlag>
+                  <item:InvoicedFlag>[INVOICED_FLAG]</item:InvoicedFlag>
+                  <item:InvoiceEnabledFlag>[INVOICE_ENABLED_FLAG]</item:InvoiceEnabledFlag>
+                  <item:CostingEnabledFlag>[COSTING_ENABLED_FLAG]</item:CostingEnabledFlag>
+                  <item:MatchApprovalLevelValue>[MATCH_APPROVAL_LEVEL_VALUE]</item:MatchApprovalLevelValue>
+                  <item:InvoiceMatchOptionValue>[INVOICE_MATCH_OPTION_VALUE]</item:InvoiceMatchOptionValue>                  
                   <item:PurchasableFlag>[PURCHASABLE_FLAG]</item:PurchasableFlag>
                   <item:PurchasingFlag>[PURCHASING_FLAG]</item:PurchasingFlag>
                   <item:CustomerOrderFlag>[CUSTOMER_ORDER_FLAG]</item:CustomerOrderFlag>
                   <item:CustomerOrderEnabledFlag>[CUSTOMER_ORDER_ENABLED_FLAG]</item:CustomerOrderEnabledFlag>
+                  <item:TransactionEnabledFlag>[SO_TRANSACTION_ENABLED_FLAG]</item:TransactionEnabledFlag>
                   <item:ListPrice>[LIST_PRICE]</item:ListPrice>
                   <item:AssetCategoryValue>[ASSET_CATEGORY]</item:AssetCategoryValue>                  
                   <item:ItemStatusValue>Active</item:ItemStatusValue>
@@ -938,15 +1058,12 @@ create or replace package body xxdl_mig_items_pkg as
         if l_cloud_item = 0 then
         
           -- Get template
-          if l_organization_code = 'DLK' then
-            l_template := get_item_template(c_i.inventory_item_id);
-            xlog('l_template: ' || l_template);
-            if l_template is null then
-              l_item_rec.error_msg := 'Cannot find template for item';
-              raise e_processing_exception;
-            end if;
-          else
-            l_template := null;
+        
+          l_template := get_item_template(c_i.inventory_item_id);
+          xlog('l_template: ' || l_template);
+          if l_template is null then
+            l_item_rec.error_msg := 'Cannot find template for item';
+            raise e_processing_exception;
           end if;
         
           -- Get list price
@@ -978,31 +1095,117 @@ create or replace package body xxdl_mig_items_pkg as
             l_weight_uom := null;
           end if;
         
-          -- Get flags --
+          ----------------------------------------
+          ----- Flags according to templates -----
+          ----------------------------------------
         
-          -- Purchasing item?
-          if c_i.purchasing_item_flag = 'Y' then
-            l_purchasing_flag := 'true';
-          else
-            l_purchasing_flag := 'false';
-          end if;
-          -- Purchasing enabled?
-          if c_i.purchasing_enabled_flag = 'Y' then
-            l_purchasable_flag := 'true';
-          else
+          -- Purchasing?
+          if l_template in ('XXDL_OS-Proizvod', 'XXDL_Otpad', 'XXDL_Proizvod', 'XXDL_SI-Alati-Proizvod', 'XXDL_Usluga-Prodaja') then
+            l_purchasing_flag  := 'false';
             l_purchasable_flag := 'false';
-          end if;
-          -- Customer ordered?
-          if c_i.customer_order_flag = 'Y' then
-            l_customer_order_flag := 'true';
           else
-            l_customer_order_flag := 'false';
+            l_purchasing_flag  := 'true';
+            l_purchasable_flag := 'true';
           end if;
-          -- Customer order enabled?
-          if c_i.customer_order_enabled_flag = 'Y' then
-            l_customer_order_enabled_flag := 'true';
-          else
+        
+          -- Customer  Order? 
+          if l_template in ('XXDL_Autogume', 'XXDL_Hrana', 'XXDL_Uredski materijal', 'XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz') then
+            l_customer_order_flag         := 'false';
             l_customer_order_enabled_flag := 'false';
+            l_returnable_flag             := 'false';
+            l_so_transaction_enabled_flag := 'false';
+          else
+            l_customer_order_flag         := 'true';
+            l_customer_order_enabled_flag := 'true';
+            l_returnable_flag             := 'true';
+            l_so_transaction_enabled_flag := 'true';
+          end if;
+        
+          -- Dodatno - prodaja samo s prodajnih skladista. Onemogucava prodaju s neprodajnih skladista
+          if not is_sales_org(l_organization_code) then
+            l_customer_order_enabled_flag := 'false';
+          end if;
+        
+          -- Internal order
+          if l_template in ('XXDL_Hrana', 'XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz', 'XXDL_Usluga-Prodaja', 'XXDL_Usluga-Prodaja i nabava') then
+            l_internal_order_flag         := 'false';
+            l_internal_order_enabled_flag := 'false';
+          else
+            l_internal_order_flag         := 'true';
+            l_internal_order_enabled_flag := 'true';
+          end if;
+        
+          -- Shippable
+          if l_template in ('XXDL_Hrana', 'XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz') then
+            l_shippable_flag := 'false';
+          else
+            l_shippable_flag := 'true';
+          end if;
+        
+          -- Inventory item flag
+          if l_template in ('XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz', 'XXDL_Usluga-Prodaja', 'XXDL_Usluga-Prodaja i nabava') then
+            l_inventory_item_flag               := 'false';
+            l_material_transaction_enabled_flag := 'false';
+          else
+            l_inventory_item_flag               := 'true';
+            l_material_transaction_enabled_flag := 'true';
+          end if;
+        
+          -- Inv asset flag
+          if l_template in ('XXDL_OS-Nabava',
+                            'XXDL_OS-Prodaja',
+                            'XXDL_Usluga-Nabava',
+                            'XXDL_Usluga-Prijevoz',
+                            'XXDL_Usluga-Prodaja',
+                            'XXDL_Usluga-Prodaja i nabava') then
+            l_inventory_asset_flag              := 'false';
+            l_stock_enabled_flag                := 'false';
+            l_material_transaction_enabled_flag := 'false';
+            l_reservable_flag                   := 'false';
+          
+          else
+            l_inventory_asset_flag := 'true';
+            l_stock_enabled_flag   := 'true';
+            l_reservable_flag      := 'true';
+          end if;
+        
+          -- Dodatno stock enabled
+          if is_expense_org(l_organization_code) then
+            l_material_transaction_enabled_flag := 'false';
+            l_stock_enabled_flag                := 'false';
+          end if;
+        
+          -- Routing
+          l_receipt_rounting_value     := 'Direct';
+          l_invoice_match_option_value := 'Receipt';
+          l_match_approval_level_value := '3-Way';
+        
+          if is_insp_routing_org(l_organization_code) and l_stock_enabled_flag = 'true' then
+            l_receipt_rounting_value     := 'Inspection';
+            l_invoice_match_option_value := 'Receipt';
+            l_match_approval_level_value := '4-Way';
+          end if;
+        
+          if l_organization_code = 'PRO' then
+            l_receipt_rounting_value     := 'Direct';
+            l_invoice_match_option_value := 'Order';
+            l_match_approval_level_value := '2-Way';
+          end if;
+        
+          -- Invoiced
+          if l_template in ('XXDL_Hrana', 'XXDL_Usluga-Nabava') then
+            l_invoiced_flag        := 'false';
+            l_invoice_enabled_flag := 'false';
+          else
+            l_invoiced_flag        := 'true';
+            l_invoice_enabled_flag := 'true';
+          end if;
+        
+          -- Costing
+          if l_template in ('XXDL_OS-Prodaja', 'XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz', 'XXDL_Usluga-Prodaja', 'XXDL_Usluga-Prodaja i nabava') then
+            l_costing_enabled_flag := 'false';
+          else
+            l_costing_enabled_flag := 'true';
           end if;
         
           xlog('Creating item...');
@@ -1016,13 +1219,10 @@ create or replace package body xxdl_mig_items_pkg as
           l_text := replace(l_text, '[ORGANIZATION_CODE]', l_organization_code);
           l_text := replace(l_text, '[TEMPLATE]', l_template);
           l_text := replace(l_text, '[ITEM_NUMBER]', l_segment1);
+          l_text := replace(l_text, '[ITEM_TYPE]', cdata(get_item_type(c_i.item_type)));
           l_text := replace(l_text, '[DESCRIPTION]', cdata(c_i.description));
           l_text := replace(l_text, '[LONG_DESCRIPTION]', cdata(c_i.long_description));
           l_text := replace(l_text, '[PRIMARY_UOM_VALUE]', c_i.primary_uom_code);
-          l_text := replace(l_text, '[PURCHASING_FLAG]', l_purchasing_flag);
-          l_text := replace(l_text, '[PURCHASABLE_FLAG]', l_purchasable_flag);
-          l_text := replace(l_text, '[CUSTOMER_ORDER_FLAG]', l_customer_order_flag);
-          l_text := replace(l_text, '[CUSTOMER_ORDER_ENABLED_FLAG]', l_customer_order_enabled_flag);
           l_text := replace(l_text, '[LIST_PRICE]', format_number(l_list_price));
           l_text := replace(l_text, '[UNIT_WEIGHT_QUANTITY]', format_number(l_unit_weight));
           l_text := replace(l_text, '[WEIGHT_UOM]', l_weight_uom);
@@ -1035,6 +1235,27 @@ create or replace package body xxdl_mig_items_pkg as
           l_text := replace(l_text, '[SOURCE_ORGANIZATION_VALUE]', l_source_organization_name);
           l_text := replace(l_text, '[SOURCE_SUBINVENTORY_ORGANIZATION_VALUE]', null);
           l_text := replace(l_text, '[SOURCE_SUBINVENTORY_VALUE]', c_i.source_subinventory);
+          -- Calculated columns
+          l_text := replace(l_text, '[PURCHASING_FLAG]', l_purchasing_flag);
+          l_text := replace(l_text, '[PURCHASABLE_FLAG]', l_purchasable_flag);
+          l_text := replace(l_text, '[CUSTOMER_ORDER_FLAG]', l_customer_order_flag);
+          l_text := replace(l_text, '[CUSTOMER_ORDER_ENABLED_FLAG]', l_customer_order_enabled_flag);
+          l_text := replace(l_text, '[SHIPPABLE_FLAG]', l_shippable_flag);
+          l_text := replace(l_text, '[INTERNAL_ORDER_FLAG]', l_internal_order_flag);
+          l_text := replace(l_text, '[INTERNAL_ORDER_ENABLED_FLAG]', l_internal_order_enabled_flag);
+          l_text := replace(l_text, '[INVENTORY_ITEM_FLAG]', l_inventory_item_flag);
+          l_text := replace(l_text, '[INVENTORY_ASSET_FLAG]', l_inventory_asset_flag);
+          l_text := replace(l_text, '[MATERIAL_TRANSACTION_ENABLED_FLAG]', l_material_transaction_enabled_flag);
+          l_text := replace(l_text, '[STOCK_ENABLED_FLAG]', l_stock_enabled_flag);
+          l_text := replace(l_text, '[RETURNABLE_FLAG]', l_returnable_flag);
+          l_text := replace(l_text, '[RECEIPT_ROUNTING_VALUE]', l_receipt_rounting_value);
+          l_text := replace(l_text, '[RESERVABLE_FLAG]', l_reservable_flag);
+          l_text := replace(l_text, '[INVOICED_FLAG]', l_invoiced_flag);
+          l_text := replace(l_text, '[INVOICE_ENABLED_FLAG]', l_invoice_enabled_flag);
+          l_text := replace(l_text, '[COSTING_ENABLED_FLAG]', l_costing_enabled_flag);
+          l_text := replace(l_text, '[MATCH_APPROVAL_LEVEL_VALUE]', l_match_approval_level_value);
+          l_text := replace(l_text, '[INVOICE_MATCH_OPTION_VALUE]', l_invoice_match_option_value);
+          l_text := replace(l_text, '[SO_TRANSACTION_ENABLED_FLAG]', l_so_transaction_enabled_flag);
         
           l_text_categories := '';
         
@@ -1067,6 +1288,14 @@ create or replace package body xxdl_mig_items_pkg as
               l_text_categories := replace(l_text_categories, '[CATEGORY_CODE]', c_i_cat.category_code);
             end if;
           end loop;
+        
+          -- Ako nema racunovodstvene, postavi je na Nedefinirano
+          if instr(l_text_categories, 'Racunovodstvena kategorija') = 0 or l_text_categories is null then
+            l_text_categories := l_text_categories || l_category_xml;
+            l_text_categories := replace(l_text_categories, '[CATEGORY_SET_NAME]', 'Racunovodstvena kategorija');
+            l_text_categories := replace(l_text_categories, '[CATEGORY_CODE]', 'NEDEFINIRANO');
+          end if;
+          
         
           l_text := replace(l_text, '[CATEGORIES_XML]', l_text_categories);
         
@@ -1115,7 +1344,7 @@ create or replace package body xxdl_mig_items_pkg as
             end;
           
             -- Delete lobs after successful item migrated
-            xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+           xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
           
           else
             xlog('   Error! Item not migrated!');
@@ -1291,7 +1520,7 @@ create or replace package body xxdl_mig_items_pkg as
     
       --dbms_output.put_line(l_count || '. Item: ' || c_item.segment1);
     
-      xxdl_mig_items_pkg.migrate_items_cloud(p_item_seg => c_item.segment1, p_rows => 1, p_retry_error => p_retry_error, p_suffix => '');
+      xxdl_mig_items_pkg.migrate_items_cloud(p_item_seg => c_item.segment1, p_rows => 1, p_retry_error => p_retry_error, p_suffix => ''); -- TODO Suffix?
     
       commit;
     

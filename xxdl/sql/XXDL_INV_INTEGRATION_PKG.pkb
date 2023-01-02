@@ -11,9 +11,9 @@ create or replace package body xxdl_inv_integration_pkg is
 
   -- Log variables
   c_module constant varchar2(100) := 'XXDL_INV_INTEGRATION_PKG';
-  --g_log_level varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
-  g_log_level    varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
-  g_last_message varchar2(2000);
+  g_log_level varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
+  --g_log_level    varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
+  g_last_message varchar2(32000);
   g_report_id    number := -1;
 
   e_processing_exception exception;
@@ -202,6 +202,8 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_status  => l_return_status,
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
+  
+    xlog('l_ws_call_id: ' || l_ws_call_id);
   
     dbms_lob.freetemporary(l_soap_env);
   
@@ -398,6 +400,8 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_status  => l_return_status,
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
+  
+    xlog('l_ws_call_id: ' || l_ws_call_id);
   
     dbms_lob.freetemporary(l_soap_env);
   
@@ -619,11 +623,13 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
     if (l_return_status != 'S') then
-      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('Error getting data from BI report for Inventory orgs');
       xlog('l_return_message: ' || l_return_message);
       raise e_processing_exception;
     end if;
@@ -793,6 +799,8 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
@@ -905,9 +913,9 @@ create or replace package body xxdl_inv_integration_pkg is
   Arguments   : 
   ============================================================================+*/
   procedure process_transactions_interface(p_batch_id number) as
-      -- Potrebno da se moze iz triggera pozivati
+    -- Potrebno da se moze iz triggera pozivati
     pragma autonomous_transaction;
-    
+  
     cursor cur_transactions is
       select *
         from xxdl_inv_material_txns_int
@@ -1222,11 +1230,13 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
     if (l_return_status != 'S') then
-      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('Error getting data from BI report for Inventory trx types');
       xlog('l_return_message: ' || l_return_message);
       raise e_processing_exception;
     end if;
@@ -1403,11 +1413,13 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
     if (l_return_status != 'S') then
-      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('Error getting data from BI report for item relations');
       xlog('l_return_message: ' || l_return_message);
       raise e_processing_exception;
     end if;
@@ -1588,11 +1600,13 @@ create or replace package body xxdl_inv_integration_pkg is
                               x_return_message => l_return_message,
                               x_ws_call_id     => l_ws_call_id);
   
+    xlog('l_ws_call_id: ' || l_ws_call_id);
+  
     dbms_lob.freetemporary(l_soap_env);
   
     xlog('x_return_status: ' || l_return_status);
     if (l_return_status != 'S') then
-      xlog('Error getting data from BI report for Inventory transaction');
+      xlog('Error getting data from BI report for CST accounting');
       xlog('l_return_message: ' || l_return_message);
       raise e_processing_exception;
     end if;
