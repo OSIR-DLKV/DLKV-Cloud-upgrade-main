@@ -1,0 +1,37 @@
+/* $Header: $
+============================================================================+
+
+File Name   : XXDL_POZ_INSTRUMENT_ASSIGN.sql
+Description : Table creation script 
+
+
+History     :
+V1.0 30.12.2022 - Zoran Kovac - initial creation
+============================================================================+*/
+
+WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
+
+PROMPT XXDL_POZ_INSTRUMENT_ASSIGN;
+--drop index XXDL_POZ_SUPPLIER_BANK_ACC_U1;
+--drop table XXDL_POZ_INSTRUMENT_ASSIGN;
+
+CREATE
+  TABLE "XXDL_POZ_INSTRUMENT_ASSIGN"
+  (
+    CLOUD_PAYMENT_INSTRUMENT_ID NUMBER,
+    EXT_BANK_ACCOUNT_ID NUMBER,
+    CLOUD_EXT_PAYEE_ID NUMBER,
+    CLOUD_OWNER_ID NUMBER,
+    PROCESS_FLAG VARCHAR2(1),
+    ERROR_MESSAGE VARCHAR2(4000),
+    CREATION_DATE DATE,
+    LAST_UPDATE_DATE DATE
+   );
+  
+  
+    CREATE UNIQUE INDEX "XXDL_POZ_INSTRUMENT_ASSIGN_U1" ON "XXDL_POZ_INSTRUMENT_ASSIGN" ("CLOUD_PAYMENT_INSTRUMENT_ID") 
+  PCTFREE 10 INITRANS 2 MAXTRANS 255 COMPUTE STATISTICS 
+  TABLESPACE "USERS" ;
+
+EXIT;
+
