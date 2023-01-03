@@ -97,8 +97,8 @@
     hl.location_id
     ,hps.party_site_id
     ,hp.party_id
-    ,'999999999999'||hp.party_number party_number
-    ,'999999999999'||hps.party_site_number party_site_number
+    ,'99999999'||hp.party_number party_number
+    ,'99999999'||hps.party_site_number party_site_number
     ,HCASA.attribute4 party_site_name
     ,hps.IDENTIFYING_ADDRESS_FLAG
     ,decode(hps.IDENTIFYING_ADDRESS_FLAG,'Y','true','false') IDENTIFYING_ADDRESS_FLAG_SOAP
@@ -162,7 +162,7 @@
     and hcasa.org_id in (102,531,532,663,1486,2068,2288)
     --and hcasa.org_id in (102,531,2288)
     and to_number(hp.party_number) = case
-                            when length(c_party_number)-12=length(hp.party_number) then
+                            when length(c_party_number)-8=length(hp.party_number) then
                                 case when length(hp.party_number)!= length(c_party_number) then to_number(substr(c_party_number,length(c_party_number)-length(hp.party_number)+1,length(c_party_number))) else to_number(c_party_number) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_number mora zapisati s nekim sufiksom radi unique errora
                             else
                                 to_number(c_party_number)
@@ -177,7 +177,7 @@
     select distinct
     hl.location_id
     ,hps.party_site_id
-    ,'999999999999'||hps.party_site_number party_site_number
+    ,'99999999'||hps.party_site_number party_site_number
     ,HCASA.attribute4 party_site_name
     ,hpsu.site_use_type site_use_code
     ,hpsu.party_site_use_id site_use_id
@@ -302,7 +302,7 @@
                                                 <org:PartySite>
                                                     <par:PartySiteNumber>'||c_ps.party_site_number||'</par:PartySiteNumber>
                                                     <par:OrigSystem>EBSR11_NEW</par:OrigSystem>         
-                                                    <par:OrigSystemReference>999999999999'||c_ps.party_site_id||'</par:OrigSystemReference>
+                                                    <par:OrigSystemReference>99999999'||c_ps.party_site_id||'</par:OrigSystemReference>
                                                     <par:StartDateActive>'||c_ps.start_date||'</par:StartDateActive>
                                                     <par:IdentifyingAddressFlag>'||c_ps.IDENTIFYING_ADDRESS_FLAG_SOAP||'</par:IdentifyingAddressFlag>
                                                     <par:Language>'||c_ps.language||'</par:Language>
@@ -336,7 +336,7 @@
                                         <par:PrimaryPerType>'||c_psu.primary_per_type||'</par:PrimaryPerType>  
                                         <par:OrigSystem>EBSR11_NEW</par:OrigSystem>                                                                             
                                         <par:CreatedByModule>HZ_WS</par:CreatedByModule>      
-                                        <par:OrigSystemReference>999999999999'||c_psu.site_use_id||'</par:OrigSystemReference>
+                                        <par:OrigSystemReference>99999999'||c_psu.site_use_id||'</par:OrigSystemReference>
                                     </par:PartySiteUse>';
                         l_soap_env := l_soap_env || to_clob(l_text);  
                         
@@ -408,7 +408,7 @@
                             ,xx.process_flag = x_return_status
                             ,xx.last_update_date = sysdate
                             where xx.party_site_id = case
-                                    when length(c_r.source_party_site_id)-12=length(xx.party_site_id) then
+                                    when length(c_r.source_party_site_id)-8=length(xx.party_site_id) then
                                         case when length(xx.party_site_id)!= length(c_r.source_party_site_id) then to_number(substr(c_r.source_party_site_id,length(c_r.source_party_site_id)-length(xx.party_site_id)+1,length(c_r.source_party_site_id))) else to_number(c_r.source_party_site_id) end
                                     else
                                         to_number(c_r.source_party_site_id)
@@ -442,7 +442,7 @@
                                 ,xx.cloud_party_site_id = c_as.party_site_id
                                 ,xx.CLOUD_SITE_USE_ID = c_as.party_site_use_id
                                 where xx.party_site_id = case
-                                    when length(c_r.source_party_site_id)-12=length(xx.party_site_id) then
+                                    when length(c_r.source_party_site_id)-8=length(xx.party_site_id) then
                                         case when length(xx.party_site_id)!= length(c_r.source_party_site_id) then to_number(substr(c_r.source_party_site_id,length(c_r.source_party_site_id)-length(xx.party_site_id)+1,length(c_r.source_party_site_id))) else to_number(c_r.source_party_site_id) end
                                     else
                                         to_number(c_r.source_party_site_id)
@@ -508,7 +508,7 @@
                         where xx.party_site_id in (select xx2.party_site_id 
                                                     from xxdl_hz_party_sites xx2
                                                     ,xxdl_hz_parties xhp
-                                                    where xhp.party_number = '999999999999'||p_party_number
+                                                    where xhp.party_number = '99999999'||p_party_number
                                                     and xhp.party_id = xx2.party_id
                         )
                         ;  
@@ -519,7 +519,7 @@
                         where xx.party_site_id in (select xx2.party_site_id 
                                                     from xxdl_hz_party_sites xx2
                                                     ,xxdl_hz_parties xhp
-                                                    where xhp.party_number = '999999999999'||p_party_number
+                                                    where xhp.party_number = '99999999'||p_party_number
                                                     and xhp.party_id = xx2.party_id
                         )
                         ;                        
@@ -549,7 +549,7 @@
     cursor c_party is
     select 
     hp.party_name party_name
-    ,'999999999999'||hp.party_number party_number
+    ,'99999999'||hp.party_number party_number
     ,hp.jgzz_fiscal_code TAXPAYER_ID
     ,hp.party_id
     ,hp.duns_number
@@ -562,7 +562,7 @@
     and hp.party_id > 0
     and rownum <= nvl(p_rows,10)
     and not exists (select 1 from xxdl_hz_parties xx
-                        where xx.party_number = '999999999999'||hp.party_number
+                        where xx.party_number = '99999999'||hp.party_number
                         and nvl(xx.process_flag,'X') in ('S',decode(p_retry_error,'Y','N','E'))
                         )
 
@@ -581,7 +581,7 @@
             select distinct
             hl.location_id
             ,hps.party_site_id
-            ,'999999999999'||hps.party_site_number party_site_number
+            ,'99999999'||hps.party_site_number party_site_number
             ,HCASA.attribute4 party_site_name
             ,hl.address1
             ,hl.address2
@@ -622,7 +622,7 @@
             and hcasa.org_id in (102,531,532,663,1486,2068,2288)
             --and hcasa.org_id in (102,531,2288)
             and to_number(hp.party_number) = case
-                            when length(c_party_number)-12=length(hp.party_number) then
+                            when length(c_party_number)-8=length(hp.party_number) then
                                 case when length(hp.party_number)!= length(c_party_number) then to_number(substr(c_party_number,length(c_party_number)-length(hp.party_number)+1,length(c_party_number))) else to_number(c_party_number) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_number mora zapisati s nekim sufiksom radi unique errora
                             else
                                 to_number(c_party_number)
@@ -684,7 +684,7 @@
             select distinct
             hl.location_id
             ,hps.party_site_id
-            ,'999999999999'||hps.party_site_number party_site_number
+            ,'99999999'||hps.party_site_number party_site_number
             ,HCASA.attribute4 party_site_name
             ,hl.address1
             ,hl.address2
@@ -725,7 +725,7 @@
             and hcasa.org_id in (102,531,532,663,1486,2068,2288)
             --and hcasa.org_id in (102,531,2288)
             and to_number(hp.party_number) = case
-                            when length(c_party_number)-12=length(hp.party_number) then
+                            when length(c_party_number)-8=length(hp.party_number) then
                                 case when length(hp.party_number)!= length(c_party_number) then to_number(substr(c_party_number,length(c_party_number)-length(hp.party_number)+1,length(c_party_number))) else to_number(c_party_number) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_number mora zapisati s nekim sufiksom radi unique errora
                             else
                                 to_number(c_party_number)
@@ -883,8 +883,8 @@
     hl.location_id
     ,hps.party_site_id
     ,hp.party_id
-    ,'999999999999'||hp.party_number party_number
-    ,'999999999999'||hps.party_site_number party_site_number
+    ,'99999999'||hp.party_number party_number
+    ,'99999999'||hps.party_site_number party_site_number
     ,HCASA.attribute4 party_site_name
     ,hps.IDENTIFYING_ADDRESS_FLAG
     ,decode(hps.IDENTIFYING_ADDRESS_FLAG,'Y','true','false') IDENTIFYING_ADDRESS_FLAG_SOAP
@@ -944,7 +944,7 @@
     and hcsu.site_use_code is not null
     --and hps.status = 'A'
     and to_number(hp.party_number) = case
-                            when length(c_party_number)-12=length(hp.party_number) then
+                            when length(c_party_number)-8=length(hp.party_number) then
                                 case when length(hp.party_number)!= length(c_party_number) then to_number(substr(c_party_number,length(c_party_number)-length(hp.party_number)+1,length(c_party_number))) else to_number(c_party_number) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_number mora zapisati s nekim sufiksom radi unique errora
                             else
                                 to_number(c_party_number)
@@ -959,7 +959,7 @@
     select distinct
     hl.location_id
     ,hps.party_site_id
-    ,'999999999999'||hps.party_site_number party_site_number
+    ,'99999999'||hps.party_site_number party_site_number
     ,HCASA.attribute4 party_site_name
     ,hpsu.site_use_type site_use_code
     ,hpsu.party_site_use_id site_use_id
@@ -1005,7 +1005,7 @@
 
     cursor c_accounts(c_party_id in number) is
     select distinct
-        '999999999999'||hca.account_number account_number
+        '99999999'||hca.account_number account_number
         ,hca.account_name
         ,hca.customer_type
         ,to_char(nvl(hca.account_activation_date,to_date('1998-01-01','YYYY-MM-DD')),'YYYY-MM-DD') account_activation_date    
@@ -1034,7 +1034,7 @@
         --and hcasa.org_id in (102,531,2288)
         --and hps.status = 'A'
         and hp.party_id = case
-                            when length(c_party_id)-12=length(hp.party_id) then
+                            when length(c_party_id)-8=length(hp.party_id) then
                                 case when length(hp.party_id)!= length(c_party_id) then to_number(substr(c_party_id,length(c_party_id)-length(hp.party_id)+1,length(c_party_id))) else to_number(c_party_id) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_id mora zapisati s nekim sufiksom radi unique errora
                             else
                                 to_number(c_party_id)
@@ -1067,7 +1067,7 @@
         ,jt.address_id cloud_address_id
         ,jt.cloud_party_site_number
         ,HCSA.attribute4 party_site_name
-        ,'999999999999'||hps.party_site_number party_site_number
+        ,'99999999'||hps.party_site_number party_site_number
         ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
         ,case
             when hl.country = 'HR' then
@@ -1185,7 +1185,7 @@
         and hca.cust_account_id = c_cust_account_id
         --and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
         and hps.party_site_id = case
-                            when length(jt.source_address_id)-12=length(hps.party_site_id) then
+                            when length(jt.source_address_id)-8=length(hps.party_site_id) then
                                 case when length(hps.party_site_id)!=length(jt.source_address_id) then to_number(substr(jt.source_address_id,(length(jt.source_address_id)-length(hps.party_site_id))+1,length(jt.source_address_id))) else to_number(jt.source_address_id) end
                             else
                                 to_number(jt.source_address_id)
@@ -1309,7 +1309,7 @@
         and hcsa.cust_acct_site_id = c_cust_acct_site_id
         --and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
         and hps.party_site_id = case
-                            when length(jt.source_address_id)-12=length(hps.party_site_id) then
+                            when length(jt.source_address_id)-8=length(hps.party_site_id) then
                                 case when length(hps.party_site_id)!=length(jt.source_address_id) then to_number(substr(jt.source_address_id,(length(jt.source_address_id)-length(hps.party_site_id))+1,length(jt.source_address_id))) else to_number(jt.source_address_id) end
                             else
                                 to_number(jt.source_address_id)
@@ -1522,7 +1522,7 @@
                                 "AddressNumber":"'||c_l.party_site_number||'",
                                 "SourceSystem": "EBSR11_NEW",
                                 "StartDateActive" : "'||c_l.start_date||'",
-                                "SourceSystemReferenceValue": "999999999999'||c_l.party_site_id||'"
+                                "SourceSystemReferenceValue": "99999999'||c_l.party_site_id||'"
                             }';
     
                     l_rest_env := l_rest_env|| to_clob(l_text);
@@ -1654,7 +1654,7 @@
                                         update xxdl_hz_locations xx
                                         set xx.cloud_location_id = c_loc.cloud_location_id
                                         ,xx.process_flag = x_return_status
-                                        where '999999999999'||xx.party_site_id = c_loc.source_address_id;
+                                        where '99999999'||xx.party_site_id = c_loc.source_address_id;
                                     end if;                
                         end loop;
 
@@ -1763,7 +1763,7 @@
                                                     <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
                                                     <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                     <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>999999999999'||c_a.cust_account_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystemReference>99999999'||c_a.cust_account_id||'</cus:OrigSystemReference>';
 
                                 l_soap_env := l_soap_env || to_clob(l_text);
 
@@ -1810,7 +1810,7 @@
                                                     <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
                                                     <cus:Language>'||c_as.language||'</cus:Language>
                                                     <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>999999999999'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystemReference>99999999'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
                                 l_soap_env := l_soap_env || to_clob(l_text);                   
 
                                 for c_asu in c_account_site_use(c_as.cust_acct_site_id,xr_ws_call_id) loop
@@ -1860,7 +1860,7 @@
                                                             <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                             <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
                                                             <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag> 
-                                                            <cus:OrigSystemReference>999999999999'||c_asu.site_use_id||'</cus:OrigSystemReference>
+                                                            <cus:OrigSystemReference>99999999'||c_asu.site_use_id||'</cus:OrigSystemReference>
                                                             <cus:StartDate>'||c_asu.start_date||'</cus:StartDate>
                                                     </cus:CustomerAccountSiteUse>';
                                     l_soap_env := l_soap_env || to_clob(l_text);
@@ -1979,7 +1979,7 @@
                                 ,xx.process_flag = x_return_status
                                 ,xx.last_update_date = sysdate
                                 where xx.cust_account_id = case
-                                    when length(c_r.source_account_id)-12=length(xx.cust_account_id) then
+                                    when length(c_r.source_account_id)-8=length(xx.cust_account_id) then
                                         case when length(xx.cust_account_id)!= length(c_r.source_account_id) then to_number(substr(c_r.source_account_id,length(c_r.source_account_id)-length(xx.cust_account_id)+1,length(c_r.source_account_id))) else to_number(c_r.source_account_id) end  
                                     else
                                         to_number(c_r.source_account_id)
@@ -2036,7 +2036,7 @@
                                     ,xx.cloud_cust_acct_site_id = c_as.cust_acct_site_id
                                     ,xx.CLOUD_CUST_ACCOUNT_ID = c_as.cust_account_id  
                                     where xx.cust_acct_site_id = case
-                                            when length(c_as.source_cust_acct_site_id)-12=length(xx.cust_acct_site_id) then
+                                            when length(c_as.source_cust_acct_site_id)-8=length(xx.cust_acct_site_id) then
                                                 case when length(xx.cust_acct_site_id)!= length(c_as.source_cust_acct_site_id) then to_number(substr(c_as.source_cust_acct_site_id,length(c_as.source_cust_acct_site_id)-length(xx.cust_acct_site_id)+1,length(c_as.source_cust_acct_site_id))) else to_number(c_as.source_cust_acct_site_id) end  
                                             else
                                                 to_number(c_as.source_cust_acct_site_id)
@@ -2103,7 +2103,7 @@
                                         ,xx.CLOUD_BILL_TO_SITE_USE_ID= c_asu.bill_site_to_use_id
                                         ,xx.process_flag = 'S'
                                         where xx.site_use_id = case
-                                            when length(c_asu.source_acct_site_use_id)-12=length(xx.site_use_id) then
+                                            when length(c_asu.source_acct_site_use_id)-8=length(xx.site_use_id) then
                                                 case when length(xx.site_use_id)!= length(c_asu.source_acct_site_use_id) then to_number(substr(c_asu.source_acct_site_use_id,length(c_asu.source_acct_site_use_id)-length(xx.site_use_id)+1,length(c_asu.source_acct_site_use_id))) else to_number(c_asu.source_acct_site_use_id) end  
                                             else
                                                 to_number(c_asu.source_acct_site_use_id)
@@ -2395,7 +2395,7 @@
                         "SourceSystemReference": [
                             {
                                 "SourceSystem": "EBSR11_NEW",
-                                "SourceSystemReferenceValue": "999999999999'||c_p.party_id||'"
+                                "SourceSystemReferenceValue": "99999999'||c_p.party_id||'"
                             }
                         ],
                         "OrganizationName": "'||apex_escape.json(c_p.party_name)||'",
@@ -2424,7 +2424,7 @@
                             "AddressNumber":"'||c_l.party_site_number||'",                                                        
                             "SourceSystem": "EBSR11_NEW",
                             "StartDateActive" : "'||c_l.start_date||'",
-                            "SourceSystemReferenceValue": "999999999999'||c_l.party_site_id||'"
+                            "SourceSystemReferenceValue": "99999999'||c_l.party_site_id||'"
                         }';
                 if c_l.c > 0 then
                     l_text := l_text ||',';
@@ -2552,7 +2552,7 @@
                         update xxdl_hz_locations xx
                         set xx.cloud_location_id = c_loc.cloud_location_id
                         ,xx.process_flag = x_return_status
-                        where '999999999999'||xx.party_site_id = c_loc.source_address_id;
+                        where '99999999'||xx.party_site_id = c_loc.source_address_id;
                     end if;                
                 end loop;
 
@@ -2635,7 +2635,7 @@
                                                 <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
                                                 <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                 <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                <cus:OrigSystemReference>999999999999'||c_a.cust_account_id||'</cus:OrigSystemReference>';
+                                                <cus:OrigSystemReference>99999999'||c_a.cust_account_id||'</cus:OrigSystemReference>';
                             l_soap_env := l_soap_env || to_clob(l_text);
 
                             for c_as in c_account_sites(c_a.cust_account_id, x_ws_call_id) loop
@@ -2679,7 +2679,7 @@
                                                     <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
                                                     <cus:Language>'||c_as.language||'</cus:Language>
                                                     <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>999999999999'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystemReference>99999999'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
                                 l_soap_env := l_soap_env || to_clob(l_text);                    
 
                                 for c_asu in c_account_site_use(c_as.cust_acct_site_id,x_ws_call_id) loop
@@ -2729,7 +2729,7 @@
                                                             <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                             <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
                                                             <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag>                                                    
-                                                            <cus:OrigSystemReference>999999999999'||c_asu.site_use_id||'</cus:OrigSystemReference>
+                                                            <cus:OrigSystemReference>99999999'||c_asu.site_use_id||'</cus:OrigSystemReference>
                                                             <cus:StartDate>'||c_asu.start_date||'</cus:StartDate>
                                                     </cus:CustomerAccountSiteUse>';
                                     l_soap_env := l_soap_env || to_clob(l_text);                                        
@@ -2807,7 +2807,7 @@
                                 ,xx.process_flag = x_return_status
                                 ,xx.last_update_date = sysdate
                                 where xx.cust_account_id = case
-                                            when length(c_r.source_account_id)-12=length(xx.cust_account_id) then
+                                            when length(c_r.source_account_id)-8=length(xx.cust_account_id) then
                                                 case when length(xx.cust_account_id)!= length(c_r.source_account_id) then to_number(substr(c_r.source_account_id,length(c_r.source_account_id)-length(xx.cust_account_id)+1,length(c_r.source_account_id))) else to_number(c_r.source_account_id) end
                                             else
                                                 to_number(c_r.source_account_id)
@@ -2844,7 +2844,7 @@
                                     ,xx.cloud_cust_acct_site_id = c_as.cust_acct_site_id
                                     ,xx.CLOUD_CUST_ACCOUNT_ID = c_as.cust_account_id  
                                     where xx.cust_acct_site_id = case
-                                            when length(c_as.source_cust_acct_site_id)-12=length(xx.cust_acct_site_id) then
+                                            when length(c_as.source_cust_acct_site_id)-8=length(xx.cust_acct_site_id) then
                                                 case when length(xx.cust_acct_site_id )!= length(c_as.source_cust_acct_site_id) then to_number(substr(c_as.source_cust_acct_site_id,length(c_as.source_cust_acct_site_id)-length(xx.cust_acct_site_id )+1,length(c_as.source_cust_acct_site_id))) else to_number(c_as.source_cust_acct_site_id) end
                                             else
                                                 to_number(c_as.source_cust_acct_site_id)
@@ -2889,7 +2889,7 @@
                                         ,xx.CLOUD_BILL_TO_SITE_USE_ID= c_asu.bill_site_to_use_id
                                         ,xx.process_flag = 'S'
                                         where xx.site_use_id = case
-                                            when length(c_asu.source_acct_site_use_id)-12=length(xx.site_use_id) then
+                                            when length(c_asu.source_acct_site_use_id)-8=length(xx.site_use_id) then
                                                 case when length(xx.site_use_id)!= length(c_asu.source_acct_site_use_id) then to_number(substr(c_asu.source_acct_site_use_id,length(c_asu.source_acct_site_use_id)-length(xx.site_use_id)+1,length(c_asu.source_acct_site_use_id))) else to_number(c_asu.source_acct_site_use_id) end  
                                             else
                                                 to_number(c_asu.source_acct_site_use_id)
@@ -3233,7 +3233,7 @@
                             if nvl(c_loc.address_id,0) > 0 then            
                                 update xxdl_hz_locations xx
                                 set xx.process_flag = 'E'
-                                where '999999999999'||xx.location_id = substr(c_loc.source_address_id,instr(c_loc.source_address_id,';',1,1)+1,length(c_loc.source_address_id));
+                                where '99999999'||xx.location_id = substr(c_loc.source_address_id,instr(c_loc.source_address_id,';',1,1)+1,length(c_loc.source_address_id));
                             end if;                
                 end loop;
               
@@ -3529,7 +3529,7 @@
         select distinct
         xx.cloud_party_site_id
         ,hp.party_name
-        ,'999999999999'||hp.party_number party_number
+        ,'99999999'||hp.party_number party_number
         ,xx.cloud_party_site_number
         ,xx.party_site_id
         ,case
@@ -3971,7 +3971,7 @@
                     and hcsu.site_use_code is not null
                     and hca.cust_account_id = c_s.cust_account_id
                     and hps.party_site_id = case
-                            when length(jt.source_address_id)-12=length(hps.party_site_id) then
+                            when length(jt.source_address_id)-8=length(hps.party_site_id) then
                                 case when length(hps.party_site_id)!=length(jt.source_address_id) then to_number(substr(jt.source_address_id,(length(jt.source_address_id)-length(hps.party_site_id))+1,length(jt.source_address_id))) else to_number(jt.source_address_id) end
                             else
                                 to_number(jt.source_address_id)
@@ -5524,6 +5524,478 @@
 
     end;
 
+    /*===========================================================================+
+    Function   : get_customers
+    Description : Download party_site, party_site_uses, party account
+    Usage       :
+    Arguments   : p_entity - name of the entity we download, PARTY_SITES, PARTY_ACCOUNTS, PARTY_SITE_USES
+                p_party_number - party number (registry id ) from cloud
+                p_date - entities max date of creation of last_update_date
+    Remarks     :
+    ============================================================================+*/
+    /*function get_customers(p_entity in varchar2, p_party_number IN varchar2, p_date in varchar2) return varchar2
+    is
+
+    l_body VARCHAR2(30000);
+    l_result varchar2(500);
+    l_result_clob  clob;
+    x_return_status varchar2(500);
+    x_return_message varchar2(32000);
+    l_soap_env clob;
+    l_text varchar2(32000);
+    x_ws_call_id number;
+    l_inflated_resp blob;
+    l_result_nr varchar2(32000);
+    l_resp_xml       XMLType;
+    l_resp_xml_id   XMLType;
+    l_result_nr_id  varchar2(500);
+    l_result_varchar  varchar2(32000);
+    l_result_clob_decode clob;
+
+    l_app_url varchar2(300);
+
+    l_party_site_rec xxdl_hz_party_sites%ROWTYPE;
+    l_party_site_rec_empty xxdl_hz_party_sites%ROWTYPE;
+    l_party_acct_rec xxdl_hz_cust_accounts%ROWTYPE;
+    l_party_acct_rec_empty xxdl_hz_cust_accounts%ROWTYPE;
+    l_party_site_use_rec xxdl_hz_party_site_uses%ROWTYPE;
+    l_party_site_use_rec_empty xxdl_hz_party_site_uses%ROWTYPE;
+
+
+    XX_NO_REPORT exception;
+
+    BEGIN
+
+    execute immediate 'alter session set NLS_TIMESTAMP_TZ_FORMAT= ''YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM''';
+    --execute immediate 'alter session set nls_date_format=''yyyy-mm-dd hh24:mi:ss''';
+    --execute immediate 'alter session set NLS_TIMESTAMP_FORMAT= ''YYYY-MM-DD"T"HH24:MI:SS.FF3''';
+
+    l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
+
+    l_text :='<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
+    <soap:Header/>
+    <soap:Body>
+        <pub:runReport>
+            <pub:reportRequest>
+                <pub:attributeFormat>xml</pub:attributeFormat>
+                <pub:attributeLocale></pub:attributeLocale>
+                <pub:attributeTemplate></pub:attributeTemplate>
+                <pub:parameterNameValues>
+                <!--Zero or more repetitions:-->
+                <pub:item>
+                    <pub:name>p_entity</pub:name>
+                    <pub:values>
+                        <!--Zero or more repetitions:-->
+                        <pub:item>'||p_entity||'</pub:item>   
+                    </pub:values>
+                </pub:item>
+                <pub:item>
+                  <pub:name>p_party_number</pub:name>
+                  <pub:values>
+                     <!--Zero or more repetitions:-->
+                     <pub:item>'||p_party_number||'</pub:item>   
+                  </pub:values>
+               </pub:item>
+                <pub:item>
+                    <pub:name>p_date</pub:name>
+                    <pub:values>
+                        <!--Zero or more repetitions:-->
+                        <pub:item>'||p_date||'</pub:item>   
+                    </pub:values>
+                </pub:item>
+                </pub:parameterNameValues>
+                <pub:reportAbsolutePath>Custom/XXDL_Integration/XXDL_CUSTOMERS_EXPORT_PRT.xdo</pub:reportAbsolutePath>
+                <pub:sizeOfDataChunkDownload>-1</pub:sizeOfDataChunkDownload>
+            </pub:reportRequest>
+            <pub:appParams></pub:appParams>
+        </pub:runReport>
+    </soap:Body>
+    </soap:Envelope>';
+
+    --log('Payload:'||l_text);
+
+    l_soap_env := to_clob(l_text);
+
+    XXFN_CLOUD_WS_PKG.WS_CALL(
+        p_ws_url => l_app_url||'xmlpserver/services/ExternalReportWSSService?WSDL',
+        p_soap_env => l_soap_env,
+        p_soap_act => 'runReport',
+        p_content_type => 'application/soap+xml;charset="UTF-8"',
+        x_return_status => x_return_status,
+        x_return_message => x_return_message,
+        x_ws_call_id => x_ws_call_id);
+        
+    dbms_lob.freetemporary(l_soap_env);
+    log(x_ws_call_id);
+    log('Return status: '||x_return_status);
+    --log(x_return_message);
+
+
+    if(x_return_status = 'S') then
+    
+        log('Extracting xml response');
+        
+        begin
+        select response_xml
+        into l_resp_xml
+        from xxfn_ws_call_log
+        where ws_call_id = x_ws_call_id;
+        exception
+            when no_data_found then
+            raise XX_NO_REPORT;
+        end;
+
+        begin
+        SELECT xml.vals
+        INTO l_result_clob
+        FROM xxfn_ws_call_log a,
+            XMLTable(xmlnamespaces('http://xmlns.oracle.com/oxp/service/PublicReportService' AS "ns2",'http://www.w3.org/2003/05/soap-envelope' AS "env"), '/env:Envelope/env:Body/ns2:runReportResponse/ns2:runReportReturn' PASSING a.response_xml COLUMNS vals CLOB PATH './ns2:reportBytes') xml
+        WHERE a.ws_call_id = x_ws_call_id
+        AND xml.vals      IS NOT NULL;
+        exception
+            when no_data_found then
+            raise XX_NO_REPORT;
+        end;
+
+
+        begin
+        select * into l_party_site_rec
+        from xxdl_hz_party_sites xps
+        where xps.party_id = (select xhp.party_id 
+                            from xxdl_hz_parties xhp
+                                where xhp.party_number = p_party_number);
+        exception
+          when no_data_found then
+          log('Cant find party site for party number in log table!');
+          end;
+
+        begin
+        select * into l_party_acct_rec
+        from xxdl_hz_cust_accounts xhca
+        where xhca.party_id = (select xhp.party_id 
+                            from xxdl_hz_parties xhp
+                                where xhp.party_number = p_party_number);
+        exception
+          when no_data_found then
+          log('Cant find party account for party number in log table!');
+          end;
+
+        begin
+        select * into l_party_site_rec
+        from xxdl_hz_party_site_uses xpss
+        where xpss.party_id = (select xhp.party_id 
+                            from xxdl_hz_parties xhp
+                            ,xxdl_hz_party_sites
+                                where xhp.party_number = p_party_number);
+        exception
+          when no_data_found then
+          log('Cant find party site use for party number in log table!');
+          end;
+
+        
+        
+        l_result_clob_decode := DecodeBASE64(l_result_clob);
+        
+        l_resp_xml_id := XMLType.createXML(l_result_cl  ob_decode);
+        
+        log('Parsing report response for suppliers');
+        
+        FOR cur_rec IN (
+        SELECT xt.*
+        FROM   XMLTABLE('/DATA_DS/PARTY_SITES'
+                PASSING l_resp_xml_id
+                COLUMNS 
+                    PARTY_ID number PATH 'PARTY_ID ', 
+                    PARTY_SITE_ID  number PATH 'PARTY_SITE_ID ',
+                    PARTY_NAME  VARCHAR2(1440) PATH 'PARTY_NAME ',
+                    PARTY_SITE_NUMBER  VARCHAR2(120) PATH 'PARTY_SITE_NUMBER ',
+                    PARTY_SITE_NAME VARCHAR2(200) PATH 'PARTY_SITE_NAME',
+                    LOCATION_ID  NUMBER PATH 'LOCATION_ID',
+                    IDENTIFYING_ADDRESS_FLAG VARCHAR2(1) PATH 'IDENTIFYING_ADDRESS_FLAG',
+                    ORIG_SYSTEM_REFERENCE  VARCHAR2(200) PATH 'ORIG_SYSTEM_REFERENCE '
+                ) xt)
+        LOOP
+    
+            log('====================');
+            log('Party ID:'||cur_rec.PARTY_ID);
+            log('Party site id:'||cur_rec.PARTY_SITE_ID);
+            log('Party name'||cur_rec.PARTY_NAME);
+            log('Party site number:'||cur_rec.PARTY_SITE_NUMBER);
+            log('Party site name:'||cur_rec.PARTY_SITE_NAME);
+            log('Orig party site id:'||cur_rec.ORIG_SYSTEM_REFERENCE);
+            log('==============================');
+            
+            
+            log('Inserting supplier into table');
+            
+            l_party_site_rec.cloud_part := cur_rec.vendor_id;
+            l_party_site_rec.party_id := cur_rec.party_id;
+            l_party_site_rec.vendor_name := cur_rec.vendor_name;
+            l_party_site_rec.supplier_number := cur_rec.supplier_number;
+            l_party_site_rec.vat_number := cur_rec.vat_number;
+            l_party_site_rec.DUNS_NUMBER := cur_rec.DUNS_NUMBER;
+            l_party_site_rec.TAXPAYER_ID := cur_rec.TAXPAYER_ID;
+            begin
+            
+            insert into xxdl_poz_suppliers values l_sup_rec;        
+            
+            exception
+            when dup_val_on_index then
+            log('Supplier already in table, updating record!');
+                update xxdl_poz_suppliers xx
+                set xx.vendor_name = cur_rec.vendor_name
+                ,xx.supplier_number = cur_rec.supplier_number
+                ,xx.vat_number = cur_rec.vat_number
+                ,xx.DUNS_NUMBER = cur_rec.DUNS_NUMBER
+                ,xx.TAXPAYER_ID = cur_rec.TAXPAYER_ID
+                ,xx.inactive_date = cast(to_timestamp_tz(  cur_rec.inactive_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.creation_date = cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.last_update_date =cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.transf_last_update = sysdate
+                where xx.vendor_id = cur_rec.vendor_id;
+            end;
+        end loop;
+        
+        log('End of suppliers download');
+        
+        log('Parsing report response for suppliers addresses');
+        
+        FOR cur_rec IN (
+        SELECT xt.*
+        FROM   XMLTABLE('/DATA_DS/SUPPLIER_ADDRESSES'
+                PASSING l_resp_xml_id
+                COLUMNS 
+                    VENDOR_ID NUMBER PATH 'VENDOR_ID', 
+                    VENDOR_SITE_ID NUMBER PATH 'VENDOR_SITE_ID',
+                    PARTY_SITE_ID NUMBER PATH 'PARTY_SITE_ID',
+                    LOCATION_ID NUMBER PATH 'LOCATION_ID',
+                    ADDRESS_NAME VARCHAR2(400) PATH 'ADDRESS_NAME',
+                    ADDRESS VARCHAR2(3840) PATH 'ADDRESS',
+                    ADDRESS1 VARCHAR2(960) PATH 'ADDRESS1',
+                    ADDRESS2 VARCHAR2(960) PATH 'ADDRESS2',
+                    ADDRESS3 VARCHAR2(960) PATH 'ADDRESS3',
+                    ADDRESS4 VARCHAR2(960) PATH 'ADDRESS4',
+                    CITY  VARCHAR2(240) PATH 'CITY',
+                    COUNTRY VARCHAR2(240) PATH 'COUNTRY',
+                    POSTAL_CODE  VARCHAR2(240) PATH 'POSTAL_CODE',
+                    INACTIVE_DATE VARCHAR2(35) PATH 'INACTIVE_DATE',
+                    CREATION_DATE VARCHAR2(35) PATH 'CREATION_DATE',
+                    LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE'
+                ) xt)
+        LOOP
+    
+            log('====================');
+            log('Vendor ID:'||cur_rec.vendor_id);
+            log('Location Id:'||to_char(cur_rec.location_id));
+            log('Address:'||cur_rec.address);
+            log('Address name:'||cur_rec.address_name);
+            log('Address country:'||cur_rec.country);
+            log('==============================');
+            
+            
+            log('Inserting supplier address into table');
+            l_sup_addr_rec.vendor_id := cur_rec.vendor_id;
+            --l_sup_addr_rec.vendor_site_id := cur_rec.vendor_site_id;  --adresa ne moze imati vendor_site_id, jer jedna adresa ide na više siteova, party_site_id je veza između site i adrese, party_site_id je address_id
+            l_sup_addr_rec.vendor_site_id := null;
+            l_sup_addr_rec.party_site_id := cur_rec.party_site_id;
+            l_sup_addr_rec.location_id := cur_rec.location_id;
+            l_sup_addr_rec.address_name := cur_rec.address_name;
+            l_sup_addr_rec.address := cur_rec.address;
+            l_sup_addr_rec.address1 := cur_rec.address1;
+            l_sup_addr_rec.address2 := cur_rec.address2;
+            l_sup_addr_rec.address3 := cur_rec.address3;
+            l_sup_addr_rec.address4 := cur_rec.address4;
+            l_sup_addr_rec.city := cur_rec.city;
+            l_sup_addr_rec.country := cur_rec.country;
+            l_sup_addr_rec.postal_code := cur_rec.postal_code;
+            l_sup_addr_rec.inactive_date := cast(to_timestamp_tz(  cur_rec.inactive_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
+            l_sup_addr_rec.creation_date := cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
+            l_sup_addr_rec.last_update_date := cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
+            l_sup_addr_rec.transf_creation_date := sysdate;
+            
+            begin
+            
+            insert into xxdl_poz_supplier_addresses values l_sup_addr_rec;        
+            
+            exception
+            when dup_val_on_index then
+            log('Supplier address already in table, updating record!');
+                update xxdl_poz_supplier_addresses xx
+                set xx.vendor_id = cur_rec.vendor_id
+                ,xx.vendor_site_id = null
+                ,xx.party_site_id = cur_rec.party_site_id
+                ,xx.location_id = cur_rec.location_id
+                ,xx.address_name = cur_rec.address_name
+                ,xx.address = cur_rec.address
+                ,xx.address1 = cur_rec.address1
+                ,xx.address2 = cur_rec.address2
+                ,xx.address3 = cur_rec.address3
+                ,xx.address4 = cur_rec.address4
+                ,xx.city = cur_rec.city
+                ,xx.country = cur_rec.country
+                ,xx.postal_code = cur_rec.postal_code
+                ,xx.inactive_date = cast(to_timestamp_tz(  cur_rec.inactive_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.creation_date = cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.last_update_date =cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.transf_last_update = sysdate
+                where xx.location_id = cur_rec.location_id;
+            end;
+        end loop;
+        
+        
+        log('End of suppliers addresses interface check');
+        
+        log('Parsing report response for suppliers sites');
+        
+        FOR cur_rec IN (
+        SELECT xt.*
+        FROM   XMLTABLE('/DATA_DS/SUPPLIER_SITES'
+                PASSING l_resp_xml_id
+                COLUMNS 
+                    VENDOR_ID NUMBER PATH 'VENDOR_ID', 
+                    VENDOR_SITE_ID NUMBER PATH 'VENDOR_SITE_ID',
+                    VENDOR_SITE_CODE VARCHAR2(60) PATH 'VENDOR_SITE_CODE',
+                    PARTY_SITE_ID  NUMBER PATH 'PARTY_SITE_ID',
+                    INACTIVE_DATE  VARCHAR2(35) PATH 'INACTIVE_DATE',
+                    CREATION_DATE VARCHAR2(35) PATH 'CREATION_DATE',
+                    LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE',
+                    BU_NAME VARCHAR2(100) PATH 'BU_NAME'
+                ) xt)
+        LOOP
+    
+            log('====================');
+            log('Vendor ID:'||cur_rec.vendor_id);
+            log('Vendor site Id:'||cur_rec.VENDOR_SITE_ID);
+            log('Vendor site code:'||cur_rec.VENDOR_SITE_CODE);
+            log('BU Namee:'||cur_rec.bu_name);
+            log('==============================');
+            
+            
+            log('Inserting supplier site into table');
+            l_sup_site_rec.vendor_id := cur_rec.vendor_id;
+            l_sup_site_rec.vendor_site_id := cur_rec.vendor_site_id;
+            l_sup_site_rec.vendor_site_code := cur_rec.vendor_site_code;
+            l_sup_site_rec.party_site_id := cur_rec.party_site_id;
+            l_sup_site_rec.inactive_date := cast(to_timestamp_tz(  cur_rec.inactive_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
+            l_sup_site_rec.creation_date := cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
+            l_sup_site_rec.last_update_date := cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
+            l_sup_site_rec.transf_creation_date := sysdate;
+            l_sup_site_rec.bu_name := cur_rec.bu_name;
+            
+            begin
+            
+            insert into xxdl_poz_supplier_sites values l_sup_site_rec;        
+            
+            exception
+            when dup_val_on_index then
+            log('Supplier site already in table, updating record!');
+                update xxdl_poz_supplier_sites xx
+                set xx.vendor_id = cur_rec.vendor_id
+                ,xx.vendor_site_id = cur_rec.vendor_site_id
+                ,xx.vendor_site_code = cur_rec.vendor_site_code
+                ,xx.party_site_id = cur_rec.party_site_id
+                ,xx.inactive_date = cast(to_timestamp_tz(  cur_rec.inactive_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.creation_date = cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.last_update_date =cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.transf_last_update = sysdate
+                ,xx.bu_name = cur_rec.bu_name
+                where xx.vendor_site_id = cur_rec.vendor_site_id
+                and xx.bu_name = cur_rec.bu_name;
+            end;
+        end loop;
+        
+        log('End of suppliers sites download');
+        
+        log('Parsing report response for suppliers contacts');
+        
+            FOR cur_rec IN (
+        SELECT xt.*
+        FROM   XMLTABLE('/DATA_DS/SUPPLIER_CONTACTS'
+                PASSING l_resp_xml_id
+                COLUMNS 
+                    VENDOR_CONTACT_ID NUMBER PATH 'VENDOR_CONTACT_ID', 
+                    VENDOR_ID NUMBER PATH 'VENDOR_ID',
+                    PER_PARTY_ID NUMBER PATH 'PER_PARTY_ID',
+                    PARTY_SITE_ID VARCHAR2(60) PATH 'PARTY_SITE_ID',
+                    PERSON_FIRST_NAME VARCHAR2(600) PATH 'PERSON_FIRST_NAME',
+                    PERSON_LAST_NAME VARCHAR2(600) PATH 'PERSON_LAST_NAME',
+                    EMAIL_ADDRESS VARCHAR2(1280) PATH 'EMAIL_ADDRESS',
+                    INACTIVE_DATE VARCHAR2(35) PATH 'INACTIVE_DATE',
+                    CREATION_DATE VARCHAR2(35) PATH 'CREATION_DATE',
+                    LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE'
+                ) xt)
+        LOOP
+    
+            log('====================');
+            log('Vendor contact ID:'||cur_rec.VENDOR_CONTACT_ID);
+            log('Party site ID:'||cur_rec.PARTY_SITE_ID);
+            log('First name Id:'||cur_rec.PERSON_FIRST_NAME);
+            log('Last name:'||cur_rec.PERSON_LAST_NAME);
+            log('==============================');
+            
+            
+            log('Inserting supplier address into table');
+            l_sup_cont_rec.vendor_contact_id := cur_rec.vendor_contact_id;
+            l_sup_cont_rec.vendor_id := cur_rec.vendor_id;
+            l_sup_cont_rec.PER_PARTY_ID := cur_rec.PER_PARTY_ID;
+            l_sup_cont_rec.PARTY_SITE_ID := cur_rec.PARTY_SITE_ID;
+            l_sup_cont_rec.PERSON_FIRST_NAME := cur_rec.PERSON_FIRST_NAME;
+            l_sup_cont_rec.PERSON_LAST_NAME := cur_rec.PERSON_LAST_NAME;
+            l_sup_cont_rec.EMAIL_ADDRESS := cur_rec.EMAIL_ADDRESS;
+            l_sup_cont_rec.inactive_date := cast(to_timestamp_tz(  cur_rec.inactive_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
+            l_sup_cont_rec.creation_date := cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
+            l_sup_cont_rec.last_update_date := cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
+            l_sup_cont_rec.transf_creation_date := sysdate;
+            
+            begin
+            
+            insert into xxdl_poz_supplier_contacts values l_sup_cont_rec;        
+            
+            exception
+            when dup_val_on_index then
+            log('Supplier site already in table, updating record!');
+                update xxdl_poz_supplier_contacts xx
+                set xx.vendor_contact_id = cur_rec.vendor_contact_id
+                ,xx.per_party_id = cur_rec.per_party_id
+                ,xx.vendor_id = cur_rec.vendor_id
+                ,xx.party_site_id = cur_rec.party_site_id
+                ,xx.PERSON_FIRST_NAME = cur_rec.PERSON_FIRST_NAME
+                ,xx.PERSON_LAST_NAME = cur_rec.PERSON_LAST_NAME
+                ,xx.EMAIL_ADDRESS = cur_rec.EMAIL_ADDRESS
+                ,xx.inactive_date = cast(to_timestamp_tz(  cur_rec.inactive_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.creation_date = cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.last_update_date =cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
+                ,xx.transf_last_update = sysdate
+                where xx.vendor_contact_id = cur_rec.vendor_contact_id;
+            end;
+        end loop;
+        log('End of suppliers contacts download');   
+
+         update xxfn_ws_call_log xx 
+                set xx.response_xml = null
+                ,xx.response_clob = null
+                ,xx.response_blob = null
+                ,xx.ws_payload_xml = null
+                where ws_call_id = x_ws_call_id;
+
+        log('Cleared xxfn_ws_call_log table!');           
+        
+    end if;
+    return x_return_status;
+    exception
+    when XX_NO_REPORT then
+        log('Cant find the report for call ID:'||x_ws_call_id);
+        return 'E';
+    when others then
+    rollback;
+        log('Error occured during web service call for sending csv to cloud: '||sqlcode);
+        log('Msg:'||sqlerrm);
+        log('Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK());
+        log('Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
+        return 'E';
+    END get_customers;
+*/
 
     /*===========================================================================+
     -- Name    : find_supplier_site
@@ -6479,7 +6951,7 @@
                         ,xx_bank.branch_party_id cloud_bank_id
                         ,bank_acc.bank_branch_id
                         ,bank_acc.bank_account_name
-                        ,'999999999999 '||bank_acc.bank_account_num bank_account_num
+                        ,'99999999 '||bank_acc.bank_account_num bank_account_num
                         ,bank_acc.address_line1
                         ,bank_acc.iban_number
                         ,bank_acc.country bank_country            
