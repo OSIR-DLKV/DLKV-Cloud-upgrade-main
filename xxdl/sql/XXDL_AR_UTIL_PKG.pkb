@@ -7610,7 +7610,7 @@
         select
         xhp.*
         from
-        xxdl_hz_parties_22112022 xhp
+        xxdl_hz_parties xhp
         where xhp.party_number like nvl(p_party_number,'%')
         and xhp.cloud_party_id > 0 
         ;
@@ -7702,7 +7702,7 @@
         select
         xps.*
         from
-        xxdl_poz_suppliers_13122022 xps
+        xxdl_poz_suppliers xps
         where xps.supplier_number like nvl(p_supplier_number,'%')
         and xps.vendor_id > 0 
         ;
