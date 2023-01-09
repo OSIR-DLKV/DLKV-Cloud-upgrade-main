@@ -306,7 +306,6 @@
                                                 <org:PartySite>
                                                     <par:PartySiteNumber>'||c_ps.party_site_number||'</par:PartySiteNumber>
                                                     <par:OrigSystem>EBSR11</par:OrigSystem>         
-                                                    <par:OrigSystemReference>'||c_ps.party_site_id||'</par:OrigSystemReference>         
                                                     <par:StartDateActive>'||c_ps.start_date||'</par:StartDateActive>
                                                     <par:IdentifyingAddressFlag>'||c_ps.IDENTIFYING_ADDRESS_FLAG_SOAP||'</par:IdentifyingAddressFlag>
                                                     <par:Language>'||c_ps.language||'</par:Language>
@@ -915,7 +914,8 @@
         and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
         and hps.location_id = hl.location_id(+)
         and hcsu.site_use_code is not null
-        --and hps.status = 'A'
+        and hca.status = 'A'
+        --and hca.cust_account_id = 1645593
         --and hcasa.org_id in (102,531,532,663,1486,2068,2288)
         --and hcasa.org_id in (102,531,2288)
         --and hps.status = 'A'
@@ -1069,6 +1069,8 @@
         and hps.location_id = hl.location_id(+)
         and hcsu.site_use_code is not null
         and hca.cust_account_id = c_cust_account_id
+        and hca.status = 'A'
+        --and hca.cust_account_id = 1645593
         --and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
         --and hps.party_site_id = case
         --and hl.location_id = case    
@@ -1201,6 +1203,8 @@
         and hps.location_id = hl.location_id(+)
         and hcsu.site_use_code is not null
         and hcsa.cust_acct_site_id = c_cust_acct_site_id
+        and hca.status = 'A'
+        --and hca.cust_account_id = 1645593
         --and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
         --and hps.party_site_id = case
         --and hl.location_id = case   
@@ -1418,7 +1422,7 @@
                                 "AddressNumber":"'||c_l.party_site_number||'",
                                 "SourceSystem": "EBSR11",
                                 "StartDateActive" : "'||c_l.start_date||'",
-                                "SourceSystemReferenceValue": "'||c_l.location_id||'"
+                                "SourceSystemReferenceValue": "'||c_l.party_site_id||';'||c_l.location_id||'"
                             }';
     
                     l_rest_env := l_rest_env|| to_clob(l_text);
@@ -1660,7 +1664,7 @@
                                                     <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
                                                     <cus:AccountName>'||c_a.account_name||'</cus:AccountName>    
                                                     <cus:AccountNumber>'||c_a.account_number||'</cus:AccountNumber>
-                                                    <cus:CustomerType>'||c_a.account_name||'</cus:CustomerType>
+                                                    <cus:CustomerType>'||c_a.customer_type||'</cus:CustomerType>
                                                     <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
                                                     <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                     <cus:OrigSystem>EBSR11</cus:OrigSystem>
@@ -2325,7 +2329,7 @@
                             "AddressNumber":"'||c_l.party_site_number||'",                                                        
                             "SourceSystem": "EBSR11",
                             "StartDateActive" : "'||c_l.start_date||'",
-                            "SourceSystemReferenceValue": "'||c_l.location_id||'"
+                            "SourceSystemReferenceValue": "'||c_l.party_site_id||';'||c_l.location_id||'"
                         }';
                 if c_l.c > 0 then
                     l_text := l_text ||',';
@@ -3636,7 +3640,7 @@
 
                 l_text := '{
                     "PartyTypeCode": "THIRD_PARTY",
-                    "PartyName":"'||c_p.party_name||'",
+                    "PartyName":"'||apex_escape.json(c_p.party_name)||'",
                     "PartyNumber":"'||c_p.party_number||'",
                     "RoundingLevelCode": "HEADER",
                     "RoundingRuleCode": "NEAREST",
@@ -3969,7 +3973,7 @@
 
                 l_text := '{
                     "PartyTypeCode": "THIRD_PARTY_SITE",
-                    "PartyName":"'||c_s.party_name||'",
+                    "PartyName":"'||apex_escape.json(c_s.party_name)||'",
                     "PartyNumber":"'||c_s.party_number||'",
                     "RoundingLevelCode": "HEADER",
                     "RoundingRuleCode": "NEAREST",
@@ -6112,8 +6116,8 @@
 
 
     /*===========================================================================+
-    -- Name    : find_supplier_contact_address
-    -- Desc    : Find existing supplier contact address
+    -- Name    : get_ccid_account_segs
+    -- Desc    : get_accounts_segs
     -- Usage   : 
     -- Parameters
     ============================================================================+*/
@@ -6124,7 +6128,7 @@
     begin
 
         begin
-            select gcc.segment1||'.'||gcc.segment2||'.'||gcc.segment3||'.'||gcc.segment4||'.'||gcc.segment5||'.'||gcc.segment6||'.'||gcc.segment7||'.0.000000.000000' liability
+            select gcc.segment1||'.'||gcc.segment2||'.'||gcc.segment3||'.'||gcc.segment4||'.'||gcc.segment5||'.'||gcc.segment6||'.'||gcc.segment7||'.00.000000.000000' liability
             into l_acc
             from
             apps.gl_code_combinations@ebsprod gcc
