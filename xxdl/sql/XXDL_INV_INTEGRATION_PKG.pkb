@@ -7,6 +7,7 @@ create or replace package body xxdl_inv_integration_pkg is
   History     :
   v1.0 15.07.2022 Marko Sladoljev: Inicijalna verzija
   v1.1 22.12.2022 Marko Sladoljev: Verzija za PROD
+  v1.2 06.01.2022 Marko Sladoljev: Izmjene nakon testiranja s reflection - pragma autonomous removed
   ============================================================================+*/
 
   -- Log variables
@@ -913,8 +914,6 @@ create or replace package body xxdl_inv_integration_pkg is
   Arguments   : 
   ============================================================================+*/
   procedure process_transactions_interface(p_batch_id number) as
-    -- Potrebno da se moze iz triggera pozivati
-    pragma autonomous_transaction;
   
     cursor cur_transactions is
       select *
@@ -1128,12 +1127,10 @@ create or replace package body xxdl_inv_integration_pkg is
          set i.status = l_trans_status, i.error_message = l_trans_error_message, i.last_update_date = sysdate
        where i.transaction_interface_id = c_trans.transaction_interface_id;
     
-      -- Commit is required after each record to reflect Cloud transaction status
-      commit;
-    
     end loop;
     xout('*** End of report ***');
     xlog('Procedure process_transactions_interface ended');
+
   exception
     when others then
       elog('*** OTHERS unhandled exception');

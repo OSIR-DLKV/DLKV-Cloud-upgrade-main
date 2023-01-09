@@ -6,6 +6,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   Description : Package to support mappings generation
   History     :
   v1.0 13.05.2022 Marko Sladoljev: Inicijalna verzija
+  v1.1 07.01.2023 Marko Sladoljev: varchar/clob zamjena radi velicine zapisa
   ============================================================================+*/
 
   -- File names
@@ -40,7 +41,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   begin
     g_last_message := p_text;
     if g_log_level = xxdl_log_pkg.g_level_statement then
-      dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
+      --dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
       xxdl_log_pkg.log(p_module => c_module, p_log_level => xxdl_log_pkg.g_level_statement, p_message => p_text);
     end if;
   end;
@@ -271,7 +272,7 @@ create or replace package body xxdl_sla_mappings_pkg is
                 p_wsdl_link   - URL of the web service we are calling, e.g. https://ehaz-test.fa.em2.oraclecloud.com:443/fscmService/ErpIntegrationService
                 p_wsdl_method  - Web service method we are calling, importBulkData, runReport
   ============================================================================+*/
-  procedure send_csv_to_cloud(p_document      in varchar2,
+  procedure send_csv_to_cloud(p_document      in clob,
                               p_doc_name      in varchar2,
                               p_doc_type      in varchar2,
                               p_author        in varchar2,
@@ -290,7 +291,7 @@ create or replace package body xxdl_sla_mappings_pkg is
     l_return_status      varchar2(500);
     l_return_message     varchar2(32000);
     l_soap_env           clob;
-    l_text               varchar2(32000);
+    l_text               clob;
     l_inflated_resp      blob;
     l_result_nr          varchar2(32000);
     l_resp_xml           xmltype;
@@ -334,7 +335,7 @@ create or replace package body xxdl_sla_mappings_pkg is
            </soapenv:Body>
       </soapenv:Envelope>';
   
-    l_soap_env := to_clob(l_text);
+    l_soap_env := l_text;
   
     xxfn_cloud_ws_pkg.ws_call(p_ws_url         => p_wsdl_link,
                               p_soap_env       => l_soap_env,
@@ -358,31 +359,45 @@ create or replace package body xxdl_sla_mappings_pkg is
   /*===========================================================================+
   Function    : base64_encode_file
   Description : Encodes file contents with base64
-  Usage       : called from package XXPO_NCS_FBDI_PKG
+  Usage       : 
   Arguments   : p_dir                - directory where file is stored
                 p_filename           - name of the file
   Returns     : Encoded contents of a file
   ============================================================================+*/
-  procedure base64_encode_file(p_dir in varchar2, p_filename in varchar2, p_encode out varchar2) is
+  procedure base64_encode_file(p_dir in varchar2, p_filename in varchar2, p_encode out clob) is
     l_encoded blob;
     l_b_file  bfile;
     l_step    pls_integer := 12000;
     l_clob    clob;
   begin
   
-    xlog('Starting base64 encoding');
+    xlog('Procedure base64_encode_file started');
   
     xlog('Opening file:' || p_filename);
   
     l_b_file := bfilename(p_dir, p_filename);
+    
+    xlog('l_b_file initialized');
+    
     dbms_lob.fileopen(l_b_file, dbms_lob.file_readonly);
+    
+    xlog('File opened, starting loop');
   
     for i in 0 .. trunc((dbms_lob.getlength(l_b_file) - 1) / l_step) loop
       l_clob := l_clob || utl_raw.cast_to_varchar2(utl_encode.base64_encode(dbms_lob.substr(l_b_file, l_step, i * l_step + 1)));
     end loop;
+    
+    xlog('Loop ended');
+    
+    xlog('Clob length: ' || dbms_lob.getlength(l_clob));
   
+    xlog('Setting p_encode out parameter');
     p_encode := l_clob;
+    
+    xlog('Closing the file');
     dbms_lob.fileclose(l_b_file);
+    
+    xlog('Procedure base64_encode_file ended');
   exception
     when others then
       dbms_lob.fileclose(l_b_file);
@@ -701,7 +716,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   procedure process_interface(p_batch_id number, p_reprocess_flag boolean, p_purge_flag boolean) as
   
     l_filename_zip        varchar2(250);
-    l_document            varchar2(30000);
+    l_document            clob;
     l_doc_type            varchar2(100) := '.csv';
     l_app_account         varchar2(300) := 'fin$/fusionAccountingHub$/import';
     l_job_name            varchar2(500) := '/oracle/apps/ess/financials/commonModules/shared/common/interfaceLoader/,InterfaceLoaderController';

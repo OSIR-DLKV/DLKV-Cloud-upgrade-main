@@ -533,6 +533,18 @@ create or replace package body xxdl_mig_items_pkg as
       return l_new_category;
     end if;
   
+    -- Check xxdl_proiz_usl for item
+    begin
+      select max(trim(cat_new)) into l_new_category from xxdl.xxdl_proiz_usl@ebsprod where proizvod = p_item_number;
+    exception
+      when no_data_found then
+        l_new_category := null;
+    end;
+  
+    if l_new_category is not null then
+      return l_new_category;
+    end if;
+  
     -- Check xxdl_nab_cat_old_new for category mapping
     begin
       select trim(cat_new) into l_new_category from xxdl.xxdl_nab_cat_old_new@ebsprod where cat_old = p_category_code_old;
@@ -776,7 +788,7 @@ create or replace package body xxdl_mig_items_pkg as
                where xx.inventory_item_id = msi.inventory_item_id
                  and xx.organization_id = msi.organization_id
                  and xx.process_flag = 'E'
-                 and p_retry_error = 'N') -- error recordi se procesiraju ako je traženo 
+                 and p_retry_error = 'N') -- error recordi se procesiraju ako je trazeno 
        order by segment1,
                 case
                   when organization_code_ebs = 'DLK' then
@@ -903,6 +915,7 @@ create or replace package body xxdl_mig_items_pkg as
     l_match_approval_level_value        varchar2(100);
     l_invoice_match_option_value        varchar2(100);
     l_so_transaction_enabled_flag       varchar2(100);
+    l_orderable_on_web_flag             varchar2(100);
   
   begin
   
@@ -947,6 +960,7 @@ create or replace package body xxdl_mig_items_pkg as
                   <item:PurchasingFlag>[PURCHASING_FLAG]</item:PurchasingFlag>
                   <item:CustomerOrderFlag>[CUSTOMER_ORDER_FLAG]</item:CustomerOrderFlag>
                   <item:CustomerOrderEnabledFlag>[CUSTOMER_ORDER_ENABLED_FLAG]</item:CustomerOrderEnabledFlag>
+                  <item:OrderableOnWebFlag>[ORDERABLE_ON_WEB_FLAG]</item:OrderableOnWebFlag>
                   <item:TransactionEnabledFlag>[SO_TRANSACTION_ENABLED_FLAG]</item:TransactionEnabledFlag>
                   <item:ListPrice>[LIST_PRICE]</item:ListPrice>
                   <item:UnitWeightQuantity>[UNIT_WEIGHT_QUANTITY]</item:UnitWeightQuantity>
@@ -1000,6 +1014,7 @@ create or replace package body xxdl_mig_items_pkg as
                   <item:PurchasingFlag>[PURCHASING_FLAG]</item:PurchasingFlag>
                   <item:CustomerOrderFlag>[CUSTOMER_ORDER_FLAG]</item:CustomerOrderFlag>
                   <item:CustomerOrderEnabledFlag>[CUSTOMER_ORDER_ENABLED_FLAG]</item:CustomerOrderEnabledFlag>
+                  <item:OrderableOnWebFlag>[ORDERABLE_ON_WEB_FLAG]</item:OrderableOnWebFlag>
                   <item:TransactionEnabledFlag>[SO_TRANSACTION_ENABLED_FLAG]</item:TransactionEnabledFlag>
                   <item:ListPrice>[LIST_PRICE]</item:ListPrice>
                   <item:AssetCategoryValue>[ASSET_CATEGORY]</item:AssetCategoryValue>                  
@@ -1208,6 +1223,9 @@ create or replace package body xxdl_mig_items_pkg as
             l_costing_enabled_flag := 'true';
           end if;
         
+          -- l_orderable_on_web_flag
+          l_orderable_on_web_flag := l_customer_order_enabled_flag;
+        
           xlog('Creating item...');
         
           if l_organization_code = 'DLK' then
@@ -1240,6 +1258,7 @@ create or replace package body xxdl_mig_items_pkg as
           l_text := replace(l_text, '[PURCHASABLE_FLAG]', l_purchasable_flag);
           l_text := replace(l_text, '[CUSTOMER_ORDER_FLAG]', l_customer_order_flag);
           l_text := replace(l_text, '[CUSTOMER_ORDER_ENABLED_FLAG]', l_customer_order_enabled_flag);
+          l_text := replace(l_text, '[ORDERABLE_ON_WEB_FLAG]', l_orderable_on_web_flag);
           l_text := replace(l_text, '[SHIPPABLE_FLAG]', l_shippable_flag);
           l_text := replace(l_text, '[INTERNAL_ORDER_FLAG]', l_internal_order_flag);
           l_text := replace(l_text, '[INTERNAL_ORDER_ENABLED_FLAG]', l_internal_order_enabled_flag);
@@ -1295,7 +1314,6 @@ create or replace package body xxdl_mig_items_pkg as
             l_text_categories := replace(l_text_categories, '[CATEGORY_SET_NAME]', 'Racunovodstvena kategorija');
             l_text_categories := replace(l_text_categories, '[CATEGORY_CODE]', 'NEDEFINIRANO');
           end if;
-          
         
           l_text := replace(l_text, '[CATEGORIES_XML]', l_text_categories);
         
@@ -1344,7 +1362,7 @@ create or replace package body xxdl_mig_items_pkg as
             end;
           
             -- Delete lobs after successful item migrated
-           xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+            xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
           
           else
             xlog('   Error! Item not migrated!');
