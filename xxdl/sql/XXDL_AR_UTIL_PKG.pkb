@@ -624,8 +624,9 @@
             and hps.party_site_id = hcasa.party_site_id(+)
             and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
             and hps.location_id = hl.location_id(+)
+            and hca.status = 'A'
             --and hps.status = 'A'
-            and hcsu.site_use_code is not null
+            --and hcsu.site_use_code is not null
             --and hcasa.org_id in (102,531,532,663,1486,2068,2288)
             and hcasa.org_id = xx_set.ebs_org_id
             --and hcasa.org_id in (102,531,2288)
@@ -729,7 +730,8 @@
             and hps.party_site_id = hcasa.party_site_id(+)
             and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
             and hps.location_id = hl.location_id(+)
-            and hcsu.site_use_code is not null
+            and hca.status = 'A'
+            --and hcsu.site_use_code is not null
             --and hps.status = 'A'
             --and hcasa.org_id in (102,531,532,663,1486,2068,2288)
             and hcasa.org_id = xx_set.ebs_org_id
@@ -913,7 +915,7 @@
         and hps.party_site_id = hcasa.party_site_id(+)
         and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
         and hps.location_id = hl.location_id(+)
-        and hcsu.site_use_code is not null
+        --and hcsu.site_use_code is not null
         and hca.status = 'A'
         --and hca.cust_account_id = 1645593
         --and hcasa.org_id in (102,531,532,663,1486,2068,2288)
@@ -1204,6 +1206,7 @@
         and hcsu.site_use_code is not null
         and hcsa.cust_acct_site_id = c_cust_acct_site_id
         and hca.status = 'A'
+        and hcsu.status = 'A'
         --and hca.cust_account_id = 1645593
         --and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
         --and hps.party_site_id = case
@@ -5077,7 +5080,8 @@
                     INACTIVE_DATE VARCHAR2(35) PATH 'INACTIVE_DATE',
                     CREATION_DATE VARCHAR2(35) PATH 'CREATION_DATE',
                     LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE'
-                ) xt)
+                ) xt
+                )
         LOOP
     
             log('====================');
@@ -5228,7 +5232,9 @@
                     CREATION_DATE VARCHAR2(35) PATH 'CREATION_DATE',
                     LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE',
                     BU_NAME VARCHAR2(100) PATH 'BU_NAME'
-                ) xt)
+                ) xt
+                --where vendor_site_code = 'AUTO-SERVIS MAT'
+                )
         LOOP
     
             log('====================');
@@ -6230,14 +6236,42 @@
         and xx_cust_site.party_site_id = hps.party_site_id
         and to_char(hps.party_site_number) = pvs.attribute3
         and xx_cust_site.org_id = pvs.org_id
-        and xx_hp.party_number like nvl(p_party_number,'%')  
         and pvs.vendor_id = pv.vendor_id
         and xx_cust_site.cloud_set_id =  xx_set.reference_data_set_id(+)
+        and xx_hp.party_number in (select
+                    party_number
+                    from
+                    (
+                    select
+                                            distinct xhp.party_number
+                                            from
+                                            xxdl_hz_parties xhp
+                                            ,xxdl_hz_cust_accounts xhca
+                                            ,xxdl_hz_cust_acct_sites xhcas
+                                            where xhp.party_id = xhca.party_id
+                                            and xhca.cust_account_id = xhcas.cust_account_id
+                                            and xhp.party_number like nvl(p_party_number,'%')  
+                                            and exists (select 1 from 
+                                                            apps.po_vendor_sites_all@ebsprod pvs
+                                                                where pvs.attribute3 = xhcas.party_site_number)
+                                            and not exists (select 1 from
+                                                                xxdl_poz_supplier_sites xpss
+                                                                    where xpss.party_site_id = xhcas.cloud_party_site_id)
+                                            and not exists (select 1 from
+                                                                apps.hz_cust_accounts@ebsprod hca
+                                                                    where hca.cust_account_id = xhca.cust_account_id
+                                                                    and hca.status = 'I')
+                                                                
+                        )
+                        where rownum <= 50)
+        and not exists (select 1 from xxdl_poz_supplier_sites xpss
+                        where xpss.party_site_id = xx_psa.party_site_id)
+        order by xx_psa.vendor_id
         ;
 
         cursor c_supplier_sites(c_party_site_id in number) is
         select distinct
-                pvs.vendor_site_code||'' vendor_site_code
+                xx_cust_site.party_site_name vendor_site_code
                 ,xx_set.business_unit_name
                 ,xx_cust_site.party_site_name address_name
                 ,case
@@ -6351,6 +6385,8 @@
 
     l_app_url := get_config('ServiceRootURL');
     --l_app_url := get_config('EwhaTestServiceRootURL');
+
+    log('Starting import!');
 
 
     for c_sa in c_supplier_address loop
@@ -6471,9 +6507,9 @@
                 dbms_lob.createtemporary(l_soap_env, TRUE);
 
                 l_text := '{
-                    "SupplierSite": "'||c_a.vendor_site_code||'",
+                    "SupplierSite": "'||apex_escape.json(c_a.vendor_site_code)||'",
                     "ProcurementBU": "'||c_a.business_unit_name||'",
-                    "SupplierAddressName": "'||c_a.address_name||'",
+                    "SupplierAddressName": "'||apex_escape.json(c_a.address_name)||'",
                     "InactiveDate": null,
                     "SitePurposeSourcingOnlyFlag": false,
                     "SitePurposePurchasingFlag": true,
@@ -6767,8 +6803,8 @@
                             dbms_lob.createtemporary(l_soap_env, TRUE);
 
                             l_text := '{ 
-                                "FirstName": "'||nvl(c_va.first_name,c_va.last_name)||'",
-                                "LastName": "'||c_va.last_name||'",
+                                "FirstName": "'||apex_escape.json(nvl(c_va.first_name,c_va.last_name))||'",
+                                "LastName": "'||apex_escape.json(c_va.last_name)||'",
                                 "Email": "'||c_va.email_address||'",
                                 "PhoneAreaCode": "'||c_va.area_code||'",
                                 "PhoneNumber": "'||c_va.phone||'"                            
@@ -7033,6 +7069,7 @@
                         --and pvs.vendor_id = pv.vendor_id
                         pvs.vendor_site_id = c_a.vendor_site_id
                         and pvs.vendor_site_id = bank_acc.vendor_site_id(+)
+                        and pvs.org_id = bank_acc.org_id(+)
                         and bank_acc.bank_branch_name = xx_bank.bank_branch_name(+)
                         ) loop
                             --starting bank account
@@ -7098,7 +7135,7 @@
                                                 "Intent": "Supplier",
                                                 "PartyId": '||c_sa.cloud_party_id||',
                                                 "IBAN": "'||c_b.iban_number||'",
-                                                "BankAccountName": "'||c_b.bank_account_name||'",
+                                                "BankAccountName": "'||apex_escape.json(c_b.bank_account_name)||'",
                                                 "CurrencyCode":"'||c_b.currency_code||'",
                                                 "StartDate":"1998-01-01"
                                             }';
@@ -7341,9 +7378,10 @@
                                                     if l_bank_acc_rec.CLOUD_EXT_PAYEE_ID > 0 then
 
                                                         log('                           Starting assignment for payee id:'||l_bank_acc_rec.CLOUD_EXT_PAYEE_ID);
+                                                        log('                           Bank account primary flag:'||l_bank_acc_rec.primary_flag);
 
                                                        -- if l_bank_acc_rec.cloud_payment_instrument_id > 0 then
-                                                            log('                                   Payment instrument already assigned!');
+                                                            --log('                                   Payment instrument already assigned!');
 
                                                        -- else    
 

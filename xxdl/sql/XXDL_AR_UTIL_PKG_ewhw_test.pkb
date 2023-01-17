@@ -97,8 +97,8 @@
     hl.location_id
     ,hps.party_site_id
     ,hp.party_id
-    ,'99999999'||hp.party_number party_number
-    ,'99999999'||hps.party_site_number party_site_number
+    ,'44444444'||hp.party_number party_number
+    ,'44444444'||hps.party_site_number party_site_number
     ,HCASA.attribute4 party_site_name
     ,hps.IDENTIFYING_ADDRESS_FLAG
     ,decode(hps.IDENTIFYING_ADDRESS_FLAG,'Y','true','false') IDENTIFYING_ADDRESS_FLAG_SOAP
@@ -150,6 +150,7 @@
     ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
     ,apps.hz_locations@ebsprod hl
     ,xxdl_hz_locations xhl
+    ,xxdl_cloud_reference_sets xx_set
     where 1=1
     and hp.party_id = hca.party_id(+)
     and hp.party_id = hps.party_id(+)
@@ -159,7 +160,8 @@
     and hps.location_id = hl.location_id(+)
     and hcsu.site_use_code is not null
     --and hps.status = 'A'
-    and hcasa.org_id in (102,531,532,663,1486,2068,2288)
+    --and hcasa.org_id in (102,531,532,663,1486,2068,2288)
+    and hcasa.org_id = xx_set.ebs_org_id
     --and hcasa.org_id in (102,531,2288)
     and to_number(hp.party_number) = case
                             when length(c_party_number)-8=length(hp.party_number) then
@@ -177,7 +179,7 @@
     select distinct
     hl.location_id
     ,hps.party_site_id
-    ,'99999999'||hps.party_site_number party_site_number
+    ,'44444444'||hps.party_site_number party_site_number
     ,HCASA.attribute4 party_site_name
     ,hpsu.site_use_type site_use_code
     ,hpsu.party_site_use_id site_use_id
@@ -200,6 +202,7 @@
     ,apps.HZ_CUST_ACCT_SITES_ALL@ebsprod HCASA
     ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
     ,apps.hz_locations@ebsprod hl
+    ,xxdl_cloud_reference_sets xx_set
     where 1=1
     and hp.party_id = hca.party_id(+)
     and hp.party_id = hps.party_id(+)
@@ -212,7 +215,8 @@
     and hps.party_site_id = c_party_site_id
     --and hps.status = 'A'
     and hpsu.status = 'A'
-    and hcasa.org_id in (102,531,532,663,1486,2068,2288)
+    --and hcasa.org_id in (102,531,532,663,1486,2068,2288)
+    and hcasa.org_id = xx_set.ebs_org_id
     --and hcasa.org_id in (102,531,2288)
     and not exists (select 1 from xxdl_hz_party_site_uses xhpsu 
                     where xhpsu.site_use_id = hpsu.party_site_use_id
@@ -302,7 +306,6 @@
                                                 <org:PartySite>
                                                     <par:PartySiteNumber>'||c_ps.party_site_number||'</par:PartySiteNumber>
                                                     <par:OrigSystem>EBSR11_NEW</par:OrigSystem>         
-                                                    <par:OrigSystemReference>99999999'||c_ps.party_site_id||'</par:OrigSystemReference>
                                                     <par:StartDateActive>'||c_ps.start_date||'</par:StartDateActive>
                                                     <par:IdentifyingAddressFlag>'||c_ps.IDENTIFYING_ADDRESS_FLAG_SOAP||'</par:IdentifyingAddressFlag>
                                                     <par:Language>'||c_ps.language||'</par:Language>
@@ -316,6 +319,7 @@
                         log('           Found site use code:'||c_psu.site_use_code);
 
                         l_par_site_use_rec.SITE_USE_ID := c_psu.SITE_USE_ID;
+                        l_par_site_use_rec.party_site_number := c_ps.party_site_number;
                         l_par_site_use_rec.PARTY_SITE_ID := c_psu.PARTY_SITE_ID;
                         l_par_site_use_rec.SITE_USE_CODE := c_psu.SITE_USE_CODE;
                         l_par_site_use_rec.PRIMARY_PER_TYPE := c_psu.PRIMARY_PER_TYPE;                        
@@ -336,7 +340,7 @@
                                         <par:PrimaryPerType>'||c_psu.primary_per_type||'</par:PrimaryPerType>  
                                         <par:OrigSystem>EBSR11_NEW</par:OrigSystem>                                                                             
                                         <par:CreatedByModule>HZ_WS</par:CreatedByModule>      
-                                        <par:OrigSystemReference>99999999'||c_psu.site_use_id||'</par:OrigSystemReference>
+                                        <par:OrigSystemReference>44444444'||c_psu.site_use_id||'</par:OrigSystemReference>
                                     </par:PartySiteUse>';
                         l_soap_env := l_soap_env || to_clob(l_text);  
                         
@@ -385,6 +389,7 @@
                                     x_acc.party_id
                                     ,x_acc.party_site_id
                                     ,x_acc.source_party_site_id
+                                    ,x_acc.party_site_number
                                     from
                                     xxfn_ws_call_log xx
                                     ,xmltable(
@@ -395,7 +400,8 @@
                                         '/env:Envelope/env:Body/ns0:mergeOrganizationResponse/ns0:result/ns2:Value/ns2:PartySite' passing xx.response_xml columns
                                         party_id number path './ns1:PartyId'
                                         ,party_site_id number path './ns1:PartySiteId'
-                                        ,source_party_site_id number path './ns1:OrigSystemReference') x_acc                               
+                                        ,source_party_site_id number path './ns1:OrigSystemReference'
+                                        ,party_site_number number path './ns1:PartySiteNumber') x_acc                               
                                     where xx.ws_call_id = x_ps_ws_call_id
                                     ) loop
 
@@ -407,11 +413,11 @@
                             ,xx.cloud_party_id = c_r.party_id
                             ,xx.process_flag = x_return_status
                             ,xx.last_update_date = sysdate
-                            where xx.party_site_id = case
-                                    when length(c_r.source_party_site_id)-8=length(xx.party_site_id) then
-                                        case when length(xx.party_site_id)!= length(c_r.source_party_site_id) then to_number(substr(c_r.source_party_site_id,length(c_r.source_party_site_id)-length(xx.party_site_id)+1,length(c_r.source_party_site_id))) else to_number(c_r.source_party_site_id) end
+                            where xx.party_site_number = case
+                                    when length(c_r.party_site_number)-8=length(xx.party_site_number) then
+                                        case when length(xx.party_site_number)!= length(c_r.party_site_number) then to_number(substr(c_r.party_site_number,length(c_r.party_site_number)-length(xx.party_site_number)+1,length(c_r.party_site_number))) else to_number(c_r.party_site_number) end
                                     else
-                                        to_number(c_r.source_party_site_id)
+                                        to_number(c_r.party_site_number)
                                     end    
                             ;
 
@@ -441,11 +447,11 @@
                                 set xx.process_flag = x_return_status            
                                 ,xx.cloud_party_site_id = c_as.party_site_id
                                 ,xx.CLOUD_SITE_USE_ID = c_as.party_site_use_id
-                                where xx.party_site_id = case
-                                    when length(c_r.source_party_site_id)-8=length(xx.party_site_id) then
-                                        case when length(xx.party_site_id)!= length(c_r.source_party_site_id) then to_number(substr(c_r.source_party_site_id,length(c_r.source_party_site_id)-length(xx.party_site_id)+1,length(c_r.source_party_site_id))) else to_number(c_r.source_party_site_id) end
+                                where xx.party_site_number = case
+                                    when length(c_r.party_site_number)-8=length(xx.party_site_number) then
+                                        case when length(xx.party_site_number)!= length(c_r.party_site_number) then to_number(substr(c_r.party_site_number,length(c_r.party_site_number)-length(xx.party_site_number)+1,length(c_r.party_site_number))) else to_number(c_r.party_site_number) end
                                     else
-                                        to_number(c_r.source_party_site_id)
+                                        to_number(c_r.party_site_number)
                                     end                                    
                                 and xx.site_use_code = c_as.site_use_type
                                 --xx.cust_acct_site_id = c_as.source_cust_acct_site_id
@@ -508,7 +514,7 @@
                         where xx.party_site_id in (select xx2.party_site_id 
                                                     from xxdl_hz_party_sites xx2
                                                     ,xxdl_hz_parties xhp
-                                                    where xhp.party_number = '99999999'||p_party_number
+                                                    where xhp.party_number = '44444444'||p_party_number
                                                     and xhp.party_id = xx2.party_id
                         )
                         ;  
@@ -519,7 +525,7 @@
                         where xx.party_site_id in (select xx2.party_site_id 
                                                     from xxdl_hz_party_sites xx2
                                                     ,xxdl_hz_parties xhp
-                                                    where xhp.party_number = '99999999'||p_party_number
+                                                    where xhp.party_number = '44444444'||p_party_number
                                                     and xhp.party_id = xx2.party_id
                         )
                         ;                        
@@ -549,7 +555,7 @@
     cursor c_party is
     select 
     hp.party_name party_name
-    ,'99999999'||hp.party_number party_number
+    ,'44444444'||hp.party_number party_number
     ,hp.jgzz_fiscal_code TAXPAYER_ID
     ,hp.party_id
     ,hp.duns_number
@@ -562,7 +568,7 @@
     and hp.party_id > 0
     and rownum <= nvl(p_rows,10)
     and not exists (select 1 from xxdl_hz_parties xx
-                        where xx.party_number = '99999999'||hp.party_number
+                        where xx.party_number = '44444444'||hp.party_number
                         and nvl(xx.process_flag,'X') in ('S',decode(p_retry_error,'Y','N','E'))
                         )
 
@@ -581,7 +587,7 @@
             select distinct
             hl.location_id
             ,hps.party_site_id
-            ,'99999999'||hps.party_site_number party_site_number
+            ,'44444444'||hps.party_site_number party_site_number
             ,HCASA.attribute4 party_site_name
             ,hl.address1
             ,hl.address2
@@ -618,8 +624,9 @@
             and hps.party_site_id = hcasa.party_site_id(+)
             and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
             and hps.location_id = hl.location_id(+)
+            and hca.status = 'A'
             --and hps.status = 'A'
-            and hcsu.site_use_code is not null
+            --and hcsu.site_use_code is not null
             --and hcasa.org_id in (102,531,532,663,1486,2068,2288)
             and hcasa.org_id = xx_set.ebs_org_id
             --and hcasa.org_id in (102,531,2288)
@@ -686,7 +693,7 @@
             select distinct
             hl.location_id
             ,hps.party_site_id
-            ,'99999999'||hps.party_site_number party_site_number
+            ,'44444444'||hps.party_site_number party_site_number
             ,HCASA.attribute4 party_site_name
             ,hl.address1
             ,hl.address2
@@ -723,7 +730,8 @@
             and hps.party_site_id = hcasa.party_site_id(+)
             and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
             and hps.location_id = hl.location_id(+)
-            and hcsu.site_use_code is not null
+            and hca.status = 'A'
+            --and hcsu.site_use_code is not null
             --and hps.status = 'A'
             --and hcasa.org_id in (102,531,532,663,1486,2068,2288)
             and hcasa.org_id = xx_set.ebs_org_id
@@ -882,134 +890,9 @@
     ;
 
 
-    cursor c_party_sites(c_party_number in varchar2) is 
-    select distinct
-    hl.location_id
-    ,hps.party_site_id
-    ,hp.party_id
-    ,'99999999'||hp.party_number party_number
-    ,'99999999'||hps.party_site_number party_site_number
-    ,HCASA.attribute4 party_site_name
-    ,hps.IDENTIFYING_ADDRESS_FLAG
-    ,decode(hps.IDENTIFYING_ADDRESS_FLAG,'Y','true','false') IDENTIFYING_ADDRESS_FLAG_SOAP
-    ,hps.status
-    ,case
-                when hl.country = 'HR' then
-                    case when hl.country != hl.state then
-                        hl.state
-                    else                
-                        decode(hl.country,'CS','XK',hl.country)
-                    end
-                else decode(hl.country,'CS','XK',hl.country)    
-            end cloud_country 
-    ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
-    ,case
-            when hl.country = 'HR' then
-                case when hl.country != hl.state then
-                    case 
-                        when hl.state = 'HR' then
-                            'HR'
-                        when (hl.state = 'DE' or hl.state = 'AT') then
-                            'D'
-                        else 'US' 
-                    end
-                else                
-                    case
-                        when hl.country = 'HR' then
-                            'HR'
-                        when (hl.country = 'DE' or hl.country = 'AT') then
-                            'D'
-                        else 'US' 
-                    end
-                end
-            else 
-                case
-                        when hl.country = 'HR' then
-                            'HR'
-                        when (hl.country = 'DE' or hl.country = 'AT') then
-                            'D'
-                        else 'US' 
-                    end   
-        end language          
-    from
-    apps.hz_parties@ebsprod hp
-    ,apps.hz_party_sites@ebsprod hps
-    ,apps.hz_cust_accounts@ebsprod hca
-    ,apps.HZ_CUST_ACCT_SITES_ALL@ebsprod HCASA
-    ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
-    ,apps.hz_locations@ebsprod hl
-    where 1=1
-    and hp.party_id = hca.party_id(+)
-    and hp.party_id = hps.party_id(+)
-    and hca.cust_account_id = hcasa.cust_account_id
-    and hps.party_site_id = hcasa.party_site_id(+)
-    and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
-    and hps.location_id = hl.location_id(+)
-    and hcsu.site_use_code is not null
-    --and hps.status = 'A'
-    and to_number(hp.party_number) = case
-                            when length(c_party_number)-8=length(hp.party_number) then
-                                case when length(hp.party_number)!= length(c_party_number) then to_number(substr(c_party_number,length(c_party_number)-length(hp.party_number)+1,length(c_party_number))) else to_number(c_party_number) end  --ovaj case je samo u slučaju ponavljanja migracija kad mi se u cloudu referenca na party_number mora zapisati s nekim sufiksom radi unique errora
-                            else
-                                to_number(c_party_number)
-                            end
-    and hps.status = 'A'
-    and not exists (select 1 from xxdl_hz_party_sites xhps 
-                    where xhps.party_site_id = hps.party_site_id
-                    and xhps.process_flag = 'S' )
-    ;    
-
-    cursor c_party_site_use(c_party_site_id in varchar2) is
-    select distinct
-    hl.location_id
-    ,hps.party_site_id
-    ,'99999999'||hps.party_site_number party_site_number
-    ,HCASA.attribute4 party_site_name
-    ,hpsu.site_use_type site_use_code
-    ,hpsu.party_site_use_id site_use_id
-    ,nvl(hpsu.primary_per_type,'N') primary_per_type
-    ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
-    ,case
-                when hl.country = 'HR' then
-                    case when hl.country != hl.state then
-                        hl.state
-                    else                
-                        hl.country
-                    end
-                else hl.country    
-            end cloud_country 
-    from
-    apps.hz_parties@ebsprod hp
-    ,apps.hz_party_sites@ebsprod hps
-    ,apps.hz_party_site_uses@ebsprod hpsu
-    ,apps.hz_cust_accounts@ebsprod hca
-    ,apps.HZ_CUST_ACCT_SITES_ALL@ebsprod HCASA
-    ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
-    ,apps.hz_locations@ebsprod hl
-    where 1=1
-    and hp.party_id = hca.party_id(+)
-    and hp.party_id = hps.party_id(+)
-    and hps.party_site_id = hpsu.party_site_id
-    and hca.cust_account_id = hcasa.cust_account_id
-    and hps.party_site_id = hcasa.party_site_id(+)
-    and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
-    and hps.location_id = hl.location_id(+)
-    and hcsu.site_use_code = hpsu.site_use_type
-    and hps.party_site_id = c_party_site_id
-    --and hps.status = 'A'
-    --and hpsu.status = 'A'
-    and hcasa.org_id in (102,531,532,663,1486,2068,2288)
-    --and hcasa.org_id in (102,531,2288)
-    and not exists (select 1 from xxdl_hz_party_site_uses xhpsu 
-                    where xhpsu.site_use_id = hpsu.party_site_use_id
-                    and xhpsu.process_flag = 'S' )
-    ;      
-               
-
-
     cursor c_accounts(c_party_id in number) is
     select distinct
-        '99999999'||hca.account_number account_number
+        '44444444'||hca.account_number account_number
         ,hca.account_name
         ,hca.customer_type
         ,to_char(nvl(hca.account_activation_date,to_date('1998-01-01','YYYY-MM-DD')),'YYYY-MM-DD') account_activation_date    
@@ -1032,8 +915,9 @@
         and hps.party_site_id = hcasa.party_site_id(+)
         and hcasa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
         and hps.location_id = hl.location_id(+)
-        and hcsu.site_use_code is not null
-        --and hps.status = 'A'
+        --and hcsu.site_use_code is not null
+        and hca.status = 'A'
+        --and hca.cust_account_id = 1645593
         --and hcasa.org_id in (102,531,532,663,1486,2068,2288)
         --and hcasa.org_id in (102,531,2288)
         --and hps.status = 'A'
@@ -1071,7 +955,7 @@
         ,jt.address_id cloud_address_id
         ,jt.cloud_party_site_number
         ,HCSA.attribute4 party_site_name
-        ,'99999999'||hps.party_site_number party_site_number
+        ,'44444444'||hps.party_site_number party_site_number
         ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
         ,case
             when hl.country = 'HR' then
@@ -1187,12 +1071,16 @@
         and hps.location_id = hl.location_id(+)
         and hcsu.site_use_code is not null
         and hca.cust_account_id = c_cust_account_id
+        and hca.status = 'A'
+        --and hca.cust_account_id = 1645593
         --and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
-        and hps.party_site_id = case
-                            when length(jt.source_address_id)-8=length(hps.party_site_id) then
-                                case when length(hps.party_site_id)!=length(jt.source_address_id) then to_number(substr(jt.source_address_id,(length(jt.source_address_id)-length(hps.party_site_id))+1,length(jt.source_address_id))) else to_number(jt.source_address_id) end
+        --and hps.party_site_id = case
+        --and hl.location_id = case    
+        and hps.party_site_number = case    
+                            when length(jt.cloud_party_site_number)-8=length(hps.party_site_number) then
+                                case when length(hps.party_site_number)!=length(jt.cloud_party_site_number) then to_number(substr(jt.cloud_party_site_number,(length(jt.cloud_party_site_number)-length(hps.party_site_number))+1,length(jt.cloud_party_site_number))) else to_number(jt.cloud_party_site_number) end
                             else
-                                to_number(jt.source_address_id)
+                                to_number(jt.cloud_party_site_number)
                             end             
         and hcsa.org_id =  xx_set.ebs_org_id(+)
         --and hcsa.org_id in (102,531,532,663,1486,2068,2288)
@@ -1232,7 +1120,7 @@
         ,apps.HZ_CUST_ACCT_SITES_ALL@ebsprod HCSA
         ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
         ,apps.hz_locations@ebsprod hl
-        ,xxdl_cloud_reference_sets xx_set
+        ,xxdl_cloud_reference_sets xx_set 
         ,(
         select
         cloud_party_id
@@ -1243,6 +1131,7 @@
         ,source_party_id
         ,location_id
         ,xx.ws_call_id
+        ,cloud_party_site_number
         from
         xxfn_ws_call_log xx,
         json_table(xx.response_json,'$'
@@ -1253,7 +1142,8 @@
                             address_type varchar2(30) path '$.AddressType',
                             source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
                             source_party_id number path '$.PartySourceSystemReferenceValue',
-                            location_id number path '$.LocationId'))
+                            location_id number path '$.LocationId',
+                            cloud_party_site_number number path '$.AddressNumber'))
         where xx.ws_call_id = c_ws_call_id
         union all
         select
@@ -1265,6 +1155,7 @@
         ,source_party_id
         ,location_id
         ,xx.ws_call_id
+        ,cloud_party_site_number
         from
         xxfn_ws_call_log xx,
         json_table(xx.response_json, '$'
@@ -1276,7 +1167,8 @@
                             address_type varchar2(30) path '$.AddressType',
                             source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
                             source_party_id number path '$.PartySourceSystemReferenceValue',
-                            location_id number path '$.LocationId')))                   
+                            location_id number path '$.LocationId',
+                            cloud_party_site_number number path '$.AddressNumber')))                   
         where xx.ws_call_id = c_ws_call_id
         union all
         select
@@ -1288,6 +1180,7 @@
         ,source_party_id
         ,location_id
         ,xx.ws_call_id
+        ,cloud_party_site_number
         from
         xxfn_ws_call_log xx,
         json_table(xx.response_json, '$'
@@ -1299,7 +1192,8 @@
                             address_type varchar2(30) path '$.AddressType',
                             source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
                             source_party_id number path '$.PartySourceSystemReferenceValue',
-                            location_id number path '$.LocationId')))                   
+                            location_id number path '$.LocationId',
+                            cloud_party_site_number number path '$.AddressNumber')))                   
         where xx.ws_call_id = c_ws_call_id
         ) jt
         where 1=1
@@ -1311,12 +1205,17 @@
         and hps.location_id = hl.location_id(+)
         and hcsu.site_use_code is not null
         and hcsa.cust_acct_site_id = c_cust_acct_site_id
+        and hca.status = 'A'
+        and hcsu.status = 'A'
+        --and hca.cust_account_id = 1645593
         --and hl.location_id = case when length(hl.location_id) != length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) then to_number(substr(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)),(length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id)))-length(hl.location_id)+1),length(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))))) else to_number(substr(jt.source_address_id,instr(jt.source_address_id,';',1,1)+1,length(jt.source_address_id))) end
-        and hps.party_site_id = case
-                            when length(jt.source_address_id)-8=length(hps.party_site_id) then
-                                case when length(hps.party_site_id)!=length(jt.source_address_id) then to_number(substr(jt.source_address_id,(length(jt.source_address_id)-length(hps.party_site_id))+1,length(jt.source_address_id))) else to_number(jt.source_address_id) end
+        --and hps.party_site_id = case
+        --and hl.location_id = case   
+        and hps.party_site_number = case      
+                            when length(jt.cloud_party_site_number)-8=length(hps.party_site_id) then
+                                case when length(hps.party_site_id)!=length(jt.cloud_party_site_number) then to_number(substr(jt.cloud_party_site_number,(length(jt.cloud_party_site_number)-length(hps.party_site_id))+1,length(jt.cloud_party_site_number))) else to_number(jt.cloud_party_site_number) end
                             else
-                                to_number(jt.source_address_id)
+                                to_number(jt.cloud_party_site_number)
                             end     
         --and hcsa.org_id in (102,531,532,663,1486,2068,2288)
         and hcsa.org_id = xx_set.ebs_org_id
@@ -1448,6 +1347,7 @@
                     ,source_address_id
                     ,source_party_id
                     ,location_id
+                    ,cloud_party_site_number
                     from
                     xxfn_ws_call_log xx,
                     json_table(xx.response_json,'$'
@@ -1458,7 +1358,8 @@
                                         address_type varchar2(30) path '$.AddressType',
                                         source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
                                         source_party_id number path '$.PartySourceSystemReferenceValue',
-                                        location_id number path '$.LocationId'))
+                                        location_id number path '$.LocationId',
+                                        cloud_party_site_number number path '$.AddressNumber'))
                     where xx.ws_call_id = xr_ws_call_id
                     union all
                     select
@@ -1469,6 +1370,7 @@
                     ,source_address_id
                     ,source_party_id
                     ,location_id
+                    ,cloud_party_site_number
                     from
                     xxfn_ws_call_log xx,
                     json_table(xx.response_json, '$'
@@ -1480,7 +1382,8 @@
                                         address_type varchar2(30) path '$.AddressType',
                                         source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
                                         source_party_id number path '$.PartySourceSystemReferenceValue',
-                                        location_id number path '$.LocationId')))                   
+                                        location_id number path '$.LocationId',
+                                        cloud_party_site_number number path '$.AddressNumber')))                   
                     where xx.ws_call_id = xr_ws_call_id) jt
                         where nvl(jt.address_id,0) > 0)
             loop
@@ -1490,9 +1393,10 @@
 
               update xxdl_hz_locations xhl
               set xhl.cloud_location_id = c_loc.location_id
-              where '99999999'||xhl.party_site_id = c_loc.source_address_id;
+              where '44444444'||xhl.party_site_number = c_loc.cloud_party_site_number;
 
             end loop;
+
 
 
             if l_cloud_address_id = 0 then
@@ -1517,11 +1421,11 @@
                                 "PostalCode": "'||c_l.postal_code||'",
                                 "PostalPlus4Code": "'||c_l.postal_plus4_code||'",
                                 "State": "'||c_l.state||'",
-                                "PartySiteName":"'||c_l.party_site_name||'",
+                                "PartySiteName":"'||apex_escape.json(c_l.party_site_name)||'",
                                 "AddressNumber":"'||c_l.party_site_number||'",
                                 "SourceSystem": "EBSR11_NEW",
                                 "StartDateActive" : "'||c_l.start_date||'",
-                                "SourceSystemReferenceValue": "99999999'||c_l.party_site_id||'"
+                                "SourceSystemReferenceValue": "'||c_l.party_site_id||';'||c_l.location_id||'"
                             }';
     
                     l_rest_env := l_rest_env|| to_clob(l_text);
@@ -1529,6 +1433,7 @@
 
                     l_loc_rec.LOCATION_ID := c_l.LOCATION_ID;
                     l_loc_rec.PARTY_SITE_ID := c_l.party_site_id;
+                    l_loc_rec.party_site_number := c_l.party_site_number;
                     l_loc_rec.ADDRESS1 := c_l.ADDRESS1;
                     l_loc_rec.ADDRESS2 := c_l.ADDRESS2;
                     l_loc_rec.ADDRESS3 := c_l.ADDRESS3;
@@ -1575,11 +1480,9 @@
 
                         log('       Mapping this address create ws call to cursor!');
 
-                        begin
-
                          
                         dbms_lob.createtemporary(l_rest_env,true);
-                        l_text := '';
+                        l_text := ' ';
         
                         l_rest_env := l_rest_env|| to_clob(l_text);
                         l_text := '';                       
@@ -1587,21 +1490,15 @@
                         log('   REST payload built!');
 
                         log('   Get all adresses again.');
-                        log('   Url:'||l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_p.party_number||'/child/Address?onlyData=true&limit=500&fields=PartyId,PartyNumber,AddressId,AddressType,SourceSystemReferenceValue,PartySourceSystemReferenceValue,LocationId');
+                        log('   Url:'||l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_p.party_number||'/child/Address?onlyData=true&limit=500&fields=PartyId,PartyNumber,AddressId,AddressNumber,AddressType,SourceSystemReferenceValue,PartySourceSystemReferenceValue,LocationId');
                         XXFN_CLOUD_WS_PKG.WS_REST_CALL(
-                        p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_p.party_number||'/child/Address?onlyData=true&limit=500&fields=PartyId,PartyNumber,AddressId,AddressType,SourceSystemReferenceValue,PartySourceSystemReferenceValue,LocationId',
+                        p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||c_p.party_number||'/child/Address?onlyData=true&limit=500&fields=PartyId,PartyNumber,AddressId,AddressNumber,AddressType,SourceSystemReferenceValue,PartySourceSystemReferenceValue,LocationId',
                         p_rest_env => l_rest_env,
                         p_rest_act => 'GET',
                         p_content_type => 'application/json;charset="UTF-8"',
                         x_return_status => x_return_status,
                         x_return_message => x_return_message,
                         x_ws_call_id => x_ws_call_id);
-
-                        exception
-                              when others then
-                                dbms_output.put_line('Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
-                                dbms_output.put_line('Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
-                        end;
 
                         log('   Web service finished! ws_call_id:'||x_ws_call_id);
 
@@ -1622,6 +1519,7 @@
                                             ,source_address_id
                                             ,source_party_id
                                             ,cloud_location_id
+                                            ,cloud_party_site_number
                                             from
                                             xxfn_ws_call_log xx,
                                             json_table(xx.response_json,'$'
@@ -1632,7 +1530,8 @@
                                                                 address_type varchar2(30) path '$.AddressType',
                                                                 source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
                                                                 source_party_id number path '$.PartySourceSystemReferenceValue',
-                                                                cloud_location_id number path '$.LocationId'))
+                                                                cloud_location_id number path '$.LocationId',
+                                                                cloud_party_site_number number path '$.AddressNumber'))
                                             where xx.ws_call_id = x_ws_call_id
                                             union all
                                             select
@@ -1643,6 +1542,7 @@
                                             ,source_address_id
                                             ,source_party_id
                                             ,cloud_location_id
+                                            ,cloud_party_site_number
                                             from
                                             xxfn_ws_call_log xx,
                                             json_table(xx.response_json, '$'
@@ -1654,14 +1554,15 @@
                                                                 address_type varchar2(30) path '$.AddressType',
                                                                 source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
                                                                 source_party_id number path '$.PartySourceSystemReferenceValue',
-                                                                cloud_location_id number path '$.LocationId')))                   
+                                                                cloud_location_id number path '$.LocationId',
+                                                                cloud_party_site_number number path '$.AddressNumber')))                   
                                             where xx.ws_call_id = x_ws_call_id
                                             ) loop
                                     if nvl(c_loc.address_id,0) > 0 then            
                                         update xxdl_hz_locations xx
                                         set xx.cloud_location_id = c_loc.cloud_location_id
                                         ,xx.process_flag = x_return_status
-                                        where '99999999'||xx.party_site_id = c_loc.source_address_id;
+                                        where '44444444'||xx.party_site_number = c_loc.cloud_party_site_number;
                                     end if;                
                         end loop;
 
@@ -1766,11 +1667,11 @@
                                                     <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
                                                     <cus:AccountName>'||c_a.account_name||'</cus:AccountName>    
                                                     <cus:AccountNumber>'||c_a.account_number||'</cus:AccountNumber>
-                                                    <cus:CustomerType>'||c_a.account_name||'</cus:CustomerType>
+                                                    <cus:CustomerType>'||c_a.customer_type||'</cus:CustomerType>
                                                     <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
                                                     <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                     <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>99999999'||c_a.cust_account_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystemReference>44444444'||c_a.cust_account_id||'</cus:OrigSystemReference>';
 
                                 l_soap_env := l_soap_env || to_clob(l_text);
 
@@ -1817,7 +1718,7 @@
                                                     <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
                                                     <cus:Language>'||c_as.language||'</cus:Language>
                                                     <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>99999999'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystemReference>44444444'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
                                 l_soap_env := l_soap_env || to_clob(l_text);                   
 
                                 for c_asu in c_account_site_use(c_as.cust_acct_site_id,xr_ws_call_id) loop
@@ -1867,7 +1768,7 @@
                                                             <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                             <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
                                                             <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag> 
-                                                            <cus:OrigSystemReference>99999999'||c_asu.site_use_id||'</cus:OrigSystemReference>
+                                                            <cus:OrigSystemReference>44444444'||c_asu.site_use_id||'</cus:OrigSystemReference>
                                                             <cus:StartDate>'||c_asu.start_date||'</cus:StartDate>
                                                     </cus:CustomerAccountSiteUse>';
                                     l_soap_env := l_soap_env || to_clob(l_text);
@@ -2402,7 +2303,7 @@
                         "SourceSystemReference": [
                             {
                                 "SourceSystem": "EBSR11_NEW",
-                                "SourceSystemReferenceValue": "99999999'||c_p.party_id||'"
+                                "SourceSystemReferenceValue": "'||c_p.party_id||'"
                             }
                         ],
                         "OrganizationName": "'||apex_escape.json(c_p.party_name)||'",
@@ -2431,7 +2332,7 @@
                             "AddressNumber":"'||c_l.party_site_number||'",                                                        
                             "SourceSystem": "EBSR11_NEW",
                             "StartDateActive" : "'||c_l.start_date||'",
-                            "SourceSystemReferenceValue": "99999999'||c_l.party_site_id||'"
+                            "SourceSystemReferenceValue": "'||c_l.party_site_id||';'||c_l.location_id||'"
                         }';
                 if c_l.c > 0 then
                     l_text := l_text ||',';
@@ -2442,6 +2343,7 @@
 
                 l_loc_rec.LOCATION_ID := c_l.LOCATION_ID;
                 l_loc_rec.PARTY_SITE_ID := c_l.party_site_id;
+                l_loc_rec.party_site_number := c_l.party_site_number;
                 l_loc_rec.ADDRESS1 := c_l.ADDRESS1;
                 l_loc_rec.ADDRESS2 := c_l.ADDRESS2;
                 l_loc_rec.ADDRESS3 := c_l.ADDRESS3;
@@ -2480,7 +2382,7 @@
             --log(l_text);
 
             l_rest_env := l_rest_env|| to_clob(l_text);
-            l_text := '';
+            l_text := ' ';
 
             log('   REST payload built!');
 
@@ -2520,6 +2422,7 @@
                                     ,source_address_id
                                     ,source_party_id
                                     ,cloud_location_id
+                                    ,cloud_party_site_number
                                     from
                                     xxfn_ws_call_log xx,
                                     json_table(xx.response_json,'$'
@@ -2530,7 +2433,8 @@
                                                         address_type varchar2(30) path '$.AddressType',
                                                         source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
                                                         source_party_id number path '$.PartySourceSystemReferenceValue',
-                                                        cloud_location_id number path '$.LocationId'))
+                                                        cloud_location_id number path '$.LocationId',
+                                                        cloud_party_site_number number path '$.AddressNumber'))
                                     where xx.ws_call_id = x_ws_call_id
                                     union all
                                     select
@@ -2541,6 +2445,7 @@
                                     ,source_address_id
                                     ,source_party_id
                                     ,cloud_location_id
+                                    ,cloud_party_site_number
                                     from
                                     xxfn_ws_call_log xx,
                                     json_table(xx.response_json, '$'
@@ -2552,14 +2457,15 @@
                                                         address_type varchar2(30) path '$.AddressType',
                                                         source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
                                                         source_party_id number path '$.PartySourceSystemReferenceValue',
-                                                        cloud_location_id number path '$.LocationId')))                   
+                                                        cloud_location_id number path '$.LocationId',
+                                                        cloud_party_site_number number path '$.AddressNumber')))                   
                                     where xx.ws_call_id = x_ws_call_id
                                     ) loop
                     if nvl(c_loc.address_id,0) > 0 then            
                         update xxdl_hz_locations xx
                         set xx.cloud_location_id = c_loc.cloud_location_id
                         ,xx.process_flag = x_return_status
-                        where '99999999'||xx.party_site_id = c_loc.source_address_id;
+                        where '44444444'||xx.party_site_number = c_loc.cloud_party_site_number;
                     end if;                
                 end loop;
 
@@ -2637,12 +2543,12 @@
                                             <typ:customerAccount>
                                                 <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
                                                 <cus:AccountName>'||c_a.account_name||'</cus:AccountName>    
-                                                <cus:AccountNumber>'||c_a.account_number||'</cus:AccountNumber>
+                                                <cus:AccountNumber>44444444'||c_a.account_number||'</cus:AccountNumber>
                                                 <cus:CustomerType>'||c_a.account_name||'</cus:CustomerType>
                                                 <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
                                                 <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                 <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                <cus:OrigSystemReference>99999999'||c_a.cust_account_id||'</cus:OrigSystemReference>';
+                                                <cus:OrigSystemReference>44444444'||c_a.cust_account_id||'</cus:OrigSystemReference>';
                             l_soap_env := l_soap_env || to_clob(l_text);
 
                             for c_as in c_account_sites(c_a.cust_account_id, x_ws_call_id) loop
@@ -2686,7 +2592,7 @@
                                                     <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
                                                     <cus:Language>'||c_as.language||'</cus:Language>
                                                     <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>99999999'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystemReference>44444444'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
                                 l_soap_env := l_soap_env || to_clob(l_text);                    
 
                                 for c_asu in c_account_site_use(c_as.cust_acct_site_id,x_ws_call_id) loop
@@ -2736,7 +2642,7 @@
                                                             <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                             <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
                                                             <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag>                                                    
-                                                            <cus:OrigSystemReference>99999999'||c_asu.site_use_id||'</cus:OrigSystemReference>
+                                                            <cus:OrigSystemReference>44444444'||c_asu.site_use_id||'</cus:OrigSystemReference>
                                                             <cus:StartDate>'||c_asu.start_date||'</cus:StartDate>
                                                     </cus:CustomerAccountSiteUse>';
                                     l_soap_env := l_soap_env || to_clob(l_text);                                        
@@ -3174,6 +3080,7 @@
 
             else
                 log('   Error! Customer not migrated!');
+                l_party_rec.process_flag := 'E';
 
                 select xx.response_json into l_party_rec.error_msg
                 from xxfn_ws_call_log xx
@@ -3205,6 +3112,7 @@
                                     ,address_type
                                     ,source_address_id
                                     ,source_party_id
+                                    ,cloud_party_site_number
                                     from
                                     xxfn_ws_call_log xx,
                                     json_table(xx.response_json,'$'
@@ -3214,7 +3122,8 @@
                                                         address_id number path '$.AddressId',
                                                         address_type varchar2(30) path '$.AddressType',
                                                         source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
-                                                        source_party_id number path '$.PartySourceSystemReferenceValue'))
+                                                        source_party_id number path '$.PartySourceSystemReferenceValue',
+                                                        cloud_party_site_number number path '$.AddressNumber'))
                                     where xx.ws_call_id = x_ws_call_id
                                     union all
                                     select
@@ -3224,6 +3133,7 @@
                                     ,address_type
                                     ,source_address_id
                                     ,source_party_id
+                                    ,cloud_party_site_number
                                     from
                                     xxfn_ws_call_log xx,
                                     json_table(xx.response_json, '$'
@@ -3234,13 +3144,14 @@
                                                         address_id number path '$.AddressId',
                                                         address_type varchar2(30) path '$.AddressType',
                                                         source_address_id varchar2(240) path '$.SourceSystemReferenceValue',
-                                                        source_party_id number path '$.PartySourceSystemReferenceValue')))                   
+                                                        source_party_id number path '$.PartySourceSystemReferenceValue',
+                                                        cloud_party_site_number number path '$.AddressNumber')))                   
                                     where xx.ws_call_id = x_ws_call_id
                                     ) loop
                             if nvl(c_loc.address_id,0) > 0 then            
                                 update xxdl_hz_locations xx
                                 set xx.process_flag = 'E'
-                                where '99999999'||xx.location_id = substr(c_loc.source_address_id,instr(c_loc.source_address_id,';',1,1)+1,length(c_loc.source_address_id));
+                                where '44444444'||xx.party_site_number = c_loc.cloud_party_site_number;
                             end if;                
                 end loop;
               
@@ -3460,7 +3371,7 @@
 
         log('   Calling web service.');
         XXFN_CLOUD_WS_PKG.WS_REST_CALL(
-        p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||p_party_number||'/child/Address?onlyData=true&limit=500&fields=PartyId,PartyNumber,AddressId,AddressType,SourceSystemReferenceValue,PartySourceSystemReferenceValue,LocationId',
+        p_ws_url => l_app_url||'crmRestApi/resources/11.13.18.05/hubOrganizations/'||p_party_number||'/child/Address?onlyData=true&limit=500&fields=PartyId,PartyNumber,AddressId,AddressNumber,AddressType,SourceSystemReferenceValue,PartySourceSystemReferenceValue,LocationId',
         p_rest_env => l_soap_env,
         p_rest_act => 'GET',
         p_content_type => 'application/json;charset="UTF-8"',
@@ -3536,7 +3447,7 @@
         select distinct
         xx.cloud_party_site_id
         ,hp.party_name
-        ,'99999999'||hp.party_number party_number
+        ,'44444444'||hp.party_number party_number
         ,xx.cloud_party_site_number
         ,xx.party_site_id
         ,case
@@ -3636,8 +3547,10 @@
         and xx.cust_account_id = xx_hca.cust_account_id
         and xx.cloud_set_id = xx_ref.reference_data_set_id
         and xx_ref.ebs_org_id = hcas.org_id
-        and nvl(xx.cloud_tax_profile_id,0)=0
-        and nvl(xx.cloud_party_site_number,0)>0;
+        --and nvl(xx.cloud_tax_profile_id,0)=0
+        and nvl(xx.cloud_code_assignment_id,0)=0
+        and nvl(xx.cloud_party_site_number,0)>0
+        and rownum = 1;
 
 
     begin
@@ -3660,7 +3573,7 @@
                 l_soap_env := l_empty_clob;
                 dbms_lob.createtemporary(l_soap_env, TRUE);
 
-                l_text := '';
+                l_text := ' ';
 
                 l_soap_env := l_soap_env||to_clob(l_text);
 
@@ -3669,7 +3582,7 @@
                 XXFN_CLOUD_WS_PKG.WS_REST_CALL(
                     p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/partyTaxProfiles?q=PartyNumber='||c_p.party_number||';PartyTypeCode=THIRD_PARTY',
                     p_rest_env => l_soap_env,
-                    p_rest_act => 'POST',
+                    p_rest_act => 'GET',
                     p_content_type => 'application/json;charset="UTF-8"',
                     x_return_status => x_return_status,
                     x_return_message => x_return_message,
@@ -3730,7 +3643,7 @@
 
                 l_text := '{
                     "PartyTypeCode": "THIRD_PARTY",
-                    "PartyName":"'||c_p.party_name||'",
+                    "PartyName":"'||apex_escape.json(c_p.party_name)||'",
                     "PartyNumber":"'||c_p.party_number||'",
                     "RoundingLevelCode": "HEADER",
                     "RoundingRuleCode": "NEAREST",
@@ -3977,11 +3890,11 @@
                     and hps.location_id = hl.location_id(+)
                     and hcsu.site_use_code is not null
                     and hca.cust_account_id = c_s.cust_account_id
-                    and hps.party_site_id = case
-                            when length(jt.source_address_id)-8=length(hps.party_site_id) then
-                                case when length(hps.party_site_id)!=length(jt.source_address_id) then to_number(substr(jt.source_address_id,(length(jt.source_address_id)-length(hps.party_site_id))+1,length(jt.source_address_id))) else to_number(jt.source_address_id) end
+                    and hps.party_site_number = case
+                            when length(jt.cloud_party_site_number)-8=length(hps.party_site_number) then
+                                case when length(hps.party_site_number)!=length(jt.cloud_party_site_number) then to_number(substr(jt.cloud_party_site_number,(length(jt.cloud_party_site_number)-length(hps.party_site_number))+1,length(jt.cloud_party_site_number))) else to_number(jt.cloud_party_site_number) end
                             else
-                                to_number(jt.source_address_id)
+                                to_number(jt.cloud_party_site_number)
                             end  
                     and hps.party_site_id = c_s.party_site_id
                     and hcsa.org_id = xx_set.ebs_org_id
@@ -4026,7 +3939,7 @@
                             json_table(xx.response_json,'$'
                                 columns(
                                                 CLOUD_TAX_PROFILE_ID number path '$.PartyTaxProfileId'))
-                            where xx.ws_call_id = xf_ws_call_id
+                            where xx.ws_call_id = x_ws_call_id
                             union all
                             select
                             CLOUD_TAX_PROFILE_ID
@@ -4036,7 +3949,7 @@
                                 columns(nested path '$.items[*]'
                                         columns(
                                                 CLOUD_TAX_PROFILE_ID number path '$.PartyTaxProfileId')))                   
-                            where xx.ws_call_id = xf_ws_call_id
+                            where xx.ws_call_id = x_ws_call_id
                             )
                         )
                         select
@@ -4063,7 +3976,7 @@
 
                 l_text := '{
                     "PartyTypeCode": "THIRD_PARTY_SITE",
-                    "PartyName":"'||c_s.party_name||'",
+                    "PartyName":"'||apex_escape.json(c_s.party_name)||'",
                     "PartyNumber":"'||c_s.party_number||'",
                     "RoundingLevelCode": "HEADER",
                     "RoundingRuleCode": "NEAREST",
@@ -4176,28 +4089,22 @@
                         where cloud_party_site_id = c_s.cloud_party_site_id;
 
 
-                    log('           Creating tax classification!');
-                
-                
-                    l_soap_env := l_empty_clob;
+                    log('           Checking if tax classification exists!');    
+
+
+                     l_soap_env := l_empty_clob;
                     dbms_lob.createtemporary(l_soap_env, TRUE);
 
-                    l_text := '{
-                        "ClassTypeCode": "XXDL_TIP_PARTNERA",
-                        "ClassCode": "'||c_s.class_code||'",
-                        "StartDateActive": "'||to_char(sysdate,'YYYY-MM-DD')||'",
-                        "PartySiteNumber": "'||c_a.cloud_party_site_number||'",
-                        "PartyNumber": "'||c_s.party_number||'"
-                    }';
+                    l_text := ' ';
 
                     l_soap_env := l_soap_env||to_clob(l_text);       
 
-                    log('           Calling web service to create classification');
+                    log('           Calling web service to find classification');
 
                     XXFN_CLOUD_WS_PKG.WS_REST_CALL(
-                        p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/thirdPartySiteFiscalClassifications',
+                        p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/thirdPartySiteFiscalClassifications?finder=findBypartyTaxProfileId;bPartyTaxProfileId='||l_cloud_tax_profile_id,
                         p_rest_env => l_soap_env,
-                        p_rest_act => 'POST',
+                        p_rest_act => 'GET',
                         p_content_type => 'application/json;charset="UTF-8"',
                         x_return_status => x_return_status,
                         x_return_message => x_return_message,
@@ -4209,57 +4116,144 @@
                     dbms_lob.freetemporary(l_soap_env);   
 
                     l_text:=''; 
-
+                
+                
                     if x_return_status = 'S' then
-
-                        log('           Classification code updated!');
-                        
-                        begin
-                        with json_response as
-                            (
-                            (
-                                select
-                                code_assignment_id
-                                from
-                                xxfn_ws_call_log xx,
-                                json_table(xx.response_json,'$'
-                                    columns(
-                                                    code_assignment_id number path '$.CodeAssignmentId'))
-                                where xx.ws_call_id = xt_ws_call_id
-                                union all
-                                select
-                                code_assignment_id
-                                from
-                                xxfn_ws_call_log xx,
-                                json_table(xx.response_json, '$'
-                                    columns(nested path '$.items[*]'
-                                            columns(
-                                                    code_assignment_id number path '$.CodeAssignmentId')))                   
-                                where xx.ws_call_id = xt_ws_call_id
+                            begin
+                            with json_response as
+                                (
+                                (
+                                    select
+                                    code_assignment_id
+                                    from
+                                    xxfn_ws_call_log xx,
+                                    json_table(xx.response_json,'$'
+                                        columns(
+                                                        code_assignment_id number path '$.CodeAssignmentId'))
+                                    where xx.ws_call_id = xt_ws_call_id
+                                    union all
+                                    select
+                                    code_assignment_id
+                                    from
+                                    xxfn_ws_call_log xx,
+                                    json_table(xx.response_json, '$'
+                                        columns(nested path '$.items[*]'
+                                                columns(
+                                                        code_assignment_id number path '$.CodeAssignmentId')))                   
+                                    where xx.ws_call_id = xt_ws_call_id
+                                    )
                                 )
-                            )
-                            select
-                            nvl(jt.code_assignment_id,0)
-                            into l_code_assignment_id
-                            from
-                            json_response jt
-                            where rownum = 1
-                            and jt.code_assignment_id is not null;
+                                select
+                                nvl(jt.code_assignment_id,0)
+                                into l_code_assignment_id
+                                from
+                                json_response jt
+                                where rownum = 1
+                                and jt.code_assignment_id is not null;
 
-                            exception
-                            when no_data_found then
-                                l_code_assignment_id := 0;
+                                exception
+                                when no_data_found then
+                                    l_code_assignment_id := 0;
 
-                        end;
+                            end;
 
-                        update xxdl_hz_cust_acct_sites
-                        set cloud_code_assignment_id = l_code_assignment_id
-                        ,CLOUD_PARTY_FISCAL_CODE = c_s.class_code
-                        where cloud_party_site_id = c_s.cloud_party_site_id;
+                    end if;
+
+                    if l_code_assignment_id = 0 then
+
+                        l_soap_env := l_empty_clob;
+                        dbms_lob.createtemporary(l_soap_env, TRUE);
+
+
+                        l_text := '{
+                            "ClassTypeCode": "XXDL_TIP_PARTNERA",
+                            "ClassCode": "'||c_s.class_code||'",
+                            "StartDateActive": "'||to_char(sysdate,'YYYY-MM-DD')||'",
+                            "PartySiteNumber": "'||c_a.cloud_party_site_number||'",
+                            "PartyNumber": "'||c_s.party_number||'"
+                        }';
+
+                        l_soap_env := l_soap_env||to_clob(l_text);       
+
+                        log('           Calling web service to create classification');
+
+                        XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+                            p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/thirdPartySiteFiscalClassifications',
+                            p_rest_env => l_soap_env,
+                            p_rest_act => 'POST',
+                            p_content_type => 'application/json;charset="UTF-8"',
+                            x_return_status => x_return_status,
+                            x_return_message => x_return_message,
+                            x_ws_call_id => xt_ws_call_id);         
+                        
+                        log('           Web service status:'||x_return_status);
+                        log('           Web service call:'||xt_ws_call_id);
+
+                        dbms_lob.freetemporary(l_soap_env);   
+
+                        l_text:=''; 
+
+                        if x_return_status = 'S' then
+
+                            log('           Classification code updated!');
+                            
+                            begin
+                            with json_response as
+                                (
+                                (
+                                    select
+                                    code_assignment_id
+                                    from
+                                    xxfn_ws_call_log xx,
+                                    json_table(xx.response_json,'$'
+                                        columns(
+                                                        code_assignment_id number path '$.CodeAssignmentId'))
+                                    where xx.ws_call_id = xt_ws_call_id
+                                    union all
+                                    select
+                                    code_assignment_id
+                                    from
+                                    xxfn_ws_call_log xx,
+                                    json_table(xx.response_json, '$'
+                                        columns(nested path '$.items[*]'
+                                                columns(
+                                                        code_assignment_id number path '$.CodeAssignmentId')))                   
+                                    where xx.ws_call_id = xt_ws_call_id
+                                    )
+                                )
+                                select
+                                nvl(jt.code_assignment_id,0)
+                                into l_code_assignment_id
+                                from
+                                json_response jt
+                                where rownum = 1
+                                and jt.code_assignment_id is not null;
+
+                                exception
+                                when no_data_found then
+                                    l_code_assignment_id := 0;
+
+                            end;
+
+                            update xxdl_hz_cust_acct_sites
+                            set cloud_code_assignment_id = l_code_assignment_id
+                            ,CLOUD_PARTY_FISCAL_CODE = c_s.class_code
+                            where cloud_party_site_id = c_s.cloud_party_site_id;
+
+                        else
+                            log('   Classification update failed!');
+                        end if;
 
                     else
-                        log('   Classification update failed!');
-                    end if;
+
+                        log('           Tax classification already exists!');
+
+                        update xxdl_hz_cust_acct_sites
+                            set cloud_code_assignment_id = l_code_assignment_id
+                            ,CLOUD_PARTY_FISCAL_CODE = c_s.class_code
+                            where cloud_party_site_id = c_s.cloud_party_site_id;
+
+                    end if;    
 
                 
 
@@ -4273,7 +4267,8 @@
                         where cloud_party_site_id = c_s.cloud_party_site_id;
 
                 end if;
-            l_cloud_party_profile_id := null;    
+            l_cloud_party_profile_id := null;   
+            l_code_assignment_id := null; 
             end loop;
         else
             log('   Get adress request failed!');
@@ -6124,8 +6119,8 @@
 
 
     /*===========================================================================+
-    -- Name    : find_supplier_contact_address
-    -- Desc    : Find existing supplier contact address
+    -- Name    : get_ccid_account_segs
+    -- Desc    : get_accounts_segs
     -- Usage   : 
     -- Parameters
     ============================================================================+*/
@@ -6136,7 +6131,7 @@
     begin
 
         begin
-            select gcc.segment1||'.'||gcc.segment2||'.'||gcc.segment3||'.'||gcc.segment4||'.'||gcc.segment5||'.'||gcc.segment6||'.'||gcc.segment7||'.0.000000.000000' liability
+            select gcc.segment1||'.'||gcc.segment2||'.'||gcc.segment3||'.'||gcc.segment4||'.'||gcc.segment5||'.'||gcc.segment6||'.'||gcc.segment7||'.00.000000.000000' liability
             into l_acc
             from
             apps.gl_code_combinations@ebsprod gcc
@@ -6241,6 +6236,7 @@
         and xx_hp.party_number like nvl(p_party_number,'%')  
         and pvs.vendor_id = pv.vendor_id
         and xx_cust_site.cloud_set_id =  xx_set.reference_data_set_id(+)
+        and rownum <=50
         ;
 
         cursor c_supplier_sites(c_party_site_id in number) is
@@ -6958,7 +6954,7 @@
                         ,xx_bank.branch_party_id cloud_bank_id
                         ,bank_acc.bank_branch_id
                         ,bank_acc.bank_account_name
-                        ,'99999999 '||bank_acc.bank_account_num bank_account_num
+                        ,' '||bank_acc.bank_account_num bank_account_num
                         ,bank_acc.address_line1
                         ,bank_acc.iban_number
                         ,bank_acc.country bank_country            
@@ -7041,6 +7037,7 @@
                         --and pvs.vendor_id = pv.vendor_id
                         pvs.vendor_site_id = c_a.vendor_site_id
                         and pvs.vendor_site_id = bank_acc.vendor_site_id(+)
+                        and pvs.org_id = bank_acc.org_id(+)
                         and bank_acc.bank_branch_name = xx_bank.bank_branch_name(+)
                         ) loop
                             --starting bank account
@@ -7349,9 +7346,10 @@
                                                     if l_bank_acc_rec.CLOUD_EXT_PAYEE_ID > 0 then
 
                                                         log('                           Starting assignment for payee id:'||l_bank_acc_rec.CLOUD_EXT_PAYEE_ID);
+                                                        log('                           Bank account primary flag:'||l_bank_acc_rec.primary_flag);
 
                                                        -- if l_bank_acc_rec.cloud_payment_instrument_id > 0 then
-                                                            log('                                   Payment instrument already assigned!');
+                                                            --log('                                   Payment instrument already assigned!');
 
                                                        -- else    
 
