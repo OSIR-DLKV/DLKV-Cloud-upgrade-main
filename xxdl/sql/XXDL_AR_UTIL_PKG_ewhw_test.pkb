@@ -97,8 +97,8 @@
     hl.location_id
     ,hps.party_site_id
     ,hp.party_id
-    ,'44444444'||hp.party_number party_number
-    ,'44444444'||hps.party_site_number party_site_number
+    ,'77777777'||hp.party_number party_number
+    ,'77777777'||hps.party_site_number party_site_number
     ,HCASA.attribute4 party_site_name
     ,hps.IDENTIFYING_ADDRESS_FLAG
     ,decode(hps.IDENTIFYING_ADDRESS_FLAG,'Y','true','false') IDENTIFYING_ADDRESS_FLAG_SOAP
@@ -179,7 +179,7 @@
     select distinct
     hl.location_id
     ,hps.party_site_id
-    ,'44444444'||hps.party_site_number party_site_number
+    ,'77777777'||hps.party_site_number party_site_number
     ,HCASA.attribute4 party_site_name
     ,hpsu.site_use_type site_use_code
     ,hpsu.party_site_use_id site_use_id
@@ -340,7 +340,7 @@
                                         <par:PrimaryPerType>'||c_psu.primary_per_type||'</par:PrimaryPerType>  
                                         <par:OrigSystem>EBSR11_NEW</par:OrigSystem>                                                                             
                                         <par:CreatedByModule>HZ_WS</par:CreatedByModule>      
-                                        <par:OrigSystemReference>44444444'||c_psu.site_use_id||'</par:OrigSystemReference>
+                                        <par:OrigSystemReference>77777777'||c_psu.site_use_id||'</par:OrigSystemReference>
                                     </par:PartySiteUse>';
                         l_soap_env := l_soap_env || to_clob(l_text);  
                         
@@ -514,7 +514,7 @@
                         where xx.party_site_id in (select xx2.party_site_id 
                                                     from xxdl_hz_party_sites xx2
                                                     ,xxdl_hz_parties xhp
-                                                    where xhp.party_number = '44444444'||p_party_number
+                                                    where xhp.party_number = '77777777'||p_party_number
                                                     and xhp.party_id = xx2.party_id
                         )
                         ;  
@@ -525,7 +525,7 @@
                         where xx.party_site_id in (select xx2.party_site_id 
                                                     from xxdl_hz_party_sites xx2
                                                     ,xxdl_hz_parties xhp
-                                                    where xhp.party_number = '44444444'||p_party_number
+                                                    where xhp.party_number = '77777777'||p_party_number
                                                     and xhp.party_id = xx2.party_id
                         )
                         ;                        
@@ -555,7 +555,7 @@
     cursor c_party is
     select 
     hp.party_name party_name
-    ,'44444444'||hp.party_number party_number
+    ,'77777777'||hp.party_number party_number
     ,hp.jgzz_fiscal_code TAXPAYER_ID
     ,hp.party_id
     ,hp.duns_number
@@ -568,7 +568,7 @@
     and hp.party_id > 0
     and rownum <= nvl(p_rows,10)
     and not exists (select 1 from xxdl_hz_parties xx
-                        where xx.party_number = '44444444'||hp.party_number
+                        where xx.party_number = '77777777'||hp.party_number
                         and nvl(xx.process_flag,'X') in ('S',decode(p_retry_error,'Y','N','E'))
                         )
 
@@ -587,7 +587,7 @@
             select distinct
             hl.location_id
             ,hps.party_site_id
-            ,'44444444'||hps.party_site_number party_site_number
+            ,'77777777'||hps.party_site_number party_site_number
             ,HCASA.attribute4 party_site_name
             ,hl.address1
             ,hl.address2
@@ -693,7 +693,7 @@
             select distinct
             hl.location_id
             ,hps.party_site_id
-            ,'44444444'||hps.party_site_number party_site_number
+            ,'77777777'||hps.party_site_number party_site_number
             ,HCASA.attribute4 party_site_name
             ,hl.address1
             ,hl.address2
@@ -892,7 +892,7 @@
 
     cursor c_accounts(c_party_id in number) is
     select distinct
-        '44444444'||hca.account_number account_number
+        '77777777'||hca.account_number account_number
         ,hca.account_name
         ,hca.customer_type
         ,to_char(nvl(hca.account_activation_date,to_date('1998-01-01','YYYY-MM-DD')),'YYYY-MM-DD') account_activation_date    
@@ -955,7 +955,7 @@
         ,jt.address_id cloud_address_id
         ,jt.cloud_party_site_number
         ,HCSA.attribute4 party_site_name
-        ,'44444444'||hps.party_site_number party_site_number
+        ,'77777777'||hps.party_site_number party_site_number
         ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
         ,case
             when hl.country = 'HR' then
@@ -985,6 +985,7 @@
                         else 'US' 
                     end   
         end language       
+        ,xhcas.cloud_cust_acct_site_id
         from
         apps.hz_parties@ebsprod hp
         ,apps.hz_party_sites@ebsprod hps
@@ -993,6 +994,7 @@
         ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
         ,apps.hz_locations@ebsprod hl
         ,xxdl_cloud_reference_sets xx_set
+        ,xxdl_hz_cust_acct_sites xhcas
         ,(
         select
         cloud_party_id
@@ -1088,9 +1090,13 @@
         --and hcsa.org_id in (102,531,2288)
         and jt.ws_call_id = c_ws_call_id
         and hps.status = 'A'
-        and not exists (select 1 from XXDL_HZ_CUST_ACCT_SITES xxhca 
-                            where xxhca.cust_acct_site_id = hcsa.cust_acct_site_id
-                            and nvl(xxhca.process_flag,'X') = 'S')
+        and hcsa.cust_acct_site_id = xhcas.cust_acct_site_id(+)
+        and not exists (select 1 from XXDL_HZ_CUST_ACCT_SITE_USES xxhcasu 
+                            where xxhcasu.site_use_id = hcsu.site_use_id
+                            and nvl(xxhcasu.process_flag,'X') = 'S')
+        --and not exists (select 1 from XXDL_HZ_CUST_ACCT_SITES xxhca 
+        --                    where xxhca.cust_acct_site_id = hcsa.cust_acct_site_id
+         --                   and nvl(xxhca.process_flag,'X') = 'S')
         and exists (select 1 from xxdl_hz_party_sites xhps
                     where xhps.party_site_id = hps.party_site_id
                     and nvl(xhps.process_flag,'X')='S')                    
@@ -1212,8 +1218,8 @@
         --and hps.party_site_id = case
         --and hl.location_id = case   
         and hps.party_site_number = case      
-                            when length(jt.cloud_party_site_number)-8=length(hps.party_site_id) then
-                                case when length(hps.party_site_id)!=length(jt.cloud_party_site_number) then to_number(substr(jt.cloud_party_site_number,(length(jt.cloud_party_site_number)-length(hps.party_site_id))+1,length(jt.cloud_party_site_number))) else to_number(jt.cloud_party_site_number) end
+                            when length(jt.cloud_party_site_number)-8=length(hps.party_site_number) then
+                                case when length(hps.party_site_number)!=length(jt.cloud_party_site_number) then to_number(substr(jt.cloud_party_site_number,(length(jt.cloud_party_site_number)-length(hps.party_site_number))+1,length(jt.cloud_party_site_number))) else to_number(jt.cloud_party_site_number) end
                             else
                                 to_number(jt.cloud_party_site_number)
                             end     
@@ -1393,7 +1399,7 @@
 
               update xxdl_hz_locations xhl
               set xhl.cloud_location_id = c_loc.location_id
-              where '44444444'||xhl.party_site_number = c_loc.cloud_party_site_number;
+              where ''||xhl.party_site_number = c_loc.cloud_party_site_number;
 
             end loop;
 
@@ -1425,7 +1431,7 @@
                                 "AddressNumber":"'||c_l.party_site_number||'",
                                 "SourceSystem": "EBSR11_NEW",
                                 "StartDateActive" : "'||c_l.start_date||'",
-                                "SourceSystemReferenceValue": "'||c_l.party_site_id||';'||c_l.location_id||'"
+                                "SourceSystemReferenceValue": "77777777'||c_l.location_id||'"
                             }';
     
                     l_rest_env := l_rest_env|| to_clob(l_text);
@@ -1562,7 +1568,7 @@
                                         update xxdl_hz_locations xx
                                         set xx.cloud_location_id = c_loc.cloud_location_id
                                         ,xx.process_flag = x_return_status
-                                        where '44444444'||xx.party_site_number = c_loc.cloud_party_site_number;
+                                        where '77777777'||xx.party_site_number = c_loc.cloud_party_site_number;
                                     end if;                
                         end loop;
 
@@ -1671,7 +1677,7 @@
                                                     <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
                                                     <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                     <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>44444444'||c_a.cust_account_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystemReference>77777777'||c_a.cust_account_id||'</cus:OrigSystemReference>';
 
                                 l_soap_env := l_soap_env || to_clob(l_text);
 
@@ -1710,7 +1716,13 @@
                                         where xx.cust_acct_site_id = c_as.cust_acct_site_id;
                                     end;
 
-                                l_text := '
+                                if nvl(c_as.cloud_cust_acct_site_id,0) > 0 THEN
+                                    l_text := '
+                                                <cus:CustomerAccountSite>
+                                                    <cus:CustomerAccountSiteId>'||c_as.cloud_cust_acct_site_id||'</cus:CustomerAccountSiteId>';
+                                else    
+
+                                    l_text := '
                                                 <cus:CustomerAccountSite>
                                                     <cus:PartySiteId>'||c_as.cloud_address_id||'</cus:PartySiteId>
                                                     <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
@@ -1718,7 +1730,8 @@
                                                     <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
                                                     <cus:Language>'||c_as.language||'</cus:Language>
                                                     <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>44444444'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystemReference>77777777'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                end if;                    
                                 l_soap_env := l_soap_env || to_clob(l_text);                   
 
                                 for c_asu in c_account_site_use(c_as.cust_acct_site_id,xr_ws_call_id) loop
@@ -1768,7 +1781,7 @@
                                                             <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                             <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
                                                             <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag> 
-                                                            <cus:OrigSystemReference>44444444'||c_asu.site_use_id||'</cus:OrigSystemReference>
+                                                            <cus:OrigSystemReference>77777777'||c_asu.site_use_id||'</cus:OrigSystemReference>
                                                             <cus:StartDate>'||c_asu.start_date||'</cus:StartDate>
                                                     </cus:CustomerAccountSiteUse>';
                                     l_soap_env := l_soap_env || to_clob(l_text);
@@ -2303,7 +2316,7 @@
                         "SourceSystemReference": [
                             {
                                 "SourceSystem": "EBSR11_NEW",
-                                "SourceSystemReferenceValue": "'||c_p.party_id||'"
+                                "SourceSystemReferenceValue": "77777777'||c_p.party_id||'"
                             }
                         ],
                         "OrganizationName": "'||apex_escape.json(c_p.party_name)||'",
@@ -2332,7 +2345,7 @@
                             "AddressNumber":"'||c_l.party_site_number||'",                                                        
                             "SourceSystem": "EBSR11_NEW",
                             "StartDateActive" : "'||c_l.start_date||'",
-                            "SourceSystemReferenceValue": "'||c_l.party_site_id||';'||c_l.location_id||'"
+                            "SourceSystemReferenceValue": "77777777'||c_l.location_id||'"
                         }';
                 if c_l.c > 0 then
                     l_text := l_text ||',';
@@ -2465,7 +2478,7 @@
                         update xxdl_hz_locations xx
                         set xx.cloud_location_id = c_loc.cloud_location_id
                         ,xx.process_flag = x_return_status
-                        where '44444444'||xx.party_site_number = c_loc.cloud_party_site_number;
+                        where '77777777'||xx.party_site_number = c_loc.cloud_party_site_number;
                     end if;                
                 end loop;
 
@@ -2543,12 +2556,12 @@
                                             <typ:customerAccount>
                                                 <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
                                                 <cus:AccountName>'||c_a.account_name||'</cus:AccountName>    
-                                                <cus:AccountNumber>44444444'||c_a.account_number||'</cus:AccountNumber>
+                                                <cus:AccountNumber>77777777'||c_a.account_number||'</cus:AccountNumber>
                                                 <cus:CustomerType>'||c_a.account_name||'</cus:CustomerType>
                                                 <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
                                                 <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                 <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                <cus:OrigSystemReference>44444444'||c_a.cust_account_id||'</cus:OrigSystemReference>';
+                                                <cus:OrigSystemReference>77777777'||c_a.cust_account_id||'</cus:OrigSystemReference>';
                             l_soap_env := l_soap_env || to_clob(l_text);
 
                             for c_as in c_account_sites(c_a.cust_account_id, x_ws_call_id) loop
@@ -2592,7 +2605,7 @@
                                                     <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
                                                     <cus:Language>'||c_as.language||'</cus:Language>
                                                     <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>44444444'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystemReference>77777777'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
                                 l_soap_env := l_soap_env || to_clob(l_text);                    
 
                                 for c_asu in c_account_site_use(c_as.cust_acct_site_id,x_ws_call_id) loop
@@ -2642,7 +2655,7 @@
                                                             <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                             <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
                                                             <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag>                                                    
-                                                            <cus:OrigSystemReference>44444444'||c_asu.site_use_id||'</cus:OrigSystemReference>
+                                                            <cus:OrigSystemReference>77777777'||c_asu.site_use_id||'</cus:OrigSystemReference>
                                                             <cus:StartDate>'||c_asu.start_date||'</cus:StartDate>
                                                     </cus:CustomerAccountSiteUse>';
                                     l_soap_env := l_soap_env || to_clob(l_text);                                        
@@ -3151,7 +3164,7 @@
                             if nvl(c_loc.address_id,0) > 0 then            
                                 update xxdl_hz_locations xx
                                 set xx.process_flag = 'E'
-                                where '44444444'||xx.party_site_number = c_loc.cloud_party_site_number;
+                                where '77777777'||xx.party_site_number = c_loc.cloud_party_site_number;
                             end if;                
                 end loop;
               
@@ -3447,7 +3460,7 @@
         select distinct
         xx.cloud_party_site_id
         ,hp.party_name
-        ,'44444444'||hp.party_number party_number
+        ,'77777777'||hp.party_number party_number
         ,xx.cloud_party_site_number
         ,xx.party_site_id
         ,case

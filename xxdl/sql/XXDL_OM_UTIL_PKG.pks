@@ -55,6 +55,21 @@ procedure get_om_mfq_info (errbuf out varchar2, retcode out varchar2);
 
 function parse_cs_response(p_ws_call_id in number) return varchar2;
 
+    /*===========================================================================+
+    Function   : migrate_sales_orders
+    Description : migrate all sales orders  
+    Usage       :
+    Arguments   :
+    Remarks     :
+    ============================================================================+*/
+
+    procedure migrate_sales_orders(
+        p_sales_order in varchar2,
+        p_org_id in number,
+        p_rows in number,
+        p_retry_error in varchar2
+    );
+
 end XXDL_OM_UTIL_PKG;
 /
 exit;

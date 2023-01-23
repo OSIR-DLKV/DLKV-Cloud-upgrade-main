@@ -1,8 +1,4 @@
-    SET DEFINE OFF;
-    SET VERIFY OFF;
-    WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
-    WHENEVER OSERROR EXIT FAILURE ROLLBACK;
-    create or replace package body XXDL_OM_UTIL_PKG as
+create or replace package body XXDL_OM_UTIL_PKG as
     /*$Header:  $
     =============================================================================
     -- Name        :  XXDL_OM_UTIL_PKG
@@ -88,7 +84,7 @@
         THEN
             NULL;
     END;
-    
+
     /*===========================================================================+
     Function   : DecodeBASE64
     Description : Decodes BASE64
@@ -235,7 +231,7 @@
         x_return_status => x_return_status,
         x_return_message => x_return_message,
         x_ws_call_id => x_ws_call_id);
-        
+
     dbms_lob.freetemporary(l_soap_env);
     log('Call id:'||x_ws_call_id);
     log('Return status: '||x_return_status);
@@ -243,9 +239,9 @@
 
 
     if(x_return_status = 'S') then
-    
+
         log('Extracting xml response');
-        
+
         begin
         select response_xml
         into l_resp_xml
@@ -267,14 +263,14 @@
             when no_data_found then
             raise XX_NO_REPORT;
         end;
-        
-        
+
+
         l_result_clob_decode := DecodeBASE64(l_result_clob);
-        
+
         l_resp_xml_id := XMLType.createXML(l_result_clob_decode);
-        
+
         log('Parsing report response for supply headers');
-        
+
         FOR cur_rec IN (
         SELECT xt.*
         FROM   XMLTABLE('/DATA_DS/SUPPLY_HEADERS'
@@ -294,7 +290,7 @@
                     LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE'
                 ) xt)
         LOOP
-    
+
             log('====================');
             log('Supply order:'||cur_rec.BRINZ);
             log('Transfer order:'||cur_rec.BUGNA);
@@ -303,10 +299,10 @@
             log('Projekt:'||cur_rec.PROJEKT);
             log('Izvor:'||cur_rec.IZVOR_OM);
             log('==============================');
-            
-            
+
+
             log('Inserting supply headers into table');
-            
+
             l_req_head_rec.BRINZ := cur_rec.BRINZ;
             l_req_head_rec.BUGNA := cur_rec.BUGNA;
             l_req_head_rec.DUNNA := cast(to_timestamp_tz(  cur_rec.DUNNA,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
@@ -321,9 +317,9 @@
             l_req_head_rec.last_update_date := cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
             l_req_head_rec.transf_creation_date := sysdate;
             begin
-            
+
             insert into XXDL_OM_EGZAT values l_req_head_rec;        
-            
+
             exception
             when dup_val_on_index then
             log('Supply header already in table, updating record!');
@@ -344,11 +340,11 @@
                 where xx.HEADER_ID_EBS = cur_rec.HEADER_ID_EBS;
             end;
         end loop;
-        
+
         log('End of supply headers');
-        
+
         log('Parsing report response for supply header lines');
-        
+
         FOR cur_rec IN (
         SELECT xt.*
         FROM   XMLTABLE('/DATA_DS/SUPPLY_LINES'
@@ -374,7 +370,7 @@
                     LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE'
                 ) xt)
         LOOP
-    
+
             log('====================');
             log('Internal request:'||cur_rec.BRINZ);
             log('Internal order:'||CUR_REC.BUGNA);
@@ -382,8 +378,8 @@
             log('Ordered item:'||cur_rec.SPROM);
             log('Request ship date:'||cur_rec.DISP);
             log('==============================');
-            
-            
+
+
             log('Inserting supplier lines into table');
             l_req_line_rec.BRINZ := cur_rec.BRINZ;
             l_req_line_rec.BUGNA := CUR_REC.BUGNA;
@@ -404,11 +400,11 @@
             l_req_line_rec.creation_date := cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
             l_req_line_rec.last_update_date := cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
             l_req_line_rec.transf_creation_date := sysdate;
-            
+
             begin
-            
+
             insert into xxdl_om_eszat values l_req_line_rec;        
-            
+
             exception
             when dup_val_on_index then
             log('Supply line already in table, updating record!');
@@ -435,11 +431,11 @@
                 where xx.LINE_ID_EBS = cur_rec.LINE_ID_EBS;
             end;
         end loop;
-        
-        
+
+
         log('End of supply lines download!');
 
-        
+
          update xxfn_ws_call_log xx 
                 set xx.response_xml = null
                 ,xx.response_clob = null
@@ -448,8 +444,8 @@
                 where ws_call_id = x_ws_call_id;
 
         log('Cleared xxfn_ws_call_log table!'); 
-        
-               
+
+
     end if;
     return x_return_status;
     exception
@@ -466,9 +462,9 @@
     END get_om_mfg_req;
 
     /*===========================================================================+
-    Function   : get_supplier_info
-    Description : retrieves all supplier (supplier, site, address, contact) info to a local EBS custom table
-    Usage       : Callin from concurrent program xxdl_CS_SUPPLIER_DL_PRG
+    Function   : get_om_mfq_info
+    Description : retrieves all internal request for MFG( supply header and supply lines) info to a local EBS custom table
+    Usage       :
     Arguments   :
     Remarks     :
     ============================================================================+*/
@@ -484,11 +480,11 @@
     errbuf:= 'Success';
 
     log('Get max date of creation or update from xxdl_om_egzat');
-    
+
     l_max_date := l_max_date_empty;
-    
+
     begin
-    
+
         select
         case
             when max(xx.creation_date) > max(xx.last_update_date) then
@@ -502,25 +498,25 @@
         when NO_DATA_FOUND then
         l_max_date := to_date('08.12.2022 00:00:00','DD.MM.RRRR HH24:MI:SS');
     end;
-    
+
     if l_max_date is null then
         l_max_date := to_date('08.12.2022 00:00:00','DD.MM.RRRR HH24:MI:SS');  
     end if;
-    
+
     log('Max date for SUPPLY_HEADERS is:'||to_char(l_max_date,'YYYY-MM-DD HH24:MI:SS'));
-    
+
     log('Calling cloud report for SUPPLY_HEADERS download');
-    
+
     l_status := get_om_mfg_req('SUPPLY_HEADERS',to_char(l_max_date,'YYYY-MM-DD HH24:MI:SS'));
-        
+
     log('Supply headers download status:'||l_status);
-    
+
     log('Get max date of creation or update from xxdl_om_eszat');
-    
+
     l_max_date := l_max_date_empty;
-    
+
     begin
-    
+
         select
         case
             when max(xx.creation_date) > max(xx.last_update_date) then
@@ -534,22 +530,22 @@
         when NO_DATA_FOUND then
         l_max_date := to_date('08.12.2022 00:00:00','DD.MM.RRRR HH24:MI:SS'); 
     end;
-    
+
     if l_max_date is null then
         l_max_date := to_date('08.12.2022 00:00:00','DD.MM.RRRR HH24:MI:SS');   
     end if;
-    
+
     log('Max date for SUPPLY_LINES is:'||to_char(l_max_date,'YYYY-MM-DD HH24:MI:SS'));
-    
+
     log('Calling cloud report for SUPPLY_LINES download');
-    
+
     l_status := get_om_mfg_req('SUPPLY_LINES',to_char(l_max_date,'YYYY-MM-DD HH24:MI:SS'));
-        
+
     log('Supply lines download status:'||l_status);
-    
-     
+
+
     log('Download procedure is finished');
-    
+
 
     exception
     when others then
@@ -629,6 +625,548 @@
     return l_msg_body;
     end;
 
+    /*===========================================================================+
+    Function   : migrate_sales_orders
+    Description : migrate all sales orders  
+    Usage       :
+    Arguments   :
+    Remarks     :
+    ============================================================================+*/
+
+    procedure migrate_sales_orders(
+        p_sales_order in varchar2,
+        p_org_id in number,
+        p_rows in number,
+        p_retry_error in varchar2
+    ) IS
+
+    l_fault_code          varchar2(4000);
+    l_fault_string        varchar2(4000); 
+    l_soap_env clob;
+    l_empty_clob clob;
+    l_text varchar2(32000);
+    l_find_text varchar2(32000);
+    x_return_status varchar2(500);
+    x_return_message varchar2(32000);
+    x_ws_call_id number;
+    l_app_url varchar2(300);
+    l_header_rec xxdl_oe_headers_all%rowtype;
+    l_header_rec_empty xxdl_oe_headers_all%rowtype;
+    l_line_rec xxdl_oe_lines_all%rowtype;
+    l_line_rec_empty xxdl_oe_lines_all%rowtype;
+    l_count number := 0;
+
+
+
+
+    cursor c_order_headers is 
+    select distinct
+        xx_set.business_unit_name
+        ,oeoh.ordered_date
+        ,xx_set.business_unit_id
+        ,xx_set.business_unit_id requesting_business_unit_id
+        ,oeoh.cust_po_number
+        ,oeoh.header_id
+        ,oeoh.order_number
+        ,oetl.name order_type_name
+        ,xcom.cloud_code order_type_code
+        ,xhp.party_name
+        ,xhp.cloud_party_id buying_party_id
+        ,decode(oeoh.fob_point_code,null,'null','"'||oeoh.fob_point_code||'"') fob_point_code
+        ,xhca.account_number
+        ,decode(ppa.segment1,null,'null','"'||ppa.segment1||'"','null') projekt
+        ,oeoh.attribute1 broj_zakljucka
+        ,to_char((to_date(oeoh.attribute2,'RRRR/MM/DD HH24:Mi:SS')),'YYYY-MM-DD') datum_zakljucka
+        ,oeoh.attribute3 krovni_ugovor
+        ,oeoh.attribute4 mtr
+        ,xcib.bank_account_id
+        ,oeoh.attribute9 mjesto_pariteta
+        ,oeoh.attribute5 privremena_lokacija
+        ,oeoh.attribute7 reklamacija
+        ,decode(oeoh.attribute6,null,'null','"'||oeoh.attribute6||'"','null') atest
+        ,oeoh.attribute12 krovni_nalog
+        ,case
+            when oeoh.TRANSACTIONAL_CURR_CODE = 'HRK' then
+            'EUR'
+            else oeoh.TRANSACTIONAL_CURR_CODE
+            end TRANSACTIONAL_CURR_CODE
+        ,xhcasu.cloud_site_use_id ship_to_use_id
+        ,jrs.name SALESREP_NAME
+        ,rtl.name payment_term
+        ,xhcasu.CLOUD_BILL_TO_SITE_USE_ID bill_to_use_id
+        ,xhcasu.cloud_party_site_id
+        ,oeoh.request_date
+        ,decode(xcos.resource_id,null,'null',xcos.resource_id) cloud_salesperson_id
+        --,oeoh.*
+        from
+        apps.oe_order_headers_all@ebsprod oeoh
+        ,xxdl_cloud_reference_sets xx_set
+        ,apps.oe_transaction_types_tl@ebsprod oetl
+        ,xxdl_hz_cust_accounts xhca
+        ,xxdl_hz_parties xhp
+        ,xxdl_hz_cust_acct_sites xhcas
+        ,xxdl_hz_cust_acct_site_uses xhcasu
+        ,apps.pa_projects_all@ebsprod ppa
+        ,xxdl_om_mig_bank_acc xx_bank
+        ,xxdl_cloud_internal_bank_accounts xcib
+        ,apps.jtf_rs_salesreps@ebsprod jrs
+        ,apps.ra_terms_tl@ebsprod rtl
+        ,xxdl_cloud_om_order_types xcom
+        ,xxdl_cloud_om_salesreps xcos
+        ,(select
+            *
+            from
+            per_all_people_f@ebsprod ppf
+            where nvl(ppf.effective_end_date,sysdate) >= sysdate) ppf
+        where 1=1
+        --and oeoh.order_number in ('103876')
+        and oeoh.order_number = p_sales_order
+        /*and oeoh.order_number in (
+        '101737',
+        '101738',
+        '101739',
+        '101743'
+        )*/
+        --and oeoh.attribute14 = to_char(xx_bank.bank_account_id)
+        --and oeoh.org_id = xx_bank.org_id
+        --and xx_bank.sob =   --2 DLKV, 1003 MK, 9003 OSO
+        and oeoh.org_id = xx_set.ebs_org_id
+        and oeoh.order_type_id = oetl.transaction_type_id
+        and oetl.language = 'US'
+        and lower(oetl.name) not like '%intern%'
+        and oeoh.sold_to_org_id = xhca.cust_account_id
+        and xhca.party_id = xhp.party_id
+        and xhca.cust_account_id = xhcas.cust_account_id
+        and xhcas.cust_acct_site_id = xhcasu.cust_acct_site_id
+        and oeoh.ship_to_org_id = xhcasu.site_use_id
+        and xhcasu.site_use_code = 'SHIP_TO'
+        and xhcasu.cloud_set_id = xx_set.reference_data_set_id
+        and oeoh.attribute14 = xx_bank.bank_account_id(+)
+        and oeoh.salesrep_id = jrs.salesrep_id
+        and oeoh.attribute16 = ppa.project_id(+)
+        and oeoh.payment_term_id = rtl.term_id
+        and rtl.language = 'HR'
+        and xx_bank.iban_number = xcib.iban_number(+)
+        and oeoh.order_type_id = xcom.transaction_type_id
+        and jrs.person_id = ppf.person_id(+)
+        and ppf.first_name||' '||ppf.last_name = xcos.salesrep_name(+)
+        --and xhp.party_name not in ('Gradilište','MPR - Skladište prodaje MK)
+        and oeoh.creation_date > to_date('01.01.2019','DD.MM.RRRR')
+        and exists (select 1 from apps.oe_order_lines_all@ebsprod oeol
+                        where oeol.header_id = oeoh.header_id
+                        and oeol.flow_status_code not in ('CLOSED','CANCELLED'))
+            ;
+    cursor c_order_lines(c_header_id in number) is
+    select
+    oeoh.order_number
+    ,oeoh.header_id
+    ,oeol.line_ID
+    ,substr(oeol.user_item_description,1,150) user_item_description
+    --,oeol.split_from_line_id
+    ,xx_item.segment1 item_number
+    ,xx_item.cloud_item_id
+    ,case
+        when xx_item.organization_code = 'EMU' then
+            'DLK'
+        when xx_item.organization_code = 'PMK' then
+            'DLK'
+        when xx_item.organization_code = 'POS' then
+            'DLK'
+        else
+        xx_item.organization_code
+        end requested_fulfillment_org_code
+    ,oeoh.transactional_curr_code
+    ,oeol.line_number
+    ,oeol.shipment_number
+    ,case 
+      when oeoh.transactional_curr_code = 'HRK' then
+        round(oeol.unit_list_price/7.53450,2)
+      else 
+        oeol.unit_list_price
+    end list_price_conv
+    ,oeol.ordered_quantity
+    ,oeol.ORDER_QUANTITY_UOM
+    ,opa.price_adjustment_id
+    ,oeol.unit_list_price
+    ,oeol.unit_selling_price
+    ,oeol.promise_date
+    ,oeol.tax_code
+    ,oeol.attribute1 nalog_izrade
+    ,decode(oeol.attribute4,null,'null','"'||oeol.attribute4||'"','null') koordinacija
+    ,oeol.attribute6 radni_nalog
+    ,decode(oeol.attribute8,null,'null','"'||oeol.attribute8||'"','null') prijevoz_mt
+    ,oeol.attribute9 prijevoz_km
+    ,oeol.attribute10 prijevoz_sati
+    ,oeol.request_date
+    ,oeol.schedule_ship_date
+    ,xhp.party_name
+    ,xx_set.business_unit_name
+    ,xx_set.business_unit_id
+    ,xx_set.business_unit_id requesting_business_unit_id
+    ,xhp.cloud_party_id buying_party_id
+    ,xhcasu.cloud_site_use_id ship_to_use_id
+    ,xhcasu.CLOUD_BILL_TO_SITE_USE_ID bill_to_use_id
+    from
+    apps.oe_order_headers_all@ebsprod oeoh
+    ,apps.oe_order_lines_all@ebsprod oeol
+    ,xxdl_mtl_system_items_mig xx_item
+    ,xxdl_cloud_reference_sets xx_set
+    ,xxdl_hz_cust_accounts xhca
+    ,xxdl_hz_parties xhp
+    ,xxdl_hz_cust_acct_sites xhcas
+    ,xxdl_hz_cust_acct_site_uses xhcasu
+    ,(select * from apps.oe_price_adjustments@ebsprod 
+        where list_line_type_code not in ('TAX')) opa
+    where
+    oeoh.header_id = oeol.header_id
+    and oeol.inventory_item_id = xx_item.inventory_item_id
+    and oeol.ship_from_org_id = xx_item.organization_id
+    --and oeoh.order_number in('103876')
+    and oeol.flow_status_code not in ('CLOSED','CANCELLED')
+    and oeol.org_id = xx_set.ebs_org_id
+    and oeol.sold_to_org_id = xhca.cust_account_id
+    and xhca.party_id = xhp.party_id
+    and xhca.cust_account_id = xhcas.cust_account_id
+    and xhcas.cust_acct_site_id = xhcasu.cust_acct_site_id
+    and oeol.ship_to_org_id = xhcasu.site_use_id
+    and xhcasu.site_use_code = 'SHIP_TO'
+    and xhcasu.cloud_set_id = xx_set.reference_data_set_id
+    and oeol.line_id = opa.line_id(+)
+    and oeoh.header_id = c_header_id
+    ;
+    begin
+
+
+
+    l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
+
+    log('Starting import!');
+
+    for c_h in c_order_headers loop
+
+        log('   Found order: '||c_h.order_number);
+
+        l_header_rec.ORDER_NUMBER := c_h.ORDER_NUMBER;
+        l_header_rec.HEADER_ID := c_h.HEADER_ID;
+        l_header_rec.TRANSACTIONAL_CURR_CODE := c_h.TRANSACTIONAL_CURR_CODE;
+        l_header_rec.BU_NAME := c_h.business_unit_name;
+        l_header_rec.BUYING_PARTY_NAME := c_h.party_name;
+        l_header_rec.ACCOUNT_NUMBER  := c_h.ACCOUNT_NUMBER ;
+        l_header_rec.ORDER_TYPE := c_h.ORDER_TYPE_name;
+        l_header_rec.BILL_TO_USE_ID  := c_h.BILL_TO_USE_ID ;
+        l_header_rec.SHIP_TO_USE_ID := c_h.SHIP_TO_USE_ID;
+        l_header_rec.BROJ_ZAKLJUCKA := c_h.BROJ_ZAKLJUCKA;
+        l_header_rec.DATUM_ZAKLJUCKA := c_h.DATUM_ZAKLJUCKA;
+        l_header_rec.KROVNI_UGOVOR := c_h.KROVNI_UGOVOR;
+        l_header_rec.MTR := c_h.MTR;
+        l_header_rec.PROJEKT := c_h.PROJEKT;
+        l_header_rec.BANK_ACCOUNT := c_h.BANK_ACCOUNT_ID;
+        l_header_rec.ATEST := c_h.ATEST;
+        l_header_rec.PARITET := c_h.mjesto_pariteta;
+        l_header_rec.PRIVREMENA_LOKACIJA := c_h.PRIVREMENA_LOKACIJA;
+        l_header_rec.REKLAMACIJA := c_h.REKLAMACIJA;
+        l_header_rec.KROVNI_NALOG := c_h.KROVNI_NALOG;
+        l_header_rec.SALESREP_NAME := c_h.SALESREP_NAME;
+        l_header_rec.PAYMENT_TERM_CODE := c_h.PAYMENT_TERM;
+        l_header_rec.CUST_PO_NUMBER := c_h.CUST_PO_NUMBER;
+        l_header_rec.ORDERED_DATE  := c_h.ORDERED_DATE ;
+        l_header_rec.REQUEST_DATE  := c_h.request_date ;
+        l_header_rec.CREATION_DATE := sysdate;
+
+        begin
+          insert into xxdl_oe_headers_all values l_header_rec;
+          exception
+            when dup_val_on_index then
+             update xxdl_oe_headers_all xx
+             set xx.last_update_date = sysdate
+             where xx.header_id = c_h.header_id
+              ;
+        end;
+
+
+        log('   Building order header payloads!');
+        dbms_lob.createtemporary(l_soap_env, TRUE);
+
+        l_find_text := '{
+                "SourceTransactionNumber": "'||c_h.order_number||'",
+                "SourceTransactionSystem": "OPS",
+                "SourceTransactionId": "'||c_h.header_id||'",
+                "TransactionalCurrencyCode": "'||c_h.transactional_curr_code||'",
+                "BusinessUnitName": "'||c_h.business_unit_name||'",
+                "BuyingPartyName": "'||c_h.party_name||'",
+                "TransactionOn": "'||to_char(sysdate,'YYYY-MM-DD HH24:MI:SS')||'",
+                "SubmittedFlag": false,
+                "FreezePriceFlag": false,
+                "FreezeShippingChargeFlag": false,
+                "FreezeTaxFlag": false,
+                "RequestingBusinessUnitName": "'||c_h.business_unit_name||'",
+                "TransactionTypeCode":"'||c_h.order_type_code||'",
+                "SalespersonId":'||c_h.cloud_salesperson_id||',
+                "CustomerPONumber":"'||apex_escape.json(c_h.cust_po_number)||'",
+                "FOBPointCode":'||c_h.fob_point_code||',
+                "billToCustomer": [
+                    {
+                        "PartyName": "'||c_h.party_name||'",
+                        "AccountNumber": "'||c_h.account_number||'",
+                        "SiteUseId": '||c_h.BILL_TO_USE_ID||'
+                    }
+                ],
+                "shipToCustomer": [
+                    {
+                        "PartyName": "'||c_h.party_name||'",
+                        "SiteId": '||c_h.cloud_party_site_id||'
+                    }
+                ],
+                "additionalInformation": [
+                    {
+                        "Category": "DOO_HEADERS_ADD_INFO",
+                        "HeaderEffBDodatneInformacijeprivateVO": [
+                            {
+                                "ContextCode": "DodatneInformacije",
+                                "brojzakljucka": "'||c_h.broj_zakljucka||'",
+                                "datumzakljucka": "'||c_h.datum_zakljucka||'",
+                                "krovniugovor": "'||c_h.krovni_ugovor||'",
+                                "mt": "'||c_h.MTR||'",
+                                "brojziroracuna": "'||c_h.bank_account_id||'",
+                                "mjestopariteta": "'||c_h.mjesto_pariteta||'",
+                                "reklamacijaNalogIzrade": "'||c_h.REKLAMACIJA||'",
+                                "krovninalogprodaje": "'||c_h.krovni_nalog||'",
+                                "projekt": '||c_h.projekt||'
+                            }
+                        ]
+                    }
+                ],
+                "lines": [';
+
+        l_soap_env := l_soap_env||to_clob(l_find_text);
+
+        for c_l in c_order_lines(c_h.header_id) loop
+
+            l_find_text:='';
+
+            log('       Found line number:'||c_l.line_number||'.'||c_l.shipment_number);
+            log('       Found order item:'||c_l.item_number);
+            log('       Found order qty:'||c_l.ordered_quantity);
+            log('       Found order price:'||c_l.list_price_conv);
+            log('       Found order warehouse:'||c_l.requested_fulfillment_org_code);
+
+            l_line_rec.LINE_ID := c_l.LINE_ID;
+            l_line_rec.HEADER_ID := c_l.HEADER_ID;
+            l_line_rec.ORDER_NUMBER := c_l.ORDER_NUMBER;
+            l_line_rec.TRANSACTIONAL_CURR_CODE := c_l.TRANSACTIONAL_CURR_CODE;
+            l_line_rec.BU_NAME := c_l.business_unit_name;
+            l_line_rec.BUYING_PARTY_NAME := c_l.PARTY_NAME;
+            l_line_rec.BILL_TO_USE_ID := c_l.BILL_TO_USE_ID;
+            l_line_rec.SHIP_TO_USE_ID := c_l.SHIP_TO_USE_ID;
+            l_line_rec.LINE_NUMBER := c_l.LINE_NUMBER;
+            l_line_rec.SHIPMENT_NUMBER := c_l.SHIPMENT_NUMBER;
+            l_line_rec.ITEM_NUMBER := c_l.ITEM_NUMBER;
+            l_line_rec.ITEM_ID := c_l.cloud_item_id;
+            l_line_rec.UOM := c_l.ORDER_QUANTITY_UOM;
+            l_line_rec.ORDERED_QUANTITY := c_l.ORDERED_QUANTITY;
+            l_line_rec.UNIT_SELLING_PRICE := c_l.UNIT_SELLING_PRICE;
+            l_line_rec.SELLING_PRICE_CONV := c_l.list_price_conv;
+            l_line_rec.SHIP_FROM_ORG_CODE := c_l.requested_fulfillment_org_code;
+            l_line_rec.REQUEST_DATE := c_l.REQUEST_DATE;
+            l_line_rec.PROMISE_DATE := c_l.PROMISE_DATE;
+            l_line_rec.SHIP_DATE := c_l.schedule_ship_date;
+            l_line_rec.SALESREP_NAME := c_h.SALESREP_NAME;
+            l_line_rec.TAX_CODE := c_l.TAX_CODE;
+            l_line_rec.NALOG_IZRADE := c_l.NALOG_IZRADE;
+            l_line_rec.KOORDINACIJA := c_l.KOORDINACIJA;
+            l_line_rec.RADNI_NALOG := c_l.RADNI_NALOG;
+            l_line_rec.MT_GARAZNI := c_l.prijevoz_mt;
+            l_line_rec.KM_GARAZNI := c_l.prijevoz_km;
+            l_line_rec.SATI_GARAZNI := c_l.prijevoz_sati;
+            l_line_rec.CREATION_DATE := sysdate;
+
+            begin
+              insert into xxdl_oe_lines_all values l_line_rec;
+              exception
+                when dup_val_on_index then
+                update xxdl_oe_lines_all xx
+                set xx.last_update_date = sysdate
+                where xx.line_id = c_l.line_id
+                  ;
+            end;
+
+            if l_count > 0 then
+
+                l_find_text := ',';
+
+            end if;
+
+             l_find_text := l_find_text||'                 
+                    {
+                        "SourceTransactionLineId": "'||c_l.line_id||'",
+                        "SourceTransactionLineNumber": "'||c_l.line_number||'",
+                        "SourceScheduleNumber": "'||c_l.line_number||'",
+                        "SourceTransactionScheduleId": "'||c_l.line_number||'",
+                        "OrderedUOMCode": "'||c_l.order_quantity_uom||'",
+                        "OrderedQuantity": '||c_l.ordered_quantity||',
+                        "ProductNumber": "'||c_l.item_number||'",
+                        "PaymentTerms": "'||c_h.payment_term||'",
+                        "ShipmentPriority": "High",
+                        "RequestedShipDate": "'||to_char(sysdate,'YYYY-MM-DD HH24:MI:SS')||'",
+                        "RequestedFulfillmentOrganizationName": "'||c_l.requested_fulfillment_org_code||'",
+                        "billToCustomer": [
+                            {
+                                "PartyName": "'||c_h.party_name||'",
+                                "AccountNumber": "'||c_h.account_number||'",
+                                "SiteUseId": '||c_h.BILL_TO_USE_ID||'
+                            }
+                        ],
+                        "shipToCustomer": [
+                            {
+                                "PartyName": "'||c_h.party_name||'",
+                                "SiteId": '||c_h.cloud_party_site_id||'
+                            }
+                        ],
+                        "additionalInformation": [
+                            {
+                                "Category": "DOO_FULFILL_LINES_ADD_INFO",
+                                "FulfillLineEffBxxdlAdditionaLineInfoprivateVO": [
+                                    {
+                                        "ContextCode": "xxdlAdditionaLineInfo",
+                                        "saleprcoverrideval": "'||replace(c_l.list_price_conv,',','.')||'",
+                                        "itemDescription": "'||apex_escape.json(c_l.user_item_description)||'",
+                                        "nalogIzrade": "'||c_l.nalog_izrade||'",
+                                        "koordinacijaNaloga": '||c_l.koordinacija||',
+                                        "radniNalog": "'||c_l.radni_nalog||'",
+                                        "prijevozMt": '||c_l.prijevoz_mt||',
+                                        "prijevozKm": "'||c_l.prijevoz_km||'",
+                                        "prijevozSati": "'||c_l.prijevoz_sati||'"
+                                    }
+                                ]
+                            }
+                        ]
+                    }';
+          l_soap_env := l_soap_env||to_clob(l_find_text);          
+
+          l_count := l_count + 1;
+
+          l_find_text:= '';
+
+        end loop;
+
+        l_find_text := '
+                ]
+             }';
+        l_soap_env := l_soap_env||to_clob(l_find_text);
+        log ('    Calling web service:');
+
+        XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+            p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/salesOrdersForOrderHub',
+            p_rest_env => l_soap_env,
+            p_rest_act => 'POST',
+            p_content_type => 'application/json;charset="UTF-8"',
+            x_return_status => x_return_status,
+            x_return_message => x_return_message,
+            x_ws_call_id => x_ws_call_id);
+
+
+        log('       ws_call_id: '||x_ws_call_id);
+        log('       status: '||x_return_status);
+
+        if x_return_status = 'S' then
+            log('   Order created!');
+
+
+            begin
+                with json_response as
+                    (
+                    (
+                        select
+                        cloud_header_id
+                        from
+                        xxfn_ws_call_log xx,
+                        json_table(xx.response_json,'$'
+                            columns(
+                                            cloud_header_id number path '$.HeaderId'))
+                        where xx.ws_call_id = x_ws_call_id
+                        union
+                        select
+                        cloud_header_id
+                        from
+                        xxfn_ws_call_log xx,
+                        json_table(xx.response_json,'$'
+                            columns(nested path '$.items[*]'
+                                    columns(
+                                        cloud_header_id number path '$.HeaderId'
+                                    )))
+                        where xx.ws_call_id = x_ws_call_id          
+                        )
+                    )
+                    select
+                    nvl(jt.cloud_header_id,0)
+                    into l_header_rec.cloud_header_id
+                    from
+                    json_response jt
+                    where rownum = 1;
+
+
+                    exception
+                    when no_data_found then
+                        l_header_rec.cloud_header_id := 0;
+
+                    end;
+
+                    log('           Cloud header_id:'||l_header_rec.cloud_header_id);
+
+                    begin
+                        update xxdl_oe_headers_all xx
+                        set xx.cloud_header_id = l_header_rec.cloud_header_id
+                        where xx.header_id = c_h.header_id;
+
+            end;
+
+            for c_cl in (
+                        select
+                        cloud_header_id
+                        ,cloud_line_id
+                        ,source_line_id
+                        from
+                        xxfn_ws_call_log xx,
+                        json_table(xx.response_json,'$'
+                            columns(nested path '$.lines[*]'
+                                    columns(
+                                        cloud_header_id number path '$.HeaderId',
+                                        cloud_line_id number path '$.LineId',
+                                        source_line_id number path '$.SourceTransactionLineId'
+                                    )))
+                        where xx.ws_call_id = x_ws_call_id
+            ) loop
+                
+              log('           Cloud line_id:'||c_cl.cloud_line_id);
+
+              update xxdl_oe_lines_all xx
+              set xx.process_flag = 'S'
+              ,xx.cloud_header_id = c_cl.cloud_header_id
+              ,xx.cloud_line_id = c_cl.cloud_line_id
+              where xx.line_id = c_cl.source_line_id;
+            end loop;
+        else
+            log('   Order creation failed!');
+            log('   Error:'||x_return_message);
+
+            update xxdl_oe_headers_all xx
+            set xx.process_flag = 'E'
+            ,xx.ERROR_MSG = x_return_message
+            where xx.header_id = c_h.header_id;
+
+            update xxdl_oe_lines_all xx
+            set xx.process_flag = 'E'
+            ,xx.ERROR_MSG = x_return_message
+            where xx.header_id = c_h.header_id;
+
+        end if;    
+
+    end loop;
+
+
+    log('Order import finished!');
+
+    end migrate_sales_orders;
+
     end XXDL_OM_UTIL_PKG;
-    /
-    exit;

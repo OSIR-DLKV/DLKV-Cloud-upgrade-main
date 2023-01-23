@@ -1212,8 +1212,8 @@
         --and hps.party_site_id = case
         --and hl.location_id = case   
         and hps.party_site_number = case      
-                            when length(jt.cloud_party_site_number)-8=length(hps.party_site_id) then
-                                case when length(hps.party_site_id)!=length(jt.cloud_party_site_number) then to_number(substr(jt.cloud_party_site_number,(length(jt.cloud_party_site_number)-length(hps.party_site_id))+1,length(jt.cloud_party_site_number))) else to_number(jt.cloud_party_site_number) end
+                            when length(jt.cloud_party_site_number)-8=length(hps.party_site_number) then
+                                case when length(hps.party_site_number)!=length(jt.cloud_party_site_number) then to_number(substr(jt.cloud_party_site_number,(length(jt.cloud_party_site_number)-length(hps.party_site_number))+1,length(jt.cloud_party_site_number))) else to_number(jt.cloud_party_site_number) end
                             else
                                 to_number(jt.cloud_party_site_number)
                             end     
@@ -5233,7 +5233,7 @@
                     LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE',
                     BU_NAME VARCHAR2(100) PATH 'BU_NAME'
                 ) xt
-                --where vendor_site_code = 'AUTO-SERVIS MAT'
+                --where vendor_site_code = 'RAVONA D.O.O.'
                 )
         LOOP
     
@@ -6251,6 +6251,7 @@
                                             where xhp.party_id = xhca.party_id
                                             and xhca.cust_account_id = xhcas.cust_account_id
                                             and xhp.party_number like nvl(p_party_number,'%')  
+                                            --and xhp.party_number not in ('115083')
                                             and exists (select 1 from 
                                                             apps.po_vendor_sites_all@ebsprod pvs
                                                                 where pvs.attribute3 = xhcas.party_site_number)
@@ -6263,7 +6264,7 @@
                                                                     and hca.status = 'I')
                                                                 
                         )
-                        where rownum <= 50)
+                        where rownum <= 150)
         and not exists (select 1 from xxdl_poz_supplier_sites xpss
                         where xpss.party_site_id = xx_psa.party_site_id)
         order by xx_psa.vendor_id
@@ -6271,7 +6272,7 @@
 
         cursor c_supplier_sites(c_party_site_id in number) is
         select distinct
-                xx_cust_site.party_site_name vendor_site_code
+                substr(xx_cust_site.party_site_name,1,15) vendor_site_code
                 ,xx_set.business_unit_name
                 ,xx_cust_site.party_site_name address_name
                 ,case
@@ -6301,9 +6302,9 @@
                 ,pv.QTY_RCV_EXCEPTION_CODE                       --,QTY_RCV_EXCEPTION_CODE  (Over-receipt Action)
                 ,pv.DAYS_EARLY_RECEIPT_ALLOWED                   --,DAYS_EARLY_RECEIPT_ALLOWED (Early Receipt Tolerance in Days)
                 ,pv.DAYS_LATE_RECEIPT_ALLOWED                    --,DAYS_LATE_RECEIPT_ALLOWED (Late Receipt Tolerance in Days)
-                ,pv.ALLOW_SUBSTITUTE_RECEIPTS_FLAG                --,ALLOW_SUBSTITUTE_RECEIPTS_FLAG (Allow Substitute Receipts)
-                ,pv.ALLOW_UNORDERED_RECEIPTS_FLAG                 --,ALLOW_UNORDERED_RECEIPTS_FLAG (Allow unordered receipts)
-                ,pv.RECEIPT_DAYS_EXCEPTION_CODE                   --,RECEIPT_DAYS_EXCEPTION_CODE (Receipt Date Exception)
+                ,nvl(pv.ALLOW_SUBSTITUTE_RECEIPTS_FLAG,'N') ALLOW_SUBSTITUTE_RECEIPTS_FLAG               --,ALLOW_SUBSTITUTE_RECEIPTS_FLAG (Allow Substitute Receipts)
+                ,nvl(pv.ALLOW_UNORDERED_RECEIPTS_FLAG,'N') ALLOW_UNORDERED_RECEIPTS_FLAG                 --,ALLOW_UNORDERED_RECEIPTS_FLAG (Allow unordered receipts)
+                ,nvl(pv.RECEIPT_DAYS_EXCEPTION_CODE,'WARNING') RECEIPT_DAYS_EXCEPTION_CODE                  --,RECEIPT_DAYS_EXCEPTION_CODE (Receipt Date Exception)
                 ,decode(pv.INVOICE_CURRENCY_CODE,'HRK','EUR',pv.INVOICE_CURRENCY_CODE ) INVOICE_CURRENCY_CODE --,INVOICE_CURRENCY_CODE (Invoice Currency)
                 ,pvs.INVOICE_AMOUNT_LIMIT                        --,INVOICE_AMOUNT_LIMIT (Invoice Amount Limit)
                 ,case
