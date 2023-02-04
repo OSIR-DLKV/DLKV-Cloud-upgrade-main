@@ -7,6 +7,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   History     :
   v1.0 13.05.2022 Marko Sladoljev: Inicijalna verzija
   v1.1 07.01.2023 Marko Sladoljev: varchar/clob zamjena radi velicine zapisa
+  v1.2 12.01.2023 Marko Sladoljev: referesh_cc_from_wo_mapping - single csv file supported
   ============================================================================+*/
 
   -- File names
@@ -1106,6 +1107,8 @@ create or replace package body xxdl_sla_mappings_pkg is
         xlog('New batch id: ' || l_batch_id);
         l_count := 0;
       end if;
+      
+      l_prev_coa := c_wo.company;
     
       l_count := l_count + 1;
     

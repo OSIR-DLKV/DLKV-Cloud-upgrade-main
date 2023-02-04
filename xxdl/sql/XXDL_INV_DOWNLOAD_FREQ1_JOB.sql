@@ -10,7 +10,7 @@
 begin
 --dbms_scheduler.drop_job(job_name => 'XXDL_INV_DOWNLOAD_FREQ1_JOB');
 dbms_scheduler.create_job (
-   job_name           =>  'XX_INTEGRATION_DEV.XXDL_INV_DOWNLOAD_FREQ1_JOB',
+   job_name           =>  'XX_INTEGRATION_PROD.XXDL_INV_DOWNLOAD_FREQ1_JOB',
    job_type           =>  'STORED_PROCEDURE',
    job_action         =>  'XXDL_INV_INTEGRATION_PKG.DOWNLOAD_FREQ1_SCHEDULE',
    start_date         =>  TRUNC(SYSDATE,'MI'),

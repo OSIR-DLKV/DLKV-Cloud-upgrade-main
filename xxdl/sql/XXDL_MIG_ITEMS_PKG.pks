@@ -19,24 +19,8 @@ create or replace package xxdl_mig_items_pkg as
   ============================================================================+*/
   function should_migrate_item(p_inventory_item_id number, p_organization_id number) return varchar2;
 
-  --/*-----------------------------------------------------------------------------
-  -- Name    : migrate_items_cloud
-  -- Desc    : Procedure for migrating EBS items to cloud
-  -- Usage   : 
-  -- Parameters
-  --     - errbuff: Concurrent program message status
-  --     - retcode: Concurrent execution status
-  -------------------------------------------------------------------------------*/
   procedure migrate_items_cloud(p_item_seg in varchar2, p_rows in number, p_retry_error in varchar2, p_suffix in varchar2);
 
-  --/*-----------------------------------------------------------------------------
-  -- Name    : find_item_cloud
-  -- Desc    : Procedure to find item in cloud
-  -- Usage   : 
-  -- Parameters
-  --     p_item in varchar2,
-  --    p_org in varchar
-  -------------------------------------------------------------------------------*/
   procedure find_item_cloud(p_item in varchar2, p_org in varchar2, p_cloud_item out number, p_cloud_org out number);
 
   procedure migrate_item_batch(p_batch_size number, p_retry_error in varchar2);
@@ -45,6 +29,11 @@ create or replace package xxdl_mig_items_pkg as
 
   function parse_cs_response(p_ws_call_id in number) return varchar2;
 
+  procedure update_items(p_item_number varchar2, p_organization_code varchar2, p_max_rows number);
+  
+  procedure update_items_all;
+
+  function get_organization_code(p_organization_code_ebs in varchar2) return varchar2;
 
 end xxdl_mig_items_pkg;
 /

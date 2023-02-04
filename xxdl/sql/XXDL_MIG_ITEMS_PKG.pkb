@@ -16,6 +16,7 @@ create or replace package body xxdl_mig_items_pkg as
    -- 18-10-22 1.1    msladoljev   New package XXDL_MIG_ITEMS_PKG  
    -- 22-11-22 1.2    msladoljev   Verzija nakon mapiranja nabavnih kategorija
    -- 28-12-22 1.3    msladoljev   Dodane vrijednosti iz template-a
+   -- 27-01-22 1.4    msladoljev   Update items
   =============================================================================*/
   --c_log_module constant varchar2(300) := $$plsql_unit;
   e_processing_exception exception;
@@ -32,7 +33,6 @@ create or replace package body xxdl_mig_items_pkg as
   begin
     --dbms_output.put_line(p_text); -- TODO: Logging?
     null;
-  
   end;
 
   /*===========================================================================+
@@ -156,7 +156,7 @@ create or replace package body xxdl_mig_items_pkg as
       Procedure   : get_item_template
       Description : Gets item template based on item data
   ============================================================================+*/
-  function get_item_template(p_inventory_item_id number) return varchar2 as
+  function get_item_template(p_inventory_item_id number, p_organization_id number) return varchar2 as
     l_template varchar2(30);
     l_count    number;
   
@@ -168,7 +168,7 @@ create or replace package body xxdl_mig_items_pkg as
              apps.mtl_parameters@ebsprod     mtp
        where mtp.organization_id = msi.organization_id
          and msi.inventory_item_id = p_inventory_item_id
-         and mtp.organization_code = 'DLK';
+         and mtp.organization_id = p_organization_id;
   
     c_itm cur_itm%rowtype;
   begin
@@ -613,6 +613,31 @@ create or replace package body xxdl_mig_items_pkg as
         if l_count > 0 then
           return 'Y';
         end if;
+      end if;
+    
+      -- Check xxdl_cloud_po_missing_items@ebsprod_xxdl
+      select count(1)
+        into l_count
+        from xxdl_cloud_po_missing_items@ebsprod_xxdl xmis,
+             apps.mtl_system_items_b@ebsprod          msi
+       where xmis.item = msi.segment1
+         and msi.inventory_item_id = p_inventory_item_id
+         and msi.organization_id = p_organization_id;
+    
+      -- Check XXDL_MIG_ITEMS_FIXED_LIST
+      select count(1)
+        into l_count
+        from xxdl_mig_items_fixed_list       xmis,
+             apps.mtl_system_items_b@ebsprod msi,
+             apps.mtl_parameters@ebsprod     mtp
+       where mtp.organization_id = msi.organization_id
+         and xmis.item_number = msi.segment1
+         and mtp.organization_code = xmis.organization_code
+         and msi.inventory_item_id = p_inventory_item_id
+         and (msi.organization_id = p_organization_id or l_organization_code = 'DLK');
+    
+      if l_count > 0 then
+        return 'Y';
       end if;
     
       if c_itm.segment1 like 'U%' or c_itm.segment1 like 'IU%' or c_itm.segment1 like '1USLUGA%' then
@@ -1074,7 +1099,7 @@ create or replace package body xxdl_mig_items_pkg as
         
           -- Get template
         
-          l_template := get_item_template(c_i.inventory_item_id);
+          l_template := get_item_template(c_i.inventory_item_id, c_i.organization_id);
           xlog('l_template: ' || l_template);
           if l_template is null then
             l_item_rec.error_msg := 'Cannot find template for item';
@@ -1361,8 +1386,8 @@ create or replace package body xxdl_mig_items_pkg as
                 l_item_rec.cloud_org_id  := null;
             end;
           
-            -- Delete lobs after successful item migrated
-            xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+            -- TODO: Delete lobs after successful item migrated
+            --xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
           
           else
             xlog('   Error! Item not migrated!');
@@ -1557,7 +1582,7 @@ create or replace package body xxdl_mig_items_pkg as
   -------------------------------------------------------------------------------*/
   procedure migrate_item_all as
   begin
-    migrate_item_batch(p_batch_size => 999999999, p_retry_error => 'N'); -- TODO : Prvi put s 'N' pokrenuti, kasnije s 'Y'
+    migrate_item_batch(p_batch_size => 999999999, p_retry_error => 'Y'); -- TODO : Prvi put s 'N' pokrenuti, kasnije s 'Y'
   end;
 
   --/*-----------------------------------------------------------------------------
@@ -1777,6 +1802,421 @@ create or replace package body xxdl_mig_items_pkg as
       end if;
     end loop;
     return l_msg_body;
+  end;
+
+  --/*-----------------------------------------------------------------------------
+  -- Name    : update_item
+  -- Desc    : Updates item from EBS to cloud. Used for fixing migration 
+  -------------------------------------------------------------------------------*/
+  procedure update_items(p_item_number varchar2, p_organization_code varchar2, p_max_rows number) as
+    cursor cur_items is
+      select msi.segment1,
+             msi.inventory_item_id,
+             msi.organization_id,
+             mtp.organization_code organization_code_ebs,
+             msi.item_type,
+             msi_mas.item_type     item_type_master
+        from apps.mtl_system_items_b@ebsprod msi,
+             apps.mtl_parameters@ebsprod     mtp,
+             apps.mtl_system_items_b@ebsprod msi_mas,
+             apps.mtl_parameters@ebsprod     mtp_mas,
+             xxdl_mtl_system_items_mig       mig
+       where mtp.organization_id = msi.organization_id
+         and mtp_mas.organization_id = msi_mas.organization_id
+         and mtp_mas.organization_code = 'DLK'
+         and msi_mas.inventory_item_id = msi.inventory_item_id
+         and msi.item_type != msi_mas.item_type
+         and mig.segment1 = msi.segment1
+         and mig.organization_code = get_organization_code(mtp.organization_code)
+         and mig.process_flag = 'S'
+            -- Filters
+         and (rownum <= p_max_rows or p_max_rows is null)
+         and msi.segment1 = nvl(p_item_number, msi.segment1)
+         and mtp.organization_code = nvl(p_organization_code, mtp.organization_code)
+         and not exists (select 1
+                from xxdl_items_update_mig u
+               where u.inventory_item_id = msi.inventory_item_id
+                 and u.organization_id = msi.organization_id
+                 and u.process_flag = 'S');
+  
+    l_item_rec        xxdl_items_update_mig%rowtype;
+    l_item_empty      xxdl_items_update_mig%rowtype;
+    l_fault_code      varchar2(4000);
+    l_fault_string    varchar2(4000);
+    l_soap_env        clob;
+    l_empty_clob      clob;
+    l_text            varchar2(32000);
+    l_text_categories varchar2(32000);
+    l_return_status   varchar2(500);
+    l_return_message  varchar2(32000);
+    l_ws_call_id      number;
+    l_cnt             number := 0;
+    l_item_count      number := 0;
+    l_new_category    varchar2(100);
+  
+    l_prev_item_id number := -1;
+  
+    l_organization_code varchar2(10);
+    l_list_price        number;
+    l_weight_uom        varchar2(10);
+    l_unit_weight       number;
+  
+    --l_ITEM_TYPE varchar2(100);
+  
+    l_app_url varchar2(100);
+  
+    l_cloud_item number;
+    l_cloud_org  number;
+  
+    l_segment1 varchar2(100);
+    l_template varchar2(30);
+  
+    l_category_xml    varchar2(32000);
+    l_item_master_xml varchar2(32000);
+    l_item_org_xml    varchar2(32000);
+  
+    l_source_organization_name varchar2(200);
+  
+    l_purchasable_flag                  varchar2(10);
+    l_purchasing_flag                   varchar2(10);
+    l_customer_order_flag               varchar2(10);
+    l_customer_order_enabled_flag       varchar2(10);
+    l_shippable_flag                    varchar2(100);
+    l_internal_order_flag               varchar2(100);
+    l_internal_order_enabled_flag       varchar2(100);
+    l_inventory_item_flag               varchar2(100);
+    l_inventory_asset_flag              varchar2(100);
+    l_material_transaction_enabled_flag varchar2(100);
+    l_stock_enabled_flag                varchar2(100);
+    l_returnable_flag                   varchar2(100);
+    l_receipt_rounting_value            varchar2(100);
+    l_reservable_flag                   varchar2(100);
+    l_invoiced_flag                     varchar2(100);
+    l_invoice_enabled_flag              varchar2(100);
+    l_costing_enabled_flag              varchar2(100);
+    l_match_approval_level_value        varchar2(100);
+    l_invoice_match_option_value        varchar2(100);
+    l_so_transaction_enabled_flag       varchar2(100);
+    l_orderable_on_web_flag             varchar2(100);
+  begin
+  
+    xlog('Procedure update_items started');
+  
+    l_app_url := xxdl_config_pkg.servicerooturl;
+  
+    l_item_org_xml := ' <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/types/" xmlns:item="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/" xmlns:cat="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/itemSupplier/categories/" xmlns:item1="http://xmlns.oracle.com/apps/scm/productModel/items/flex/itemRevision/" xmlns:cat1="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/itemRevision/categories/" xmlns:cat2="http://xmlns.oracle.com/apps/scm/productCatalogManagement/advancedItems/flex/egoItemEff/item/categories/" xmlns:item2="http://xmlns.oracle.com/apps/scm/productModel/items/flex/item/" xmlns:item3="http://xmlns.oracle.com/apps/scm/productModel/items/flex/itemGdf/" xmlns:mod="http://xmlns.oracle.com/apps/flex/fnd/applcore/attachments/model/">
+      <soapenv:Header/>
+      <soapenv:Body>
+          <typ:updateItem>
+              <typ:item xmlns:ns2="http://xmlns.oracle.com/apps/scm/productModel/items/itemServiceV2/">
+                  <item:OrganizationCode>[ORGANIZATION_CODE]</item:OrganizationCode>               
+                  <item:ItemNumber>[ITEM_NUMBER]</item:ItemNumber>
+                  <item:ItemClass>Root Item Class</item:ItemClass>
+                  <item:ShippableFlag>[SHIPPABLE_FLAG]</item:ShippableFlag>
+                  <item:InternalOrderFlag>[INTERNAL_ORDER_FLAG]</item:InternalOrderFlag>
+                  <item:InternalOrderEnabledFlag>[INTERNAL_ORDER_ENABLED_FLAG]</item:InternalOrderEnabledFlag>
+                  <item:InventoryItemFlag>[INVENTORY_ITEM_FLAG]</item:InventoryItemFlag>
+                  <item:InventoryAssetFlag>[INVENTORY_ASSET_FLAG]</item:InventoryAssetFlag>
+                  <item:MaterialTransactionEnabledFlag>[MATERIAL_TRANSACTION_ENABLED_FLAG]</item:MaterialTransactionEnabledFlag>
+                  <item:StockEnabledFlag>[STOCK_ENABLED_FLAG]</item:StockEnabledFlag>
+                  <item:ReturnableFlag>[RETURNABLE_FLAG]</item:ReturnableFlag>
+                  <item:ReceiptRountingValue>[RECEIPT_ROUNTING_VALUE]</item:ReceiptRountingValue>
+                  <item:ReservableFlag>[RESERVABLE_FLAG]</item:ReservableFlag>
+                  <item:InvoicedFlag>[INVOICED_FLAG]</item:InvoicedFlag>
+                  <item:InvoiceEnabledFlag>[INVOICE_ENABLED_FLAG]</item:InvoiceEnabledFlag>
+                  <item:CostingEnabledFlag>[COSTING_ENABLED_FLAG]</item:CostingEnabledFlag>
+                  <item:MatchApprovalLevelValue>[MATCH_APPROVAL_LEVEL_VALUE]</item:MatchApprovalLevelValue>
+                  <item:InvoiceMatchOptionValue>[INVOICE_MATCH_OPTION_VALUE]</item:InvoiceMatchOptionValue>                  
+                  <item:PurchasableFlag>[PURCHASABLE_FLAG]</item:PurchasableFlag>
+                  <item:PurchasingFlag>[PURCHASING_FLAG]</item:PurchasingFlag>
+                  <item:CustomerOrderFlag>[CUSTOMER_ORDER_FLAG]</item:CustomerOrderFlag>
+                  <item:CustomerOrderEnabledFlag>[CUSTOMER_ORDER_ENABLED_FLAG]</item:CustomerOrderEnabledFlag>
+                  <item:OrderableOnWebFlag>[ORDERABLE_ON_WEB_FLAG]</item:OrderableOnWebFlag>
+                  <item:TransactionEnabledFlag>[SO_TRANSACTION_ENABLED_FLAG]</item:TransactionEnabledFlag>               
+                </typ:item>
+          </typ:updateItem>
+      </soapenv:Body>
+   </soapenv:Envelope>';
+  
+    for c_i in cur_items loop
+      xlog('Item: ' || c_i.segment1);
+    
+      l_segment1 := c_i.segment1;
+    
+      l_organization_code := get_organization_code(c_i.organization_code_ebs);
+    
+      l_item_rec.inventory_item_id := c_i.inventory_item_id;
+      l_item_rec.organization_id   := c_i.organization_id;
+      l_item_rec.segment1          := l_segment1;
+      l_item_rec.organization_code := l_organization_code;
+      l_item_rec.item_type_org     := c_i.item_type;
+      l_item_rec.item_type_mas     := c_i.item_type_master;
+      l_item_rec.creation_date     := sysdate;
+      l_item_rec.last_update_date  := sysdate;
+    
+      begin
+      
+        xlog('   -----------------------------');
+        xlog('   Import item: ' || l_segment1);
+        xlog('   Org        : ' || l_organization_code);
+      
+        l_template := get_item_template(c_i.inventory_item_id, c_i.organization_id);
+        xlog('l_template: ' || l_template);
+        if l_template is null then
+          l_item_rec.error_msg := 'Cannot find template for item';
+          raise e_processing_exception;
+        end if;
+      
+        ----------------------------------------
+        ----- Flags according to templates -----
+        ----------------------------------------
+      
+        -- Purchasing?
+        if l_template in ('XXDL_OS-Proizvod', 'XXDL_Otpad', 'XXDL_Proizvod', 'XXDL_SI-Alati-Proizvod', 'XXDL_Usluga-Prodaja') then
+          l_purchasing_flag  := 'false';
+          l_purchasable_flag := 'false';
+        else
+          l_purchasing_flag  := 'true';
+          l_purchasable_flag := 'true';
+        end if;
+      
+        -- Customer  Order? 
+        if l_template in ('XXDL_Autogume', 'XXDL_Hrana', 'XXDL_Uredski materijal', 'XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz') then
+          l_customer_order_flag         := 'false';
+          l_customer_order_enabled_flag := 'false';
+          l_returnable_flag             := 'false';
+          l_so_transaction_enabled_flag := 'false';
+        else
+          l_customer_order_flag         := 'true';
+          l_customer_order_enabled_flag := 'true';
+          l_returnable_flag             := 'true';
+          l_so_transaction_enabled_flag := 'true';
+        end if;
+      
+        -- Dodatno - prodaja samo s prodajnih skladista. Onemogucava prodaju s neprodajnih skladista
+        if not is_sales_org(l_organization_code) then
+          l_customer_order_enabled_flag := 'false';
+        end if;
+      
+        -- Internal order
+        if l_template in ('XXDL_Hrana', 'XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz', 'XXDL_Usluga-Prodaja', 'XXDL_Usluga-Prodaja i nabava') then
+          l_internal_order_flag         := 'false';
+          l_internal_order_enabled_flag := 'false';
+        else
+          l_internal_order_flag         := 'true';
+          l_internal_order_enabled_flag := 'true';
+        end if;
+      
+        -- Shippable
+        if l_template in ('XXDL_Hrana', 'XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz') then
+          l_shippable_flag := 'false';
+        else
+          l_shippable_flag := 'true';
+        end if;
+      
+        -- Inventory item flag
+        if l_template in ('XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz', 'XXDL_Usluga-Prodaja', 'XXDL_Usluga-Prodaja i nabava') then
+          l_inventory_item_flag               := 'false';
+          l_material_transaction_enabled_flag := 'false';
+        else
+          l_inventory_item_flag               := 'true';
+          l_material_transaction_enabled_flag := 'true';
+        end if;
+      
+        -- Inv asset flag
+        if l_template in
+           ('XXDL_OS-Nabava', 'XXDL_OS-Prodaja', 'XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz', 'XXDL_Usluga-Prodaja', 'XXDL_Usluga-Prodaja i nabava') then
+          l_inventory_asset_flag              := 'false';
+          l_stock_enabled_flag                := 'false';
+          l_material_transaction_enabled_flag := 'false';
+          l_reservable_flag                   := 'false';
+        
+        else
+          l_inventory_asset_flag := 'true';
+          l_stock_enabled_flag   := 'true';
+          l_reservable_flag      := 'true';
+        end if;
+      
+        -- Dodatno stock enabled
+        if is_expense_org(l_organization_code) then
+          l_material_transaction_enabled_flag := 'false';
+          l_stock_enabled_flag                := 'false';
+        end if;
+      
+        -- Routing
+        l_receipt_rounting_value     := 'Direct';
+        l_invoice_match_option_value := 'Receipt';
+        l_match_approval_level_value := '3-Way';
+      
+        if is_insp_routing_org(l_organization_code) and l_stock_enabled_flag = 'true' then
+          l_receipt_rounting_value     := 'Inspection';
+          l_invoice_match_option_value := 'Receipt';
+          l_match_approval_level_value := '4-Way';
+        end if;
+      
+        if l_organization_code = 'PRO' then
+          l_receipt_rounting_value     := 'Direct';
+          l_invoice_match_option_value := 'Order';
+          l_match_approval_level_value := '2-Way';
+        end if;
+      
+        -- Invoiced
+        if l_template in ('XXDL_Hrana', 'XXDL_Usluga-Nabava') then
+          l_invoiced_flag        := 'false';
+          l_invoice_enabled_flag := 'false';
+        else
+          l_invoiced_flag        := 'true';
+          l_invoice_enabled_flag := 'true';
+        end if;
+      
+        -- Costing
+        if l_template in ('XXDL_OS-Prodaja', 'XXDL_Usluga-Nabava', 'XXDL_Usluga-Prijevoz', 'XXDL_Usluga-Prodaja', 'XXDL_Usluga-Prodaja i nabava') then
+          l_costing_enabled_flag := 'false';
+        else
+          l_costing_enabled_flag := 'true';
+        end if;
+      
+        -- l_orderable_on_web_flag
+        l_orderable_on_web_flag := l_customer_order_enabled_flag;
+      
+        xlog('Updating item...');
+      
+        l_text := l_item_org_xml;
+      
+        l_text := replace(l_text, '[ORGANIZATION_CODE]', l_organization_code);
+        --l_text := replace(l_text, '[TEMPLATE]', l_template);
+        l_text := replace(l_text, '[ITEM_NUMBER]', l_segment1);
+        --l_text := replace(l_text, '[ITEM_TYPE]', cdata(get_item_type(c_i.item_type)));
+        --l_text := replace(l_text, '[DESCRIPTION]', cdata(c_i.description));
+        --l_text := replace(l_text, '[LONG_DESCRIPTION]', cdata(c_i.long_description));
+        --l_text := replace(l_text, '[PRIMARY_UOM_VALUE]', c_i.primary_uom_code);
+        --l_text := replace(l_text, '[LIST_PRICE]', format_number(l_list_price));
+        --l_text := replace(l_text, '[UNIT_WEIGHT_QUANTITY]', format_number(l_unit_weight));
+        -- l_text := replace(l_text, '[WEIGHT_UOM]', l_weight_uom);
+        -- l_text := replace(l_text, '[ASSET_CATEGORY]', c_i.asset_category);
+        -- l_text := replace(l_text, '[DFF_STANDARD]', cdata(c_i.dff_standard));
+        -- l_text := replace(l_text, '[DFF_OZNAKA_KVALITETE]', cdata(c_i.dff_oznaka_kvalitete));
+        -- l_text := replace(l_text, '[DFF_POSTO_CINKA]', c_i.dff_posto_cinka);
+        -- l_text := replace(l_text, '[DFF_USLUGA_CINCANJA]', c_i.dff_usluga_cincanja);
+        -- l_text := replace(l_text, '[REPLENISHMENT_TYPE]', c_i.source_type_value);
+        -- l_text := replace(l_text, '[SOURCE_ORGANIZATION_VALUE]', l_source_organization_name);
+        -- l_text := replace(l_text, '[SOURCE_SUBINVENTORY_ORGANIZATION_VALUE]', null);
+        -- l_text := replace(l_text, '[SOURCE_SUBINVENTORY_VALUE]', c_i.source_subinventory);
+        -- Calculated columns
+        l_text := replace(l_text, '[PURCHASING_FLAG]', l_purchasing_flag);
+        l_text := replace(l_text, '[PURCHASABLE_FLAG]', l_purchasable_flag);
+        l_text := replace(l_text, '[CUSTOMER_ORDER_FLAG]', l_customer_order_flag);
+        l_text := replace(l_text, '[CUSTOMER_ORDER_ENABLED_FLAG]', l_customer_order_enabled_flag);
+        l_text := replace(l_text, '[ORDERABLE_ON_WEB_FLAG]', l_orderable_on_web_flag);
+        l_text := replace(l_text, '[SHIPPABLE_FLAG]', l_shippable_flag);
+        l_text := replace(l_text, '[INTERNAL_ORDER_FLAG]', l_internal_order_flag);
+        l_text := replace(l_text, '[INTERNAL_ORDER_ENABLED_FLAG]', l_internal_order_enabled_flag);
+        l_text := replace(l_text, '[INVENTORY_ITEM_FLAG]', l_inventory_item_flag);
+        l_text := replace(l_text, '[INVENTORY_ASSET_FLAG]', l_inventory_asset_flag);
+        l_text := replace(l_text, '[MATERIAL_TRANSACTION_ENABLED_FLAG]', l_material_transaction_enabled_flag);
+        l_text := replace(l_text, '[STOCK_ENABLED_FLAG]', l_stock_enabled_flag);
+        l_text := replace(l_text, '[RETURNABLE_FLAG]', l_returnable_flag);
+        l_text := replace(l_text, '[RECEIPT_ROUNTING_VALUE]', l_receipt_rounting_value);
+        l_text := replace(l_text, '[RESERVABLE_FLAG]', l_reservable_flag);
+        l_text := replace(l_text, '[INVOICED_FLAG]', l_invoiced_flag);
+        l_text := replace(l_text, '[INVOICE_ENABLED_FLAG]', l_invoice_enabled_flag);
+        l_text := replace(l_text, '[COSTING_ENABLED_FLAG]', l_costing_enabled_flag);
+        l_text := replace(l_text, '[MATCH_APPROVAL_LEVEL_VALUE]', l_match_approval_level_value);
+        l_text := replace(l_text, '[INVOICE_MATCH_OPTION_VALUE]', l_invoice_match_option_value);
+        l_text := replace(l_text, '[SO_TRANSACTION_ENABLED_FLAG]', l_so_transaction_enabled_flag);
+      
+        l_soap_env := to_clob(l_text);
+        l_text     := '';
+      
+        xlog('Calling web service.');
+        xlog('Url:' || l_app_url || 'fscmService/ItemServiceV2?WSDL');
+        xxfn_cloud_ws_pkg.ws_call(p_ws_url         => l_app_url || 'fscmService/ItemServiceV2?WSDL',
+                                  p_soap_env       => l_soap_env,
+                                  p_soap_act       => 'updateItem',
+                                  p_content_type   => 'text/xml;charset="UTF-8"',
+                                  x_return_status  => l_return_status,
+                                  x_return_message => l_return_message,
+                                  x_ws_call_id     => l_ws_call_id);
+      
+        xlog('ws_call_id (Update Item):' || l_ws_call_id);
+      
+        l_item_rec.ws_call_id := l_ws_call_id;
+      
+        if l_return_status = 'S' then
+        
+          xlog('Item updated!');
+        
+          l_item_rec.process_flag := l_return_status;
+        
+        else
+          xlog('Error! Item not updated!');
+          xlog('x_return_message: ' || l_return_message);
+        
+          l_item_rec.process_flag := 'E';
+        
+          -- Get error message
+          begin
+            select xt.faultcode,
+                   xt.faultstring
+              into l_fault_code,
+                   l_fault_string
+              from xxfn_ws_call_log x,
+                   xmltable(xmlnamespaces('http://schemas.xmlsoap.org/soap/envelope/' as "env"),
+                            './/env:Fault' passing x.response_xml columns faultcode varchar2(4000) path '.',
+                            faultstring varchar2(4000) path '.') xt
+             where x.ws_call_id = l_ws_call_id;
+          
+          exception
+            when no_data_found then
+              begin
+                select nvl(x.response_status_code, 'ERROR'),
+                       x.response_reason_phrase
+                  into l_fault_code,
+                       l_fault_string
+                  from xxfn_ws_call_log x
+                 where x.ws_call_id = l_ws_call_id;
+              
+              exception
+                when others then
+                  l_item_rec.error_msg := 'Cannot find env:Fault in ws call results.';
+              end;
+          end;
+        
+          if l_fault_code is not null or l_fault_string is not null then
+            l_item_rec.error_msg    := substr('   Greska => Code:' || l_fault_code || ' Text:' || l_fault_string, 1, 1000);
+            l_item_rec.process_flag := 'E';
+          end if;
+          xlog('   ' || l_item_rec.error_msg);
+        end if;
+      
+      exception
+        when e_processing_exception then
+          l_item_rec.process_flag := 'E';
+          xlog('*** Error in processing item');
+          xlog(l_item_rec.error_msg);
+      end;
+    
+      -- Save resullts to XXDL_ITEMS_UPDATE_MIG
+    
+      insert into xxdl_items_update_mig values l_item_rec;
+    
+      l_item_rec := l_item_empty;
+      l_soap_env := l_empty_clob;
+    
+      commit; -- Comit after WS call
+    
+    end loop;
+  
+    xlog('Procedure update_items finished');
+  
+  end;
+  --/*-----------------------------------------------------------------------------
+  -- Name    : update_items_all
+  -- Desc    : Updates item from EBS to cloud. Used for fixing migration 
+  -------------------------------------------------------------------------------*/
+  procedure update_items_all as
+  begin
+    update_items(null, null, null);  
   end;
 
 end xxdl_mig_items_pkg;
