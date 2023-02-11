@@ -21,10 +21,22 @@ create or replace package body xxdl_log_pkg as
   procedure log(p_module varchar, p_log_level varchar, p_message varchar2) as
     pragma autonomous_transaction;
   begin
-    insert into xxdl.xxdl_log (log_id, module, log_level, message, date_created) values (xxdl_log_s1.nextval, p_module, p_log_level, p_message, sysdate);
+    insert into xxdl_log (log_id, module, log_level, message, date_created) values (xxdl_log_s1.nextval, p_module, p_log_level, p_message, sysdate);
     commit;
   end;
 
+  /*===========================================================================+
+  Procedure   : purge_old_log
+  Description : Deletes records older then 30 days
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure purge_old_log as
+    pragma autonomous_transaction;
+  begin
+    delete from xxdl_log where date_created < sysdate - 31;
+    commit;
+  end;
 
 end xxdl_log_pkg;
 /
