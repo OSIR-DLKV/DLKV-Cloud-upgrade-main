@@ -17,6 +17,7 @@ create or replace package body xxdl_mig_items_pkg as
    -- 22-11-22 1.2    msladoljev   Verzija nakon mapiranja nabavnih kategorija
    -- 28-12-22 1.3    msladoljev   Dodane vrijednosti iz template-a
    -- 27-01-22 1.4    msladoljev   Update items
+   -- 13-02-23 1.5    msladoljev   SVE, GDS
   =============================================================================*/
   --c_log_module constant varchar2(300) := $$plsql_unit;
   e_processing_exception exception;
@@ -43,13 +44,43 @@ create or replace package body xxdl_mig_items_pkg as
     l_organization_code varchar2(10);
   begin
   
+    l_organization_code := p_organization_code_ebs;
+  
     if p_organization_code_ebs = 'CIN' then
       l_organization_code := 'PMK';
-    else
-      l_organization_code := p_organization_code_ebs;
+    end if;
+  
+    -- This part should be only for SVE and GDS
+  
+    if p_organization_code_ebs = 'NUF' then
+      l_organization_code := 'SVE';
+    elsif p_organization_code_ebs = 'GDN' then
+      l_organization_code := 'GDS';
     end if;
   
     return l_organization_code;
+  
+  end;
+
+  /*===========================================================================+
+      Procedure   : get_organization_id
+      Description : Dummy org id for SVE, GDS
+  ============================================================================+*/
+  function get_organization_id(p_organization_code in varchar2) return varchar2 as
+    l_organization_id number;
+  begin
+  
+    -- This part should be only for SVE and GDS
+  
+    if p_organization_code = 'SVE' then
+      l_organization_id := -1;
+    elsif p_organization_code = 'GDS' then
+      l_organization_id := -2;
+    else
+      select organization_id into l_organization_id from apps.mtl_parameters@ebsprod where organization_code = p_organization_code;
+    end if;
+  
+    return l_organization_id;
   
   end;
 
@@ -640,6 +671,37 @@ create or replace package body xxdl_mig_items_pkg as
         return 'Y';
       end if;
     
+      -- for SVE, GDS is same rule as for NUF, GDN
+      if l_organization_code = 'SVE' then
+      
+        select count(1)
+          into l_count
+          from xxdl_mtl_system_items_mig
+         where organization_code = 'NUF'
+           and process_flag = 'S'
+           and inventory_item_id = p_inventory_item_id;
+      
+        if l_count > 0 then
+          return 'Y';
+        end if;
+      
+      end if;
+    
+      if l_organization_code = 'GDS' then
+      
+        select count(1)
+          into l_count
+          from xxdl_mtl_system_items_mig
+         where organization_code = 'GDN'
+           and process_flag = 'S'
+           and inventory_item_id = p_inventory_item_id;
+      
+        if l_count > 0 then
+          return 'Y';
+        end if;
+      
+      end if;
+    
       if c_itm.segment1 like 'U%' or c_itm.segment1 like 'IU%' or c_itm.segment1 like '1USLUGA%' then
       
         ------------------
@@ -803,15 +865,18 @@ create or replace package body xxdl_mig_items_pkg as
          and msi.item_type = typ.lookup_code
          and typ.lookup_type = 'ITEM_TYPE'
          and typ.language = 'US'
+         and mp.organization_code in ('NUF', 'GDN')
          and not exists (select 1
                 from xxdl_mtl_system_items_mig xx
                where xx.inventory_item_id = msi.inventory_item_id
-                 and xx.organization_id = msi.organization_id
+                    --and xx.organization_id = msi.organization_id
+                 and get_organization_code(mp.organization_code) = xx.organization_code
                  and xx.process_flag in ('S', 'X')) -- Ne postoje uspjesno procesirani
          and not exists (select 1
                 from xxdl_mtl_system_items_mig xx
                where xx.inventory_item_id = msi.inventory_item_id
-                 and xx.organization_id = msi.organization_id
+                    --and xx.organization_id = msi.organization_id
+                 and get_organization_code(mp.organization_code) = xx.organization_code
                  and xx.process_flag = 'E'
                  and p_retry_error = 'N') -- error recordi se procesiraju ako je trazeno 
        order by segment1,
@@ -1069,7 +1134,8 @@ create or replace package body xxdl_mig_items_pkg as
       l_organization_code := get_organization_code(c_i.organization_code_ebs);
     
       l_item_rec.inventory_item_id := c_i.inventory_item_id;
-      l_item_rec.organization_id   := c_i.organization_id;
+      --l_item_rec.organization_id   := c_i.organization_id;
+      l_item_rec.organization_id   := get_organization_id(l_organization_code);
       l_item_rec.segment1          := l_segment1;
       l_item_rec.organization_code := l_organization_code;
       l_item_rec.description       := c_i.description;
@@ -2216,7 +2282,7 @@ create or replace package body xxdl_mig_items_pkg as
   -------------------------------------------------------------------------------*/
   procedure update_items_all as
   begin
-    update_items(null, null, null);  
+    update_items(null, null, null);
   end;
 
 end xxdl_mig_items_pkg;
