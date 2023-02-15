@@ -11,10 +11,10 @@
   ============================================================================+*/
 begin
 dbms_scheduler.create_job (
-   job_name           =>  'XX_INTEGRATION_DEV.XXDL_REFRESH_MAPPING_SETS_JOB',
+   job_name           =>  'XX_INTEGRATION_PROD.XXDL_REFRESH_MAPPING_SETS_JOB',
    job_type           =>  'STORED_PROCEDURE',
    job_action         =>  'XXDL_SLA_MAPPINGS_PKG.refresh_all_mapping_sets',
-   start_date         =>  TO_DATE('2022/05/31 02:00:00', 'YYYY/MM/DD HH:MI:SS'),
+   start_date         =>  TO_DATE('2023/01/10 02:00:00', 'YYYY/MM/DD HH:MI:SS'),
    repeat_interval    =>  'FREQ=DAILY',
    enabled            =>  TRUE);
 END;

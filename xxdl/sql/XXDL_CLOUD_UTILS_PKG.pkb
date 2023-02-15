@@ -31,7 +31,7 @@ create or replace package body xxdl_cloud_utils_pkg is
   procedure xlog(p_text in varchar2) as
   begin
     if g_log_level = xxdl_log_pkg.g_level_statement then
-      dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
+      --dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
       xxdl_log_pkg.log(p_module => c_module, p_log_level => xxdl_log_pkg.g_level_statement, p_message => p_text);
     end if;
   end;

@@ -10,12 +10,12 @@ create or replace package body xxdl_mig_inv_pkg as
 
   -- Log variables
   c_module    constant varchar2(100) := 'XXDL_MIG_INV_PKG';
-  --g_log_level constant varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
-  g_log_level    constant varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular production error only logging
+  g_log_level constant varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
+  --g_log_level    constant varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular production error only logging
 
   -- Constants
   g_account               constant varchar2(100) := '100970'; --- konto
-  g_transaction_date      constant date := to_date('1-JUL-2022', 'DD-MON-YYYY');
+  g_transaction_date      constant date := to_date('31-DEC-2022', 'DD-MON-YYYY');
   g_transaction_type_name constant varchar2(250) := unistr('Migracija po\010Detnih stanja ulaz');
   c_eur_rate              constant number := 7.5345;
 
@@ -35,7 +35,7 @@ create or replace package body xxdl_mig_inv_pkg as
   begin
     g_last_message := p_text;
     if g_log_level = xxdl_log_pkg.g_level_statement then
-      --dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
+      dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
       xxdl_log_pkg.log(p_module => c_module, p_log_level => xxdl_log_pkg.g_level_statement, p_message => p_text);
     end if;
   end;
@@ -126,16 +126,16 @@ create or replace package body xxdl_mig_inv_pkg as
   Arguments   : 
   ============================================================================+*/
   function get_subinventory(p_org_code varchar2) return varchar2 as
-    l_locator varchar2(250);
+    l_subinv varchar2(250);
   begin
   
     if p_org_code in ('ET1') then
-      l_locator := 'Zalihe2'; -- TODO: Za produkciju Zalihe
+      l_subinv := 'Zalihe'; -- TODO: Za produkciju Zalihe, za test Zalihe2
     else
-      l_locator := 'Zalihe';
+      l_subinv := 'Zalihe';
     end if;
   
-    return l_locator;
+    return l_subinv;
   end;
 
   /*===========================================================================+
@@ -164,6 +164,8 @@ create or replace package body xxdl_mig_inv_pkg as
     l_locator varchar2(100);
   
     l_subinventory varchar2(20);
+    
+    l_reference varchar2(100);
   
   begin
   
@@ -179,6 +181,8 @@ create or replace package body xxdl_mig_inv_pkg as
         l_seg1 := get_company_segment1(c_exp.organization_code_ebs);
       
         l_locator := get_locator(c_exp.organization_code_ebs);
+        
+        l_reference := 'Mig id: ' || c_exp.mig_id;
       
         l_row.transaction_interface_id := xxdl_inv_material_txns_int_s1.nextval;
         l_row.batch_id                 := l_batch_id;
@@ -192,13 +196,13 @@ create or replace package body xxdl_mig_inv_pkg as
         l_row.locator_name             := l_locator;
         l_row.inv_project_number       := null; --c_exp.project_number; --Prema dogovoru, zalihu na projektu ne migriramo
         l_row.inv_task_number          := null; -- c_exp.task_number;
-        l_row.account_combination      := l_seg1 || '.' || g_account || '.000000.000000.000000.0000000.000000.0.000000.000000';
+        l_row.account_combination      := l_seg1 || '.' || g_account || '.000000.000000.000000.0000000.000000.00.000000.000000'; -- TODO: PROD 00, TEST 0
         l_row.source_code              := 'DLKV';
         l_row.source_line_id           := 1;
         l_row.source_header_id         := 1;
         l_row.use_current_cost_flag    := 'N';
         l_row.transaction_cost         := c_exp.material_cost / c_eur_rate;
-        l_row.transaction_reference    := 'Mig id: ' || c_exp.mig_id;
+        l_row.transaction_reference    := l_reference;
         l_row.status                   := 'NEW';
         l_row.error_message            := null;
         l_row.creation_date            := sysdate;
@@ -206,12 +210,7 @@ create or replace package body xxdl_mig_inv_pkg as
       
         xlog('Deleting from xxdl_inv_material_txns_int if exists from prevous errored transactions');
         delete from xxdl_inv_material_txns_int
-         where organization_name = l_row.organization_name
-           and item_number = l_row.item_number
-           and transaction_type_name = l_row.transaction_type_name
-           and nvl(locator_name, 'X') = nvl(l_row.locator_name, 'X')
-           and nvl(inv_project_number, 'X') = nvl(l_row.inv_project_number, 'X')
-           and nvl(inv_task_number, 'X') = nvl(l_row.inv_task_number, 'X');
+         where transaction_reference = l_reference;
         xlog('Deleted: ' || sql%rowcount);
       
         insert into xxdl_inv_material_txns_int values l_row;
@@ -324,7 +323,7 @@ create or replace package body xxdl_mig_inv_pkg as
          and onh.task_id = t.task_id(+)
          and uom.language = 'US'
          and uom.uom_code = msi.primary_uom_code
-         and onh.subinventory_code in ('Zalihe', 'Projekt')
+         and onh.subinventory_code in ('Zalihe', 'Projekt', 'Otprema')
          and mtp.organization_code in ('AO3',
                                        'I04',
                                        'SS1',
@@ -352,6 +351,7 @@ create or replace package body xxdl_mig_inv_pkg as
                                        'ET1')
          and mtp.organization_code = nvl(p_org_code, mtp.organization_code)
          and msi.segment1 = nvl(p_item, msi.segment1)
+         and msi.segment1 != '0AAB0700603' -- rucno migriran
             -- Not exported already
          and not exists (select 1
                 from xxdl_mig_onhand mig
