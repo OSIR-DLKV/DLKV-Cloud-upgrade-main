@@ -18,6 +18,7 @@ create or replace package body xxdl_mig_items_pkg as
    -- 28-12-22 1.3    msladoljev   Dodane vrijednosti iz template-a
    -- 27-01-22 1.4    msladoljev   Update items
    -- 13-02-23 1.5    msladoljev   SVE, GDS
+   -- 13-02-23 1.6    msladoljev   Verzija za migraciju bez SVE, GDS
   =============================================================================*/
   --c_log_module constant varchar2(300) := $$plsql_unit;
   e_processing_exception exception;
@@ -51,12 +52,13 @@ create or replace package body xxdl_mig_items_pkg as
     end if;
   
     -- This part should be only for SVE and GDS
-  
-    if p_organization_code_ebs = 'NUF' then
-      l_organization_code := 'SVE';
-    elsif p_organization_code_ebs = 'GDN' then
-      l_organization_code := 'GDS';
-    end if;
+    /*
+        if p_organization_code_ebs = 'NUF' then
+          l_organization_code := 'SVE';
+        elsif p_organization_code_ebs = 'GDN' then
+          l_organization_code := 'GDS';
+        end if;
+    */
   
     return l_organization_code;
   
@@ -69,6 +71,7 @@ create or replace package body xxdl_mig_items_pkg as
   function get_organization_id(p_organization_code in varchar2) return varchar2 as
     l_organization_id number;
   begin
+    xlog('p_organization_code: ' || p_organization_code);
   
     -- This part should be only for SVE and GDS
   
@@ -530,7 +533,7 @@ create or replace package body xxdl_mig_items_pkg as
 
   --/*-----------------------------------------------------------------------------
   -- Name    :get_item_type
-  -- Desc    :TRanslation for item type
+  -- Desc    :Translation for item type
   -------------------------------------------------------------------------------*/
   function get_item_type(p_old_item_type varchar2) return varchar as
     l_new_item_type varchar2(100);
@@ -541,6 +544,22 @@ create or replace package body xxdl_mig_items_pkg as
       l_new_item_type := p_old_item_type;
     end if;
     return l_new_item_type;
+  
+  end;
+
+  --/*-----------------------------------------------------------------------------
+  -- Name    : get_asset_category
+  -- Desc    : Translation Asset Category
+  -------------------------------------------------------------------------------*/
+  function get_asset_category(p_old_asset_category varchar2) return varchar as
+    l_new_asset_category varchar2(100);
+  begin
+    if p_old_asset_category = 'SITAN INVENTAR-ALATI-000' then
+      l_new_asset_category := 'SITAN INVENTAR-ALATI SI-OOO';
+    else
+      l_new_asset_category := p_old_asset_category;
+    end if;
+    return l_new_asset_category;
   
   end;
 
@@ -646,14 +665,18 @@ create or replace package body xxdl_mig_items_pkg as
         end if;
       end if;
     
-      -- Check xxdl_cloud_po_missing_items@ebsprod_xxdl
+      -- Check xxdl_mig_items_fixed_list_all
       select count(1)
         into l_count
-        from xxdl_cloud_po_missing_items@ebsprod_xxdl xmis,
-             apps.mtl_system_items_b@ebsprod          msi
-       where xmis.item = msi.segment1
+        from xxdl_mig_items_fixed_list_all   xmis,
+             apps.mtl_system_items_b@ebsprod msi
+       where xmis.segment1 = msi.segment1
          and msi.inventory_item_id = p_inventory_item_id
          and msi.organization_id = p_organization_id;
+    
+      if l_count > 0 then
+        return 'Y';
+      end if;
     
       -- Check XXDL_MIG_ITEMS_FIXED_LIST
       select count(1)
@@ -865,18 +888,18 @@ create or replace package body xxdl_mig_items_pkg as
          and msi.item_type = typ.lookup_code
          and typ.lookup_type = 'ITEM_TYPE'
          and typ.language = 'US'
-         and mp.organization_code in ('NUF', 'GDN')
+            --and mp.organization_code in ('NUF', 'GDN')
          and not exists (select 1
                 from xxdl_mtl_system_items_mig xx
                where xx.inventory_item_id = msi.inventory_item_id
-                    --and xx.organization_id = msi.organization_id
-                 and get_organization_code(mp.organization_code) = xx.organization_code
+                 and xx.organization_id = msi.organization_id
+                    --and get_organization_code(mp.organization_code) = xx.organization_code
                  and xx.process_flag in ('S', 'X')) -- Ne postoje uspjesno procesirani
          and not exists (select 1
                 from xxdl_mtl_system_items_mig xx
                where xx.inventory_item_id = msi.inventory_item_id
-                    --and xx.organization_id = msi.organization_id
-                 and get_organization_code(mp.organization_code) = xx.organization_code
+                 and xx.organization_id = msi.organization_id
+                    --and get_organization_code(mp.organization_code) = xx.organization_code
                  and xx.process_flag = 'E'
                  and p_retry_error = 'N') -- error recordi se procesiraju ako je trazeno 
        order by segment1,
@@ -1134,8 +1157,8 @@ create or replace package body xxdl_mig_items_pkg as
       l_organization_code := get_organization_code(c_i.organization_code_ebs);
     
       l_item_rec.inventory_item_id := c_i.inventory_item_id;
-      --l_item_rec.organization_id   := c_i.organization_id;
-      l_item_rec.organization_id   := get_organization_id(l_organization_code);
+      l_item_rec.organization_id   := c_i.organization_id;
+      --l_item_rec.organization_id   := get_organization_id(l_organization_code);
       l_item_rec.segment1          := l_segment1;
       l_item_rec.organization_code := l_organization_code;
       l_item_rec.description       := c_i.description;
@@ -1335,7 +1358,7 @@ create or replace package body xxdl_mig_items_pkg as
           l_text := replace(l_text, '[LIST_PRICE]', format_number(l_list_price));
           l_text := replace(l_text, '[UNIT_WEIGHT_QUANTITY]', format_number(l_unit_weight));
           l_text := replace(l_text, '[WEIGHT_UOM]', l_weight_uom);
-          l_text := replace(l_text, '[ASSET_CATEGORY]', c_i.asset_category);
+          l_text := replace(l_text, '[ASSET_CATEGORY]', get_asset_category(c_i.asset_category));
           l_text := replace(l_text, '[DFF_STANDARD]', cdata(c_i.dff_standard));
           l_text := replace(l_text, '[DFF_OZNAKA_KVALITETE]', cdata(c_i.dff_oznaka_kvalitete));
           l_text := replace(l_text, '[DFF_POSTO_CINKA]', c_i.dff_posto_cinka);
@@ -1453,7 +1476,7 @@ create or replace package body xxdl_mig_items_pkg as
             end;
           
             -- TODO: Delete lobs after successful item migrated
-            --xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+            xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
           
           else
             xlog('   Error! Item not migrated!');
@@ -1629,7 +1652,7 @@ create or replace package body xxdl_mig_items_pkg as
     
       --dbms_output.put_line(l_count || '. Item: ' || c_item.segment1);
     
-      xxdl_mig_items_pkg.migrate_items_cloud(p_item_seg => c_item.segment1, p_rows => 1, p_retry_error => p_retry_error, p_suffix => ''); -- TODO Suffix?
+      xxdl_mig_items_pkg.migrate_items_cloud(p_item_seg => c_item.segment1, p_rows => 1, p_retry_error => p_retry_error, p_suffix => '');
     
       commit;
     

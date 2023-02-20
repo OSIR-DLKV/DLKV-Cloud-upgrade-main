@@ -1328,7 +1328,7 @@ create or replace package body xxdl_inv_integration_pkg is
          where wc.ws_call_id = l_ws_call_id;
       
         if l_error_code is not null or l_error_explanation is not null then
-          xlog('Error in json response');
+          elog('Error in json response');
           l_trans_error_message := l_error_code || ' ' || l_error_explanation;
           raise e_processing_exception;
         end if;
@@ -1336,15 +1336,15 @@ create or replace package body xxdl_inv_integration_pkg is
         l_trans_status := 'PROCESSED';
       
         -- Delete lobs after successful call
-        --xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id); TODO: treba biti na prod
+        xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id); 
       
       exception
         when e_processing_exception then
-          xlog('e_processing_exception');
+          elog('e_processing_exception');
           l_trans_status := 'ERROR';
         
         when others then
-          xlog('When OTHERS reached at transaction level');
+          elog('When OTHERS reached at transaction level');
           l_trans_status        := 'ERROR';
           l_trans_error_message := sqlerrm;
           elog('SQLERRM: ' || sqlerrm);

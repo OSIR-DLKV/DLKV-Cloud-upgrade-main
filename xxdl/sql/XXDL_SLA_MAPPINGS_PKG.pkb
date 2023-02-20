@@ -665,7 +665,11 @@ create or replace package body xxdl_sla_mappings_pkg is
         raise e_processing_exception;
       end if;
     
-      xout(c_rec.out_chart_of_accounts || ', ' || c_rec.source_value_1 || ', ' || c_rec.out_value || ', ' || c_rec.source_reference_info);
+      if l_count < 10 then
+        xout(c_rec.out_chart_of_accounts || ', ' || c_rec.source_value_1 || ', ' || c_rec.out_value || ', ' || c_rec.source_reference_info);
+      elsif l_count = 10 then
+        xout('... more lines exists but are not being logged');
+      end if;
     
       l_row.batch_id              := l_batch_id;
       l_row.group_id              := x_group_id;
