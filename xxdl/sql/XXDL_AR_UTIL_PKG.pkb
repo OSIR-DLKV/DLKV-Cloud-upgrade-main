@@ -1069,7 +1069,7 @@
         and hps.party_site_id = hcsa.party_site_id(+)
         and hcsa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
         and hps.location_id = hl.location_id(+)
-        and hcsu.site_use_code is not null
+        --and hcsu.site_use_code is not null
         and hca.cust_account_id = c_cust_account_id
         and hca.status = 'A'
         --and hca.cust_account_id = 1645593
@@ -6248,16 +6248,20 @@
                                             xxdl_hz_parties xhp
                                             ,xxdl_hz_cust_accounts xhca
                                             ,xxdl_hz_cust_acct_sites xhcas
+                                            ,xxdl_cloud_reference_sets xx_set2
                                             where xhp.party_id = xhca.party_id
                                             and xhca.cust_account_id = xhcas.cust_account_id
-                                            and xhp.party_number like nvl(p_party_number,'%')  
+                                            and xhp.party_number like nvl(p_party_number,'%') 
+                                            and xhcas.cloud_set_id = xx_set2.reference_data_set_id
                                             --and xhp.party_number not in ('115083')
                                             and exists (select 1 from 
                                                             apps.po_vendor_sites_all@ebsprod pvs
                                                                 where pvs.attribute3 = xhcas.party_site_number)
-                                            and not exists (select 1 from
+                                            /*and not exists (select 1 from
                                                                 xxdl_poz_supplier_sites xpss
-                                                                    where xpss.party_site_id = xhcas.cloud_party_site_id)
+                                                                    where xpss.party_site_id = xhcas.cloud_party_site_id
+                                                                    and xpss.bu_name = xx_set2.business_unit_name
+                                                                    )*/
                                             and not exists (select 1 from
                                                                 apps.hz_cust_accounts@ebsprod hca
                                                                     where hca.cust_account_id = xhca.cust_account_id
@@ -6265,8 +6269,9 @@
                                                                 
                         )
                         where rownum <= 150)
-        and not exists (select 1 from xxdl_poz_supplier_sites xpss
-                        where xpss.party_site_id = xx_psa.party_site_id)
+        /*and not exists (select 1 from xxdl_poz_supplier_sites xpss
+                        where xpss.party_site_id = xx_psa.party_site_id
+                        and xpss.bu_name = xx_set.business_unit_name)*/
         order by xx_psa.vendor_id
         ;
 
@@ -6305,7 +6310,14 @@
                 ,nvl(pv.ALLOW_SUBSTITUTE_RECEIPTS_FLAG,'N') ALLOW_SUBSTITUTE_RECEIPTS_FLAG               --,ALLOW_SUBSTITUTE_RECEIPTS_FLAG (Allow Substitute Receipts)
                 ,nvl(pv.ALLOW_UNORDERED_RECEIPTS_FLAG,'N') ALLOW_UNORDERED_RECEIPTS_FLAG                 --,ALLOW_UNORDERED_RECEIPTS_FLAG (Allow unordered receipts)
                 ,nvl(pv.RECEIPT_DAYS_EXCEPTION_CODE,'WARNING') RECEIPT_DAYS_EXCEPTION_CODE                  --,RECEIPT_DAYS_EXCEPTION_CODE (Receipt Date Exception)
-                ,decode(pv.INVOICE_CURRENCY_CODE,'HRK','EUR',pv.INVOICE_CURRENCY_CODE ) INVOICE_CURRENCY_CODE --,INVOICE_CURRENCY_CODE (Invoice Currency)
+                ,case
+                    when pv.INVOICE_CURRENCY_CODE = 'HRK' then
+                        'EUR'
+                    when pv.INVOICE_CURRENCY_CODE = 'CSD' then
+                        'RSD'
+                    else
+                    pv.INVOICE_CURRENCY_CODE
+                    end INVOICE_CURRENCY_CODE --,INVOICE_CURRENCY_CODE (Invoice Currency)
                 ,pvs.INVOICE_AMOUNT_LIMIT                        --,INVOICE_AMOUNT_LIMIT (Invoice Amount Limit)
                 ,case
                     when xx_set.business_unit_name = 'Dalekovod Projekt' then
@@ -6319,7 +6331,14 @@
                     else 
                         'THREE'
                     end MATCH_APPROVAL_LEVEL -- (Match Approval Level)
-                ,decode(pvs.PAYMENT_CURRENCY_CODE,'HRK','EUR',pvs.PAYMENT_CURRENCY_CODE) PAYMENT_CURRENCY_CODE --,PAYMENT_CURRENCY_CODE (Payment Currency)
+                ,case
+                    when pvs.PAYMENT_CURRENCY_CODE = 'HRK' then
+                        'EUR'
+                    when pvs.PAYMENT_CURRENCY_CODE = 'CSD' then
+                        'RSD'
+                    else
+                    pvs.PAYMENT_CURRENCY_CODE
+                    end PAYMENT_CURRENCY_CODE --,PAYMENT_CURRENCY_CODE (Payment Currency)
                 ,pvs.PAYMENT_PRIORITY                                    --,PAYMENT_PRIORITY (Payment Priority)
                 ,'Standard' PAY_GROUP_LOOKUP_CODE --pvs.PAY_GROUP_LOOKUP_CODE                               --,PAY_GROUP_LOOKUP_CODE (Pay Group)
                 ,pvs.HOLD_ALL_PAYMENTS_FLAG/*case
@@ -6968,12 +6987,7 @@
                                 ,xx.cloud_import_message = x_return_message
                                 where xx.party_site_id = l_contact_rec.party_site_id;
 
-                            end if;
-
-                        
-                        
-
-
+                            end if;          
 
                     end loop;
 
@@ -7047,7 +7061,7 @@
                             and bauses.vendor_id = pv.vendor_id
                             and bauses.vendor_site_id = pvs.vendor_site_id(+)
                             and sysdate between nvl(bauses.start_date,sysdate) and nvl(bauses.end_date,sysdate)
-                            and bacct.iban_number is not null
+                            --and bacct.iban_number is not null
                             --and bauses.vendor_id = pvs.vendor_id
                             /*and exists (select
                                 1 from    
@@ -7060,21 +7074,99 @@
                             ) bank_acc
                         ,xxdl_bank_branches xx_bank    
                         where 
-                        --xx_cust_site.cloud_party_site_id = c_sa.party_site_id   
-                        --and xx_cust_site.party_site_id = hps.party_site_id(+)
-                        --and xx_cust_site.cloud_set_id = xx_set.reference_data_set_id(+) 
-                        --and xx_cust_site.cust_account_id = hca.cust_account_id
-                        --and hca.party_id = hp.party_id(+)
-                        --and to_char(hps.party_site_number) = pvs.attribute3(+)
-                        --and xx_cust_site.org_id = pvs.org_id
-                        --and pvs.vendor_id = pv.vendor_id
                         pvs.vendor_site_id = c_a.vendor_site_id
                         and pvs.vendor_site_id = bank_acc.vendor_site_id(+)
                         and pvs.org_id = bank_acc.org_id(+)
                         and bank_acc.bank_branch_name = xx_bank.bank_branch_name(+)
+                        union
+                        select distinct
+                        pvs.vendor_site_code||'' vendor_site_code                
+                        ,pvs.vendor_site_id
+                        ,xx_bank.bank_number
+                        ,xx_bank.bank_party_id cloud_branch_id
+                        ,xx_bank.branch_party_id cloud_bank_id
+                        ,bank_acc.bank_branch_id
+                        ,bank_acc.bank_account_name
+                        ,' '||bank_acc.bank_account_num bank_account_num
+                        ,bank_acc.address_line1
+                        ,bank_acc.iban_number
+                        ,bank_acc.country bank_country            
+                        ,bank_acc.EFT_SWIFT_CODE
+                        ,bank_acc.bank_name
+                        ,bank_acc.primary_flag
+                        ,bank_acc.currency_code
+                        from
+                        --xxdl_hz_cust_acct_sites xx_cust_siFetching payee id return error!te      
+                        --,xxdl_cloud_reference_sets xx_set        
+                        --,apps.hz_party_sites@ebsprod hps      
+                        --,apps.hz_cust_accounts@ebsprod hca
+                        --,apps.hz_parties@ebsprod hp
+                        apps.po_vendor_sites_all@ebsprod pvs
+                        --,apps.po_vendors@ebsprod pv
+                        ,(select
+                        pv.vendor_name
+                        ,bauses.bank_account_uses_id
+                        ,bauses.customer_id
+                        ,bauses.customer_site_use_id
+                        ,bauses.external_bank_account_id
+                        ,bacct.bank_account_id
+                        ,bauses.primary_flag
+                        ,bauses.org_id uses_org_id
+                        ,bbnch.bank_branch_id
+                        ,bbnch.bank_name
+                        ,bbnch.bank_branch_name
+                        ,bbnch.bank_number
+                        ,bbnch.description
+                        ,bbnch.address_line1
+                        ,bbnch.address_line2
+                        ,bbnch.address_line3
+                        ,bbnch.address_line4
+                        ,bbnch.city
+                        ,bbnch.country
+                        ,bbnch.institution_type
+                        ,bbnch.EFT_SWIFT_CODE
+                        ,nvl(bacct.iban_number,'X') iban_number
+                        ,bacct.bank_account_name
+                        ,bacct.bank_account_id
+                        ,bacct.bank_account_num
+                        ,decode(bacct.currency_code,'HRK','EUR',bacct.currency_code) currency_code
+                        ,bacct.set_of_books_id
+                        ,bacct.account_type
+                        ,bacct.org_id
+                        ,bauses.vendor_site_id
+                        ,bauses.vendor_id 
+                        FROM
+                            apps.ap_bank_account_uses_all@ebsprod bauses,
+                            apps.ap_bank_branches@ebsprod     bbnch,
+                            apps.ap_bank_accounts_all@ebsprod     bacct,
+                            apps.po_vendors@ebsprod pv,
+                            apps.po_vendor_sites_all@ebsprod pvs
+                        WHERE  
+                            bauses.external_bank_account_id = bacct.bank_account_id
+                            AND bacct.bank_branch_id = bbnch.bank_branch_id
+                            and bauses.vendor_id = pv.vendor_id
+                            and bauses.vendor_site_id = pvs.vendor_site_id(+)
+                            and sysdate between nvl(bauses.start_date,sysdate) and nvl(bauses.end_date,sysdate)
+                            --and bacct.iban_number is not null
+                            --and bauses.vendor_id = pvs.vendor_id
+                            /*and exists (select
+                                1 from    
+                                apps.ap_invoices_all@ebsprod aia,
+                                apps.ap_payment_schedules_all@ebsprod apsa
+                                where aia.invoice_id = apsa.invoice_id
+                                and aia.vendor_site_id = pvs.vendor_site_id
+                                and apsa.external_bank_account_id = bacct.bank_account_id
+                                )*/ 
+                            ) bank_acc
+                        ,xxdl_bank_branches xx_bank    
+                        where 
+                        pvs.vendor_site_id = c_a.vendor_site_id
+                        and pvs.vendor_id = bank_acc.vendor_id(+)
+                        and pvs.org_id = bank_acc.org_id(+)
+                        and bank_acc.bank_branch_name = xx_bank.bank_branch_name(+)
                         ) loop
-                            --starting bank account
-                            if nvl(c_b.iban_number,'X') = 'X' then
+                            --starting bank account, override for iban = 'X'
+                            if nvl(c_b.iban_number,'X') = 'XX' then
                                 log('               There is no bank account to migrate!'); 
                             else 
 
@@ -7127,19 +7219,34 @@
                                 l_text := '';
                                 l_soap_env := l_empty_clob;
                                 dbms_lob.createtemporary(l_soap_env, TRUE);
-
-                                l_text := '{
-                                                "BankAccountNumber": "'||c_b.bank_account_num||'",
-                                                "CountryCode": "'||c_b.bank_country||'",
-                                                "BankBranchIdentifier": '||c_b.cloud_bank_id||',
-                                                "BankIdentifier": '||c_b.cloud_branch_id||',
-                                                "Intent": "Supplier",
-                                                "PartyId": '||c_sa.cloud_party_id||',
-                                                "IBAN": "'||c_b.iban_number||'",
-                                                "BankAccountName": "'||apex_escape.json(c_b.bank_account_name)||'",
-                                                "CurrencyCode":"'||c_b.currency_code||'",
-                                                "StartDate":"1998-01-01"
-                                            }';
+                                
+                                if nvl(c_b.iban_number,'X') = 'X' then
+                                    l_text := '{
+                                                    "BankAccountNumber": "'||c_b.bank_account_num||'",
+                                                    "CountryCode": "'||c_b.bank_country||'",
+                                                    "BankBranchIdentifier": '||c_b.cloud_bank_id||',
+                                                    "BankIdentifier": '||c_b.cloud_branch_id||',
+                                                    "Intent": "Supplier",
+                                                    "PartyId": '||c_sa.cloud_party_id||',
+                                                    "BankAccountName": "'||apex_escape.json(c_b.bank_account_name)||'",
+                                                    "CurrencyCode":"'||c_b.currency_code||'",
+                                                    "StartDate":"1998-01-01"
+                                                }';
+                                else
+                                
+                                    l_text := '{
+                                                    "BankAccountNumber": "'||c_b.bank_account_num||'",
+                                                    "CountryCode": "'||c_b.bank_country||'",
+                                                    "BankBranchIdentifier": '||c_b.cloud_bank_id||',
+                                                    "BankIdentifier": '||c_b.cloud_branch_id||',
+                                                    "Intent": "Supplier",
+                                                    "PartyId": '||c_sa.cloud_party_id||',
+                                                    "IBAN": "'||c_b.iban_number||'",
+                                                    "BankAccountName": "'||apex_escape.json(c_b.bank_account_name)||'",
+                                                    "CurrencyCode":"'||c_b.currency_code||'",
+                                                    "StartDate":"1998-01-01"
+                                                }';
+                                end if;            
                                 
                                 l_soap_env := l_soap_env||to_clob(l_text);       
 
@@ -7225,7 +7332,7 @@
                                         if l_bank_acc_rec.CLOUD_OWNER_SET = 'Y' then
                                             log('                       Bank account owner already exists!');
                                             x_return_status := 'S';
-                                            GOTO bank_acc_owner_set;
+                                            --GOTO bank_acc_owner_set;
                                         end if;
 
                                                 
@@ -7256,6 +7363,30 @@
                                         if x_return_status = 'E' then
                                             x_return_message := get_ws_err_msg(xbo_ws_call_id);
                                             log('     Web service message:'||x_return_message);
+                                            if x_return_message = 'A record with this combination of values already exists.' then
+                                                log('       Try to skip this and assign!');
+                                                 l_text := '';
+                                                    l_soap_env := l_empty_clob;
+                                                    dbms_lob.createtemporary(l_soap_env, TRUE);
+
+                                                    l_text := ' ';
+                                                                                            
+                                                    l_soap_env := l_soap_env||to_clob(l_text);       
+
+                                                    log('                   Calling web service to create external bank account owner!');
+
+                                                    XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+                                                    p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/externalBankAccounts/'||l_bank_acc_rec.EXT_BANK_ACCOUNT_ID||'/child/accountOwners',
+                                                    p_rest_env => l_soap_env,
+                                                    p_rest_act => 'GET',
+                                                    p_content_type => 'application/json;charset="UTF-8"',
+                                                    x_return_status => x_return_status,
+                                                    x_return_message => x_return_message,
+                                                    x_ws_call_id => xbo_ws_call_id);     
+
+                                                goto bank_acc_owner_set;
+
+                                            end if;
                                         end if;
                                         log('                   Web service call:'||xbo_ws_call_id);
                                         dbms_lob.freetemporary(l_soap_env); 
@@ -7281,6 +7412,18 @@
                                                                         CLOUD_OWNER_ID number path '$.AccountOwnerId'))
                                                     where xx.ws_call_id = xbo_ws_call_id
                                                     and xbo_ws_call_id is not null --when supplier site is freshly created
+                                                    union
+                                                    select
+                                                    CLOUD_OWNER_ID
+                                                    from
+                                                    xxfn_ws_call_log xx,
+                                                    json_table(xx.response_json,'$'
+                                                                columns(nested path '$.items[*]'
+                                                                        columns(
+                                                                            CLOUD_OWNER_ID number path '$.AccountOwnerId'
+                                                                        )))
+                                                    where xx.ws_call_id = xbo_ws_call_id
+                                                    and xbo_ws_call_id is not null --when supplier site is freshly created
                                                     union                       
                                                     select 
                                                     xx_ba.CLOUD_OWNER_ID
@@ -7297,6 +7440,8 @@
                                                 json_response jt
                                                 where rownum = 1
                                                 and jt.CLOUD_OWNER_ID is not null;
+
+                                                log('       Cloud owner id:'||l_bank_acc_rec.cloud_owner_id);
 
                                                 exception
                                                 when no_data_found then

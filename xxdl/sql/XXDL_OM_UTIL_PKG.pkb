@@ -660,12 +660,12 @@ create or replace package body XXDL_OM_UTIL_PKG as
 
 
     cursor c_order_headers is 
-    select distinct
+    select 
         xx_set.business_unit_name
         ,oeoh.ordered_date
         ,xx_set.business_unit_id
         ,xx_set.business_unit_id requesting_business_unit_id
-        ,oeoh.cust_po_number
+        ,decode(oeoh.cust_po_number,null,'null','"'||apex_escape.json(oeoh.cust_po_number)||'"') cust_po_number
         ,oeoh.header_id
         ,oeoh.order_number
         ,oetl.name order_type_name
@@ -674,7 +674,7 @@ create or replace package body XXDL_OM_UTIL_PKG as
         ,xhp.cloud_party_id buying_party_id
         ,decode(oeoh.fob_point_code,null,'null','"'||oeoh.fob_point_code||'"') fob_point_code
         ,xhca.account_number
-        ,decode(ppa.segment1,null,'null','"'||ppa.segment1||'"','null') projekt
+        ,decode(ppa.segment1,null,'null','"'||decode(ppa.segment1,'200237','200094',ppa.segment1)||'"') projekt
         ,oeoh.attribute1 broj_zakljucka
         ,to_char((to_date(oeoh.attribute2,'RRRR/MM/DD HH24:Mi:SS')),'YYYY-MM-DD') datum_zakljucka
         ,oeoh.attribute3 krovni_ugovor
@@ -683,21 +683,26 @@ create or replace package body XXDL_OM_UTIL_PKG as
         ,oeoh.attribute9 mjesto_pariteta
         ,oeoh.attribute5 privremena_lokacija
         ,oeoh.attribute7 reklamacija
-        ,decode(oeoh.attribute6,null,'null','"'||oeoh.attribute6||'"','null') atest
+        ,decode(oeoh.attribute6,null,'null','"'||oeoh.attribute6||'"') atest
         ,oeoh.attribute12 krovni_nalog
         ,case
             when oeoh.TRANSACTIONAL_CURR_CODE = 'HRK' then
             'EUR'
             else oeoh.TRANSACTIONAL_CURR_CODE
             end TRANSACTIONAL_CURR_CODE
+        ,case
+            when oeoh.TRANSACTIONAL_CURR_CODE != 'EUR' then
+            '"300000003061037"'   --HNB tečaj u cloudu
+            else 'null'
+            end conversion_type    
         ,xhcasu.cloud_site_use_id ship_to_use_id
         ,jrs.name SALESREP_NAME
-        ,rtl.name payment_term
+        ,rtl.name payment_term  --placeno avansom baci trunacted error bind...
         ,xhcasu.CLOUD_BILL_TO_SITE_USE_ID bill_to_use_id
         ,xhcasu.cloud_party_site_id
         ,oeoh.request_date
-        ,decode(xcos.resource_id,null,'null',xcos.resource_id) cloud_salesperson_id
-        --,oeoh.*
+        --,decode(xcos.resource_id,null,'null',decode(xcos.resource_id,300000003542083,300000003558607,xcos.resource_id)) cloud_salesperson_id
+        ,xcos.resource_id cloud_salesperson_id
         from
         apps.oe_order_headers_all@ebsprod oeoh
         ,xxdl_cloud_reference_sets xx_set
@@ -707,7 +712,7 @@ create or replace package body XXDL_OM_UTIL_PKG as
         ,xxdl_hz_cust_acct_sites xhcas
         ,xxdl_hz_cust_acct_site_uses xhcasu
         ,apps.pa_projects_all@ebsprod ppa
-        ,xxdl_om_mig_bank_acc xx_bank
+        ,(select distinct * from xxdl_om_mig_bank_acc) xx_bank
         ,xxdl_cloud_internal_bank_accounts xcib
         ,apps.jtf_rs_salesreps@ebsprod jrs
         ,apps.ra_terms_tl@ebsprod rtl
@@ -719,17 +724,8 @@ create or replace package body XXDL_OM_UTIL_PKG as
             per_all_people_f@ebsprod ppf
             where nvl(ppf.effective_end_date,sysdate) >= sysdate) ppf
         where 1=1
-        --and oeoh.order_number in ('103876')
         and oeoh.order_number = p_sales_order
-        /*and oeoh.order_number in (
-        '101737',
-        '101738',
-        '101739',
-        '101743'
-        )*/
-        --and oeoh.attribute14 = to_char(xx_bank.bank_account_id)
-        --and oeoh.org_id = xx_bank.org_id
-        --and xx_bank.sob =   --2 DLKV, 1003 MK, 9003 OSO
+        and oeoh.org_id = p_org_id
         and oeoh.org_id = xx_set.ebs_org_id
         and oeoh.order_type_id = oetl.transaction_type_id
         and oetl.language = 'US'
@@ -742,11 +738,19 @@ create or replace package body XXDL_OM_UTIL_PKG as
         and xhcasu.site_use_code = 'SHIP_TO'
         and xhcasu.cloud_set_id = xx_set.reference_data_set_id
         and oeoh.attribute14 = xx_bank.bank_account_id(+)
+        and oeoh.org_id = xx_bank.org_id(+)
         and oeoh.salesrep_id = jrs.salesrep_id
         and oeoh.attribute16 = ppa.project_id(+)
         and oeoh.payment_term_id = rtl.term_id
         and rtl.language = 'HR'
         and xx_bank.iban_number = xcib.iban_number(+)
+        /*
+        and xcib.currency_code = case
+            when oeoh.TRANSACTIONAL_CURR_CODE = 'HRK' then
+            'EUR'
+            else oeoh.TRANSACTIONAL_CURR_CODE
+            end 
+            */      
         and oeoh.order_type_id = xcom.transaction_type_id
         and jrs.person_id = ppf.person_id(+)
         and ppf.first_name||' '||ppf.last_name = xcos.salesrep_name(+)
@@ -754,8 +758,10 @@ create or replace package body XXDL_OM_UTIL_PKG as
         and oeoh.creation_date > to_date('01.01.2019','DD.MM.RRRR')
         and exists (select 1 from apps.oe_order_lines_all@ebsprod oeol
                         where oeol.header_id = oeoh.header_id
-                        and oeol.flow_status_code not in ('CLOSED','CANCELLED'))
+                        and oeol.flow_status_code not in ('CLOSED'))
             ;
+
+
     cursor c_order_lines(c_header_id in number) is
     select
     oeoh.order_number
@@ -784,17 +790,17 @@ create or replace package body XXDL_OM_UTIL_PKG as
       else 
         oeol.unit_list_price
     end list_price_conv
-    ,oeol.ordered_quantity
+    ,decode(oeol.ordered_quantity,0,oeol.cancelled_quantity,oeol.ordered_quantity) ordered_quantity
     ,oeol.ORDER_QUANTITY_UOM
     ,opa.price_adjustment_id
     ,oeol.unit_list_price
     ,oeol.unit_selling_price
     ,oeol.promise_date
-    ,oeol.tax_code
+    ,decode(oeol.tax_code,null,'null','"'||oeol.tax_code||'"') tax_code
     ,oeol.attribute1 nalog_izrade
-    ,decode(oeol.attribute4,null,'null','"'||oeol.attribute4||'"','null') koordinacija
+    ,decode(oeol.attribute4,null,'null','"'||oeol.attribute4||'"') koordinacija
     ,oeol.attribute6 radni_nalog
-    ,decode(oeol.attribute8,null,'null','"'||oeol.attribute8||'"','null') prijevoz_mt
+    ,decode(oeol.attribute8,null,'null','"'||oeol.attribute8||'"') prijevoz_mt
     ,oeol.attribute9 prijevoz_km
     ,oeol.attribute10 prijevoz_sati
     ,oeol.request_date
@@ -823,9 +829,10 @@ create or replace package body XXDL_OM_UTIL_PKG as
     and oeol.ship_from_org_id = xx_item.organization_id
     --and oeoh.order_number in('103876')
     and oeol.flow_status_code not in ('CLOSED','CANCELLED')
+    and oeoh.flow_status_code not in ('DRAFT')
     and oeol.org_id = xx_set.ebs_org_id
     and oeol.sold_to_org_id = xhca.cust_account_id
-    and xhca.party_id = xhp.party_id
+    and xhca.party_id = xhp.party_id 
     and xhca.cust_account_id = xhcas.cust_account_id
     and xhcas.cust_acct_site_id = xhcasu.cust_acct_site_id
     and oeol.ship_to_org_id = xhcasu.site_use_id
@@ -903,8 +910,9 @@ create or replace package body XXDL_OM_UTIL_PKG as
                 "RequestingBusinessUnitName": "'||c_h.business_unit_name||'",
                 "TransactionTypeCode":"'||c_h.order_type_code||'",
                 "SalespersonId":'||c_h.cloud_salesperson_id||',
-                "CustomerPONumber":"'||apex_escape.json(c_h.cust_po_number)||'",
+                "CustomerPONumber":'||c_h.cust_po_number||',
                 "FOBPointCode":'||c_h.fob_point_code||',
+                "CurrencyConversionType":'||c_h.conversion_type||',
                 "billToCustomer": [
                     {
                         "PartyName": "'||c_h.party_name||'",
@@ -1004,12 +1012,13 @@ create or replace package body XXDL_OM_UTIL_PKG as
                         "SourceScheduleNumber": "'||c_l.line_number||'",
                         "SourceTransactionScheduleId": "'||c_l.line_number||'",
                         "OrderedUOMCode": "'||c_l.order_quantity_uom||'",
-                        "OrderedQuantity": '||c_l.ordered_quantity||',
+                        "OrderedQuantity": '||replace(c_l.ordered_quantity,',','.')||',
                         "ProductNumber": "'||c_l.item_number||'",
                         "PaymentTerms": "'||c_h.payment_term||'",
                         "ShipmentPriority": "High",
                         "RequestedShipDate": "'||to_char(sysdate,'YYYY-MM-DD HH24:MI:SS')||'",
-                        "RequestedFulfillmentOrganizationName": "'||c_l.requested_fulfillment_org_code||'",
+                        "RequestedFulfillmentOrganizationCode": "'||c_l.requested_fulfillment_org_code||'",
+                        "TaxClassificationCode":'||c_l.tax_code||',
                         "billToCustomer": [
                             {
                                 "PartyName": "'||c_h.party_name||'",
@@ -1029,7 +1038,7 @@ create or replace package body XXDL_OM_UTIL_PKG as
                                 "FulfillLineEffBxxdlAdditionaLineInfoprivateVO": [
                                     {
                                         "ContextCode": "xxdlAdditionaLineInfo",
-                                        "saleprcoverrideval": "'||replace(c_l.list_price_conv,',','.')||'",
+                                        "saleprcoverrideval": "'||replace(round(c_l.list_price_conv,2),',','.')||'",
                                         "itemDescription": "'||apex_escape.json(c_l.user_item_description)||'",
                                         "nalogIzrade": "'||c_l.nalog_izrade||'",
                                         "koordinacijaNaloga": '||c_l.koordinacija||',
@@ -1049,6 +1058,7 @@ create or replace package body XXDL_OM_UTIL_PKG as
           l_find_text:= '';
 
         end loop;
+        
 
         l_find_text := '
                 ]
@@ -1148,12 +1158,27 @@ create or replace package body XXDL_OM_UTIL_PKG as
             end loop;
         else
             log('   Order creation failed!');
-            log('   Error:'||x_return_message);
+            --log('   Error:'||x_return_message);
+
+            begin
+                select
+                        substr(xx.response_json,1,4000) into x_return_message
+                        from
+                        xxfn_ws_call_log xx
+                        where xx.ws_call_id = x_ws_call_id;
+
+
+                    exception
+                    when no_data_found then
+                        null;
+            end;
 
             update xxdl_oe_headers_all xx
             set xx.process_flag = 'E'
             ,xx.ERROR_MSG = x_return_message
             where xx.header_id = c_h.header_id;
+
+            log('error:'||x_return_message);
 
             update xxdl_oe_lines_all xx
             set xx.process_flag = 'E'
@@ -1166,6 +1191,10 @@ create or replace package body XXDL_OM_UTIL_PKG as
 
 
     log('Order import finished!');
+    exception
+        when others then
+            dbms_output.put_line('Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
+            dbms_output.put_line('Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
 
     end migrate_sales_orders;
 
