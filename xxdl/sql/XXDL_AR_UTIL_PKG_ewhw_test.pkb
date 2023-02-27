@@ -97,8 +97,8 @@
     hl.location_id
     ,hps.party_site_id
     ,hp.party_id
-    ,''||hp.party_number party_number
-    ,''||hps.party_site_number party_site_number
+    ,'77777777'||hp.party_number party_number
+    ,'77777777'||hps.party_site_number party_site_number
     ,HCASA.attribute4 party_site_name
     ,hps.IDENTIFYING_ADDRESS_FLAG
     ,decode(hps.IDENTIFYING_ADDRESS_FLAG,'Y','true','false') IDENTIFYING_ADDRESS_FLAG_SOAP
@@ -179,7 +179,7 @@
     select distinct
     hl.location_id
     ,hps.party_site_id
-    ,''||hps.party_site_number party_site_number
+    ,'77777777'||hps.party_site_number party_site_number
     ,HCASA.attribute4 party_site_name
     ,hpsu.site_use_type site_use_code
     ,hpsu.party_site_use_id site_use_id
@@ -305,7 +305,7 @@
                     l_text := '
                                                 <org:PartySite>
                                                     <par:PartySiteNumber>'||c_ps.party_site_number||'</par:PartySiteNumber>
-                                                    <par:OrigSystem>EBSR11</par:OrigSystem>         
+                                                    <par:OrigSystem>EBSR11_NEW</par:OrigSystem>         
                                                     <par:StartDateActive>'||c_ps.start_date||'</par:StartDateActive>
                                                     <par:IdentifyingAddressFlag>'||c_ps.IDENTIFYING_ADDRESS_FLAG_SOAP||'</par:IdentifyingAddressFlag>
                                                     <par:Language>'||c_ps.language||'</par:Language>
@@ -338,9 +338,9 @@
                                         <par:BeginDate>'||c_psu.start_date||'</par:BeginDate>
                                         <par:SiteUseType>'||c_psu.site_use_code||'</par:SiteUseType>
                                         <par:PrimaryPerType>'||c_psu.primary_per_type||'</par:PrimaryPerType>  
-                                        <par:OrigSystem>EBSR11</par:OrigSystem>                                                                             
+                                        <par:OrigSystem>EBSR11_NEW</par:OrigSystem>                                                                             
                                         <par:CreatedByModule>HZ_WS</par:CreatedByModule>      
-                                        <par:OrigSystemReference>'||c_psu.site_use_id||'</par:OrigSystemReference>
+                                        <par:OrigSystemReference>77777777'||c_psu.site_use_id||'</par:OrigSystemReference>
                                     </par:PartySiteUse>';
                         l_soap_env := l_soap_env || to_clob(l_text);  
                         
@@ -514,7 +514,7 @@
                         where xx.party_site_id in (select xx2.party_site_id 
                                                     from xxdl_hz_party_sites xx2
                                                     ,xxdl_hz_parties xhp
-                                                    where xhp.party_number = ''||p_party_number
+                                                    where xhp.party_number = '77777777'||p_party_number
                                                     and xhp.party_id = xx2.party_id
                         )
                         ;  
@@ -525,7 +525,7 @@
                         where xx.party_site_id in (select xx2.party_site_id 
                                                     from xxdl_hz_party_sites xx2
                                                     ,xxdl_hz_parties xhp
-                                                    where xhp.party_number = ''||p_party_number
+                                                    where xhp.party_number = '77777777'||p_party_number
                                                     and xhp.party_id = xx2.party_id
                         )
                         ;                        
@@ -555,7 +555,7 @@
     cursor c_party is
     select 
     hp.party_name party_name
-    ,''||hp.party_number party_number
+    ,'77777777'||hp.party_number party_number
     ,hp.jgzz_fiscal_code TAXPAYER_ID
     ,hp.party_id
     ,hp.duns_number
@@ -568,7 +568,7 @@
     and hp.party_id > 0
     and rownum <= nvl(p_rows,10)
     and not exists (select 1 from xxdl_hz_parties xx
-                        where xx.party_number = ''||hp.party_number
+                        where xx.party_number = '77777777'||hp.party_number
                         and nvl(xx.process_flag,'X') in ('S',decode(p_retry_error,'Y','N','E'))
                         )
 
@@ -587,7 +587,7 @@
             select distinct
             hl.location_id
             ,hps.party_site_id
-            ,''||hps.party_site_number party_site_number
+            ,'77777777'||hps.party_site_number party_site_number
             ,HCASA.attribute4 party_site_name
             ,hl.address1
             ,hl.address2
@@ -693,7 +693,7 @@
             select distinct
             hl.location_id
             ,hps.party_site_id
-            ,''||hps.party_site_number party_site_number
+            ,'77777777'||hps.party_site_number party_site_number
             ,HCASA.attribute4 party_site_name
             ,hl.address1
             ,hl.address2
@@ -892,7 +892,7 @@
 
     cursor c_accounts(c_party_id in number) is
     select distinct
-        ''||hca.account_number account_number
+        '77777777'||hca.account_number account_number
         ,hca.account_name
         ,hca.customer_type
         ,to_char(nvl(hca.account_activation_date,to_date('1998-01-01','YYYY-MM-DD')),'YYYY-MM-DD') account_activation_date    
@@ -955,7 +955,7 @@
         ,jt.address_id cloud_address_id
         ,jt.cloud_party_site_number
         ,HCSA.attribute4 party_site_name
-        ,''||hps.party_site_number party_site_number
+        ,'77777777'||hps.party_site_number party_site_number
         ,to_char(to_date('1998-01-01','YYYY-MM-DD'),'YYYY-MM-DD') start_date
         ,case
             when hl.country = 'HR' then
@@ -985,6 +985,7 @@
                         else 'US' 
                     end   
         end language       
+        ,xhcas.cloud_cust_acct_site_id
         from
         apps.hz_parties@ebsprod hp
         ,apps.hz_party_sites@ebsprod hps
@@ -993,6 +994,7 @@
         ,apps.HZ_CUST_SITE_USES_all@ebsprod hcsu
         ,apps.hz_locations@ebsprod hl
         ,xxdl_cloud_reference_sets xx_set
+        ,xxdl_hz_cust_acct_sites xhcas
         ,(
         select
         cloud_party_id
@@ -1069,7 +1071,7 @@
         and hps.party_site_id = hcsa.party_site_id(+)
         and hcsa.cust_acct_site_id = hcsu.cust_acct_site_id(+)
         and hps.location_id = hl.location_id(+)
-        --and hcsu.site_use_code is not null
+        and hcsu.site_use_code is not null
         and hca.cust_account_id = c_cust_account_id
         and hca.status = 'A'
         --and hca.cust_account_id = 1645593
@@ -1088,9 +1090,13 @@
         --and hcsa.org_id in (102,531,2288)
         and jt.ws_call_id = c_ws_call_id
         and hps.status = 'A'
-        and not exists (select 1 from XXDL_HZ_CUST_ACCT_SITES xxhca 
-                            where xxhca.cust_acct_site_id = hcsa.cust_acct_site_id
-                            and nvl(xxhca.process_flag,'X') = 'S')
+        and hcsa.cust_acct_site_id = xhcas.cust_acct_site_id(+)
+        and not exists (select 1 from XXDL_HZ_CUST_ACCT_SITE_USES xxhcasu 
+                            where xxhcasu.site_use_id = hcsu.site_use_id
+                            and nvl(xxhcasu.process_flag,'X') = 'S')
+        --and not exists (select 1 from XXDL_HZ_CUST_ACCT_SITES xxhca 
+        --                    where xxhca.cust_acct_site_id = hcsa.cust_acct_site_id
+         --                   and nvl(xxhca.process_flag,'X') = 'S')
         and exists (select 1 from xxdl_hz_party_sites xhps
                     where xhps.party_site_id = hps.party_site_id
                     and nvl(xhps.process_flag,'X')='S')                    
@@ -1423,9 +1429,9 @@
                                 "State": "'||c_l.state||'",
                                 "PartySiteName":"'||apex_escape.json(c_l.party_site_name)||'",
                                 "AddressNumber":"'||c_l.party_site_number||'",
-                                "SourceSystem": "EBSR11",
+                                "SourceSystem": "EBSR11_NEW",
                                 "StartDateActive" : "'||c_l.start_date||'",
-                                "SourceSystemReferenceValue": "'||c_l.party_site_id||';'||c_l.location_id||'"
+                                "SourceSystemReferenceValue": "77777777'||c_l.location_id||'"
                             }';
     
                     l_rest_env := l_rest_env|| to_clob(l_text);
@@ -1562,7 +1568,7 @@
                                         update xxdl_hz_locations xx
                                         set xx.cloud_location_id = c_loc.cloud_location_id
                                         ,xx.process_flag = x_return_status
-                                        where ''||xx.party_site_number = c_loc.cloud_party_site_number;
+                                        where '77777777'||xx.party_site_number = c_loc.cloud_party_site_number;
                                     end if;                
                         end loop;
 
@@ -1670,8 +1676,8 @@
                                                     <cus:CustomerType>'||c_a.customer_type||'</cus:CustomerType>
                                                     <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
                                                     <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
-                                                    <cus:OrigSystem>EBSR11</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>'||c_a.cust_account_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
+                                                    <cus:OrigSystemReference>77777777'||c_a.cust_account_id||'</cus:OrigSystemReference>';
 
                                 l_soap_env := l_soap_env || to_clob(l_text);
 
@@ -1710,15 +1716,22 @@
                                         where xx.cust_acct_site_id = c_as.cust_acct_site_id;
                                     end;
 
-                                l_text := '
+                                if nvl(c_as.cloud_cust_acct_site_id,0) > 0 THEN
+                                    l_text := '
+                                                <cus:CustomerAccountSite>
+                                                    <cus:CustomerAccountSiteId>'||c_as.cloud_cust_acct_site_id||'</cus:CustomerAccountSiteId>';
+                                else    
+
+                                    l_text := '
                                                 <cus:CustomerAccountSite>
                                                     <cus:PartySiteId>'||c_as.cloud_address_id||'</cus:PartySiteId>
                                                     <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
                                                     <cus:SetId>'||c_as.cloud_set_id||'</cus:SetId>
                                                     <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
                                                     <cus:Language>'||c_as.language||'</cus:Language>
-                                                    <cus:OrigSystem>EBSR11</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
+                                                    <cus:OrigSystemReference>77777777'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                end if;                    
                                 l_soap_env := l_soap_env || to_clob(l_text);                   
 
                                 for c_asu in c_account_site_use(c_as.cust_acct_site_id,xr_ws_call_id) loop
@@ -1766,9 +1779,9 @@
                                                             <cus:SiteUseCode>'||c_asu.site_use_code||'</cus:SiteUseCode>
                                                             <cus:Location>'||c_asu.cloud_location_id||'</cus:Location>
                                                             <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
-                                                            <cus:OrigSystem>EBSR11</cus:OrigSystem>
+                                                            <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
                                                             <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag> 
-                                                            <cus:OrigSystemReference>'||c_asu.site_use_id||'</cus:OrigSystemReference>
+                                                            <cus:OrigSystemReference>77777777'||c_asu.site_use_id||'</cus:OrigSystemReference>
                                                             <cus:StartDate>'||c_asu.start_date||'</cus:StartDate>
                                                     </cus:CustomerAccountSiteUse>';
                                     l_soap_env := l_soap_env || to_clob(l_text);
@@ -2302,8 +2315,8 @@
                         "TaxpayerIdentificationNumber":"'||c_p.TAXPAYER_ID||'",
                         "SourceSystemReference": [
                             {
-                                "SourceSystem": "EBSR11",
-                                "SourceSystemReferenceValue": "'||c_p.party_id||'"
+                                "SourceSystem": "EBSR11_NEW",
+                                "SourceSystemReferenceValue": "77777777'||c_p.party_id||'"
                             }
                         ],
                         "OrganizationName": "'||apex_escape.json(c_p.party_name)||'",
@@ -2330,9 +2343,9 @@
                             "State": "'||c_l.state||'",
                             "PartySiteName":"'||apex_escape.json(c_l.party_site_name)||'",
                             "AddressNumber":"'||c_l.party_site_number||'",                                                        
-                            "SourceSystem": "EBSR11",
+                            "SourceSystem": "EBSR11_NEW",
                             "StartDateActive" : "'||c_l.start_date||'",
-                            "SourceSystemReferenceValue": "'||c_l.party_site_id||';'||c_l.location_id||'"
+                            "SourceSystemReferenceValue": "77777777'||c_l.location_id||'"
                         }';
                 if c_l.c > 0 then
                     l_text := l_text ||',';
@@ -2465,7 +2478,7 @@
                         update xxdl_hz_locations xx
                         set xx.cloud_location_id = c_loc.cloud_location_id
                         ,xx.process_flag = x_return_status
-                        where ''||xx.party_site_number = c_loc.cloud_party_site_number;
+                        where '77777777'||xx.party_site_number = c_loc.cloud_party_site_number;
                     end if;                
                 end loop;
 
@@ -2543,12 +2556,12 @@
                                             <typ:customerAccount>
                                                 <cus:PartyId>'||c_r.cloud_party_id||'</cus:PartyId>
                                                 <cus:AccountName>'||c_a.account_name||'</cus:AccountName>    
-                                                <cus:AccountNumber>'||c_a.account_number||'</cus:AccountNumber>
+                                                <cus:AccountNumber>77777777'||c_a.account_number||'</cus:AccountNumber>
                                                 <cus:CustomerType>'||c_a.account_name||'</cus:CustomerType>
                                                 <cus:AccountEstablishedDate>'||c_a.account_activation_date||'</cus:AccountEstablishedDate>
                                                 <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
-                                                <cus:OrigSystem>EBSR11</cus:OrigSystem>
-                                                <cus:OrigSystemReference>'||c_a.cust_account_id||'</cus:OrigSystemReference>';
+                                                <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
+                                                <cus:OrigSystemReference>77777777'||c_a.cust_account_id||'</cus:OrigSystemReference>';
                             l_soap_env := l_soap_env || to_clob(l_text);
 
                             for c_as in c_account_sites(c_a.cust_account_id, x_ws_call_id) loop
@@ -2591,8 +2604,8 @@
                                                     <cus:SetId>'||c_as.cloud_set_id||'</cus:SetId>
                                                     <cus:StartDate>'||c_as.start_date||'</cus:StartDate>
                                                     <cus:Language>'||c_as.language||'</cus:Language>
-                                                    <cus:OrigSystem>EBSR11</cus:OrigSystem>
-                                                    <cus:OrigSystemReference>'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
+                                                    <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
+                                                    <cus:OrigSystemReference>77777777'||c_as.cust_acct_site_id||'</cus:OrigSystemReference>';
                                 l_soap_env := l_soap_env || to_clob(l_text);                    
 
                                 for c_asu in c_account_site_use(c_as.cust_acct_site_id,x_ws_call_id) loop
@@ -2640,9 +2653,9 @@
                                                             <cus:SiteUseCode>'||c_asu.site_use_code||'</cus:SiteUseCode>
                                                             <cus:Location>'||c_asu.cloud_location_id||'</cus:Location>
                                                             <cus:CreatedByModule>HZ_WS</cus:CreatedByModule>
-                                                            <cus:OrigSystem>EBSR11</cus:OrigSystem>
+                                                            <cus:OrigSystem>EBSR11_NEW</cus:OrigSystem>
                                                             <cus:PrimaryFlag>'||c_asu.primary_flag_soap||'</cus:PrimaryFlag>                                                    
-                                                            <cus:OrigSystemReference>'||c_asu.site_use_id||'</cus:OrigSystemReference>
+                                                            <cus:OrigSystemReference>77777777'||c_asu.site_use_id||'</cus:OrigSystemReference>
                                                             <cus:StartDate>'||c_asu.start_date||'</cus:StartDate>
                                                     </cus:CustomerAccountSiteUse>';
                                     l_soap_env := l_soap_env || to_clob(l_text);                                        
@@ -3151,7 +3164,7 @@
                             if nvl(c_loc.address_id,0) > 0 then            
                                 update xxdl_hz_locations xx
                                 set xx.process_flag = 'E'
-                                where ''||xx.party_site_number = c_loc.cloud_party_site_number;
+                                where '77777777'||xx.party_site_number = c_loc.cloud_party_site_number;
                             end if;                
                 end loop;
               
@@ -3447,7 +3460,7 @@
         select distinct
         xx.cloud_party_site_id
         ,hp.party_name
-        ,''||hp.party_number party_number
+        ,'77777777'||hp.party_number party_number
         ,xx.cloud_party_site_number
         ,xx.party_site_id
         ,case
@@ -5080,8 +5093,7 @@
                     INACTIVE_DATE VARCHAR2(35) PATH 'INACTIVE_DATE',
                     CREATION_DATE VARCHAR2(35) PATH 'CREATION_DATE',
                     LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE'
-                ) xt
-                )
+                ) xt)
         LOOP
     
             log('====================');
@@ -5232,9 +5244,7 @@
                     CREATION_DATE VARCHAR2(35) PATH 'CREATION_DATE',
                     LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE',
                     BU_NAME VARCHAR2(100) PATH 'BU_NAME'
-                ) xt
-                --where vendor_site_code = 'RAVONA D.O.O.'
-                )
+                ) xt)
         LOOP
     
             log('====================');
@@ -6236,48 +6246,15 @@
         and xx_cust_site.party_site_id = hps.party_site_id
         and to_char(hps.party_site_number) = pvs.attribute3
         and xx_cust_site.org_id = pvs.org_id
+        and xx_hp.party_number like nvl(p_party_number,'%')  
         and pvs.vendor_id = pv.vendor_id
         and xx_cust_site.cloud_set_id =  xx_set.reference_data_set_id(+)
-        and xx_hp.party_number in (select
-                    party_number
-                    from
-                    (
-                    select
-                                            distinct xhp.party_number
-                                            from
-                                            xxdl_hz_parties xhp
-                                            ,xxdl_hz_cust_accounts xhca
-                                            ,xxdl_hz_cust_acct_sites xhcas
-                                            ,xxdl_cloud_reference_sets xx_set2
-                                            where xhp.party_id = xhca.party_id
-                                            and xhca.cust_account_id = xhcas.cust_account_id
-                                            and xhp.party_number like nvl(p_party_number,'%') 
-                                            and xhcas.cloud_set_id = xx_set2.reference_data_set_id
-                                            --and xhp.party_number not in ('115083')
-                                            and exists (select 1 from 
-                                                            apps.po_vendor_sites_all@ebsprod pvs
-                                                                where pvs.attribute3 = xhcas.party_site_number)
-                                            /*and not exists (select 1 from
-                                                                xxdl_poz_supplier_sites xpss
-                                                                    where xpss.party_site_id = xhcas.cloud_party_site_id
-                                                                    and xpss.bu_name = xx_set2.business_unit_name
-                                                                    )*/
-                                            and not exists (select 1 from
-                                                                apps.hz_cust_accounts@ebsprod hca
-                                                                    where hca.cust_account_id = xhca.cust_account_id
-                                                                    and hca.status = 'I')
-                                                                
-                        )
-                        where rownum <= 150)
-        /*and not exists (select 1 from xxdl_poz_supplier_sites xpss
-                        where xpss.party_site_id = xx_psa.party_site_id
-                        and xpss.bu_name = xx_set.business_unit_name)*/
-        order by xx_psa.vendor_id
+        and rownum <=50
         ;
 
         cursor c_supplier_sites(c_party_site_id in number) is
         select distinct
-                substr(xx_cust_site.party_site_name,1,15) vendor_site_code
+                pvs.vendor_site_code||'' vendor_site_code
                 ,xx_set.business_unit_name
                 ,xx_cust_site.party_site_name address_name
                 ,case
@@ -6307,17 +6284,10 @@
                 ,pv.QTY_RCV_EXCEPTION_CODE                       --,QTY_RCV_EXCEPTION_CODE  (Over-receipt Action)
                 ,pv.DAYS_EARLY_RECEIPT_ALLOWED                   --,DAYS_EARLY_RECEIPT_ALLOWED (Early Receipt Tolerance in Days)
                 ,pv.DAYS_LATE_RECEIPT_ALLOWED                    --,DAYS_LATE_RECEIPT_ALLOWED (Late Receipt Tolerance in Days)
-                ,nvl(pv.ALLOW_SUBSTITUTE_RECEIPTS_FLAG,'N') ALLOW_SUBSTITUTE_RECEIPTS_FLAG               --,ALLOW_SUBSTITUTE_RECEIPTS_FLAG (Allow Substitute Receipts)
-                ,nvl(pv.ALLOW_UNORDERED_RECEIPTS_FLAG,'N') ALLOW_UNORDERED_RECEIPTS_FLAG                 --,ALLOW_UNORDERED_RECEIPTS_FLAG (Allow unordered receipts)
-                ,nvl(pv.RECEIPT_DAYS_EXCEPTION_CODE,'WARNING') RECEIPT_DAYS_EXCEPTION_CODE                  --,RECEIPT_DAYS_EXCEPTION_CODE (Receipt Date Exception)
-                ,case
-                    when pv.INVOICE_CURRENCY_CODE = 'HRK' then
-                        'EUR'
-                    when pv.INVOICE_CURRENCY_CODE = 'CSD' then
-                        'RSD'
-                    else
-                    pv.INVOICE_CURRENCY_CODE
-                    end INVOICE_CURRENCY_CODE --,INVOICE_CURRENCY_CODE (Invoice Currency)
+                ,pv.ALLOW_SUBSTITUTE_RECEIPTS_FLAG                --,ALLOW_SUBSTITUTE_RECEIPTS_FLAG (Allow Substitute Receipts)
+                ,pv.ALLOW_UNORDERED_RECEIPTS_FLAG                 --,ALLOW_UNORDERED_RECEIPTS_FLAG (Allow unordered receipts)
+                ,pv.RECEIPT_DAYS_EXCEPTION_CODE                   --,RECEIPT_DAYS_EXCEPTION_CODE (Receipt Date Exception)
+                ,decode(pv.INVOICE_CURRENCY_CODE,'HRK','EUR',pv.INVOICE_CURRENCY_CODE ) INVOICE_CURRENCY_CODE --,INVOICE_CURRENCY_CODE (Invoice Currency)
                 ,pvs.INVOICE_AMOUNT_LIMIT                        --,INVOICE_AMOUNT_LIMIT (Invoice Amount Limit)
                 ,case
                     when xx_set.business_unit_name = 'Dalekovod Projekt' then
@@ -6331,14 +6301,7 @@
                     else 
                         'THREE'
                     end MATCH_APPROVAL_LEVEL -- (Match Approval Level)
-                ,case
-                    when pvs.PAYMENT_CURRENCY_CODE = 'HRK' then
-                        'EUR'
-                    when pvs.PAYMENT_CURRENCY_CODE = 'CSD' then
-                        'RSD'
-                    else
-                    pvs.PAYMENT_CURRENCY_CODE
-                    end PAYMENT_CURRENCY_CODE --,PAYMENT_CURRENCY_CODE (Payment Currency)
+                ,decode(pvs.PAYMENT_CURRENCY_CODE,'HRK','EUR',pvs.PAYMENT_CURRENCY_CODE) PAYMENT_CURRENCY_CODE --,PAYMENT_CURRENCY_CODE (Payment Currency)
                 ,pvs.PAYMENT_PRIORITY                                    --,PAYMENT_PRIORITY (Payment Priority)
                 ,'Standard' PAY_GROUP_LOOKUP_CODE --pvs.PAY_GROUP_LOOKUP_CODE                               --,PAY_GROUP_LOOKUP_CODE (Pay Group)
                 ,pvs.HOLD_ALL_PAYMENTS_FLAG/*case
@@ -6405,8 +6368,6 @@
 
     l_app_url := get_config('ServiceRootURL');
     --l_app_url := get_config('EwhaTestServiceRootURL');
-
-    log('Starting import!');
 
 
     for c_sa in c_supplier_address loop
@@ -6527,9 +6488,9 @@
                 dbms_lob.createtemporary(l_soap_env, TRUE);
 
                 l_text := '{
-                    "SupplierSite": "'||apex_escape.json(c_a.vendor_site_code)||'",
+                    "SupplierSite": "'||c_a.vendor_site_code||'",
                     "ProcurementBU": "'||c_a.business_unit_name||'",
-                    "SupplierAddressName": "'||apex_escape.json(c_a.address_name)||'",
+                    "SupplierAddressName": "'||c_a.address_name||'",
                     "InactiveDate": null,
                     "SitePurposeSourcingOnlyFlag": false,
                     "SitePurposePurchasingFlag": true,
@@ -6823,8 +6784,8 @@
                             dbms_lob.createtemporary(l_soap_env, TRUE);
 
                             l_text := '{ 
-                                "FirstName": "'||apex_escape.json(nvl(c_va.first_name,c_va.last_name))||'",
-                                "LastName": "'||apex_escape.json(c_va.last_name)||'",
+                                "FirstName": "'||nvl(c_va.first_name,c_va.last_name)||'",
+                                "LastName": "'||c_va.last_name||'",
                                 "Email": "'||c_va.email_address||'",
                                 "PhoneAreaCode": "'||c_va.area_code||'",
                                 "PhoneNumber": "'||c_va.phone||'"                            
@@ -6987,7 +6948,12 @@
                                 ,xx.cloud_import_message = x_return_message
                                 where xx.party_site_id = l_contact_rec.party_site_id;
 
-                            end if;          
+                            end if;
+
+                        
+                        
+
+
 
                     end loop;
 
@@ -7061,7 +7027,7 @@
                             and bauses.vendor_id = pv.vendor_id
                             and bauses.vendor_site_id = pvs.vendor_site_id(+)
                             and sysdate between nvl(bauses.start_date,sysdate) and nvl(bauses.end_date,sysdate)
-                            --and bacct.iban_number is not null
+                            and bacct.iban_number is not null
                             --and bauses.vendor_id = pvs.vendor_id
                             /*and exists (select
                                 1 from    
@@ -7074,99 +7040,21 @@
                             ) bank_acc
                         ,xxdl_bank_branches xx_bank    
                         where 
+                        --xx_cust_site.cloud_party_site_id = c_sa.party_site_id   
+                        --and xx_cust_site.party_site_id = hps.party_site_id(+)
+                        --and xx_cust_site.cloud_set_id = xx_set.reference_data_set_id(+) 
+                        --and xx_cust_site.cust_account_id = hca.cust_account_id
+                        --and hca.party_id = hp.party_id(+)
+                        --and to_char(hps.party_site_number) = pvs.attribute3(+)
+                        --and xx_cust_site.org_id = pvs.org_id
+                        --and pvs.vendor_id = pv.vendor_id
                         pvs.vendor_site_id = c_a.vendor_site_id
                         and pvs.vendor_site_id = bank_acc.vendor_site_id(+)
                         and pvs.org_id = bank_acc.org_id(+)
                         and bank_acc.bank_branch_name = xx_bank.bank_branch_name(+)
-                        union
-                        select distinct
-                        pvs.vendor_site_code||'' vendor_site_code                
-                        ,pvs.vendor_site_id
-                        ,xx_bank.bank_number
-                        ,xx_bank.bank_party_id cloud_branch_id
-                        ,xx_bank.branch_party_id cloud_bank_id
-                        ,bank_acc.bank_branch_id
-                        ,bank_acc.bank_account_name
-                        ,' '||bank_acc.bank_account_num bank_account_num
-                        ,bank_acc.address_line1
-                        ,bank_acc.iban_number
-                        ,bank_acc.country bank_country            
-                        ,bank_acc.EFT_SWIFT_CODE
-                        ,bank_acc.bank_name
-                        ,bank_acc.primary_flag
-                        ,bank_acc.currency_code
-                        from
-                        --xxdl_hz_cust_acct_sites xx_cust_siFetching payee id return error!te      
-                        --,xxdl_cloud_reference_sets xx_set        
-                        --,apps.hz_party_sites@ebsprod hps      
-                        --,apps.hz_cust_accounts@ebsprod hca
-                        --,apps.hz_parties@ebsprod hp
-                        apps.po_vendor_sites_all@ebsprod pvs
-                        --,apps.po_vendors@ebsprod pv
-                        ,(select
-                        pv.vendor_name
-                        ,bauses.bank_account_uses_id
-                        ,bauses.customer_id
-                        ,bauses.customer_site_use_id
-                        ,bauses.external_bank_account_id
-                        ,bacct.bank_account_id
-                        ,bauses.primary_flag
-                        ,bauses.org_id uses_org_id
-                        ,bbnch.bank_branch_id
-                        ,bbnch.bank_name
-                        ,bbnch.bank_branch_name
-                        ,bbnch.bank_number
-                        ,bbnch.description
-                        ,bbnch.address_line1
-                        ,bbnch.address_line2
-                        ,bbnch.address_line3
-                        ,bbnch.address_line4
-                        ,bbnch.city
-                        ,bbnch.country
-                        ,bbnch.institution_type
-                        ,bbnch.EFT_SWIFT_CODE
-                        ,nvl(bacct.iban_number,'X') iban_number
-                        ,bacct.bank_account_name
-                        ,bacct.bank_account_id
-                        ,bacct.bank_account_num
-                        ,decode(bacct.currency_code,'HRK','EUR',bacct.currency_code) currency_code
-                        ,bacct.set_of_books_id
-                        ,bacct.account_type
-                        ,bacct.org_id
-                        ,bauses.vendor_site_id
-                        ,bauses.vendor_id 
-                        FROM
-                            apps.ap_bank_account_uses_all@ebsprod bauses,
-                            apps.ap_bank_branches@ebsprod     bbnch,
-                            apps.ap_bank_accounts_all@ebsprod     bacct,
-                            apps.po_vendors@ebsprod pv,
-                            apps.po_vendor_sites_all@ebsprod pvs
-                        WHERE  
-                            bauses.external_bank_account_id = bacct.bank_account_id
-                            AND bacct.bank_branch_id = bbnch.bank_branch_id
-                            and bauses.vendor_id = pv.vendor_id
-                            and bauses.vendor_site_id = pvs.vendor_site_id(+)
-                            and sysdate between nvl(bauses.start_date,sysdate) and nvl(bauses.end_date,sysdate)
-                            --and bacct.iban_number is not null
-                            --and bauses.vendor_id = pvs.vendor_id
-                            /*and exists (select
-                                1 from    
-                                apps.ap_invoices_all@ebsprod aia,
-                                apps.ap_payment_schedules_all@ebsprod apsa
-                                where aia.invoice_id = apsa.invoice_id
-                                and aia.vendor_site_id = pvs.vendor_site_id
-                                and apsa.external_bank_account_id = bacct.bank_account_id
-                                )*/ 
-                            ) bank_acc
-                        ,xxdl_bank_branches xx_bank    
-                        where 
-                        pvs.vendor_site_id = c_a.vendor_site_id
-                        and pvs.vendor_id = bank_acc.vendor_id(+)
-                        and pvs.org_id = bank_acc.org_id(+)
-                        and bank_acc.bank_branch_name = xx_bank.bank_branch_name(+)
                         ) loop
-                            --starting bank account, override for iban = 'X'
-                            if nvl(c_b.iban_number,'X') = 'XX' then
+                            --starting bank account
+                            if nvl(c_b.iban_number,'X') = 'X' then
                                 log('               There is no bank account to migrate!'); 
                             else 
 
@@ -7219,34 +7107,19 @@
                                 l_text := '';
                                 l_soap_env := l_empty_clob;
                                 dbms_lob.createtemporary(l_soap_env, TRUE);
-                                
-                                if nvl(c_b.iban_number,'X') = 'X' then
-                                    l_text := '{
-                                                    "BankAccountNumber": "'||c_b.bank_account_num||'",
-                                                    "CountryCode": "'||c_b.bank_country||'",
-                                                    "BankBranchIdentifier": '||c_b.cloud_bank_id||',
-                                                    "BankIdentifier": '||c_b.cloud_branch_id||',
-                                                    "Intent": "Supplier",
-                                                    "PartyId": '||c_sa.cloud_party_id||',
-                                                    "BankAccountName": "'||apex_escape.json(c_b.bank_account_name)||'",
-                                                    "CurrencyCode":"'||c_b.currency_code||'",
-                                                    "StartDate":"1998-01-01"
-                                                }';
-                                else
-                                
-                                    l_text := '{
-                                                    "BankAccountNumber": "'||c_b.bank_account_num||'",
-                                                    "CountryCode": "'||c_b.bank_country||'",
-                                                    "BankBranchIdentifier": '||c_b.cloud_bank_id||',
-                                                    "BankIdentifier": '||c_b.cloud_branch_id||',
-                                                    "Intent": "Supplier",
-                                                    "PartyId": '||c_sa.cloud_party_id||',
-                                                    "IBAN": "'||c_b.iban_number||'",
-                                                    "BankAccountName": "'||apex_escape.json(c_b.bank_account_name)||'",
-                                                    "CurrencyCode":"'||c_b.currency_code||'",
-                                                    "StartDate":"1998-01-01"
-                                                }';
-                                end if;            
+
+                                l_text := '{
+                                                "BankAccountNumber": "'||c_b.bank_account_num||'",
+                                                "CountryCode": "'||c_b.bank_country||'",
+                                                "BankBranchIdentifier": '||c_b.cloud_bank_id||',
+                                                "BankIdentifier": '||c_b.cloud_branch_id||',
+                                                "Intent": "Supplier",
+                                                "PartyId": '||c_sa.cloud_party_id||',
+                                                "IBAN": "'||c_b.iban_number||'",
+                                                "BankAccountName": "'||c_b.bank_account_name||'",
+                                                "CurrencyCode":"'||c_b.currency_code||'",
+                                                "StartDate":"1998-01-01"
+                                            }';
                                 
                                 l_soap_env := l_soap_env||to_clob(l_text);       
 
@@ -7332,7 +7205,7 @@
                                         if l_bank_acc_rec.CLOUD_OWNER_SET = 'Y' then
                                             log('                       Bank account owner already exists!');
                                             x_return_status := 'S';
-                                            --GOTO bank_acc_owner_set;
+                                            GOTO bank_acc_owner_set;
                                         end if;
 
                                                 
@@ -7363,30 +7236,6 @@
                                         if x_return_status = 'E' then
                                             x_return_message := get_ws_err_msg(xbo_ws_call_id);
                                             log('     Web service message:'||x_return_message);
-                                            if x_return_message = 'A record with this combination of values already exists.' then
-                                                log('       Try to skip this and assign!');
-                                                 l_text := '';
-                                                    l_soap_env := l_empty_clob;
-                                                    dbms_lob.createtemporary(l_soap_env, TRUE);
-
-                                                    l_text := ' ';
-                                                                                            
-                                                    l_soap_env := l_soap_env||to_clob(l_text);       
-
-                                                    log('                   Calling web service to create external bank account owner!');
-
-                                                    XXFN_CLOUD_WS_PKG.WS_REST_CALL(
-                                                    p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/externalBankAccounts/'||l_bank_acc_rec.EXT_BANK_ACCOUNT_ID||'/child/accountOwners',
-                                                    p_rest_env => l_soap_env,
-                                                    p_rest_act => 'GET',
-                                                    p_content_type => 'application/json;charset="UTF-8"',
-                                                    x_return_status => x_return_status,
-                                                    x_return_message => x_return_message,
-                                                    x_ws_call_id => xbo_ws_call_id);     
-
-                                                goto bank_acc_owner_set;
-
-                                            end if;
                                         end if;
                                         log('                   Web service call:'||xbo_ws_call_id);
                                         dbms_lob.freetemporary(l_soap_env); 
@@ -7412,18 +7261,6 @@
                                                                         CLOUD_OWNER_ID number path '$.AccountOwnerId'))
                                                     where xx.ws_call_id = xbo_ws_call_id
                                                     and xbo_ws_call_id is not null --when supplier site is freshly created
-                                                    union
-                                                    select
-                                                    CLOUD_OWNER_ID
-                                                    from
-                                                    xxfn_ws_call_log xx,
-                                                    json_table(xx.response_json,'$'
-                                                                columns(nested path '$.items[*]'
-                                                                        columns(
-                                                                            CLOUD_OWNER_ID number path '$.AccountOwnerId'
-                                                                        )))
-                                                    where xx.ws_call_id = xbo_ws_call_id
-                                                    and xbo_ws_call_id is not null --when supplier site is freshly created
                                                     union                       
                                                     select 
                                                     xx_ba.CLOUD_OWNER_ID
@@ -7440,8 +7277,6 @@
                                                 json_response jt
                                                 where rownum = 1
                                                 and jt.CLOUD_OWNER_ID is not null;
-
-                                                log('       Cloud owner id:'||l_bank_acc_rec.cloud_owner_id);
 
                                                 exception
                                                 when no_data_found then

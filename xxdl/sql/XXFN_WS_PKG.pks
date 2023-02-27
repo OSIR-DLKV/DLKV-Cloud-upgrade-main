@@ -173,7 +173,13 @@ Arguments   : p_ws_call_id -> web service call identifier
 procedure DELETE_LOBS_FROM_LOG(
     p_ws_call_id    in xxfn_ws_call_log.ws_call_id%type);
 
-procedure insert_vendor(p_id number, p_name varchar2, p_addres varchar2);
+/*===========================================================================+
+  Procedure   : delete_log_records
+  Description : Deletes old log records
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+procedure delete_log_records;
 
 end XXFN_WS_PKG;
 /

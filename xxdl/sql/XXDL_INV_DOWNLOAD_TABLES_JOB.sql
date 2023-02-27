@@ -10,10 +10,10 @@
   ============================================================================+*/
 begin
 dbms_scheduler.create_job (
-   job_name           =>  'XX_INTEGRATION_DEV.XXDL_INV_DOWNLOAD_TABLES_JOB',
+   job_name           =>  'XX_INTEGRATION_PROD.XXDL_INV_DOWNLOAD_TABLES_JOB',
    job_type           =>  'STORED_PROCEDURE',
    job_action         =>  'XXDL_INV_INTEGRATION_PKG.download_all_inv_tables',
-   start_date         =>  TO_DATE('2022/09/28 04:00:00', 'YYYY/MM/DD HH:MI:SS'),
+   start_date         =>  TO_DATE('2022/01/19 04:00:00', 'YYYY/MM/DD HH:MI:SS'),
    repeat_interval    =>  'FREQ=DAILY',
    enabled            =>  TRUE);
 END;

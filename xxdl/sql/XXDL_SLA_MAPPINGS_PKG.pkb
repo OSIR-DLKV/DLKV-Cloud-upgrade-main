@@ -6,6 +6,9 @@ create or replace package body xxdl_sla_mappings_pkg is
   Description : Package to support mappings generation
   History     :
   v1.0 13.05.2022 Marko Sladoljev: Inicijalna verzija
+  v1.1 07.01.2023 Marko Sladoljev: varchar/clob zamjena radi velicine zapisa
+  v1.2 12.01.2023 Marko Sladoljev: referesh_cc_from_wo_mapping - single csv file supported
+  v1.3 11.02.2023 Marko Sladoljev: New refresh procedure
   ============================================================================+*/
 
   -- File names
@@ -19,8 +22,8 @@ create or replace package body xxdl_sla_mappings_pkg is
 
   -- Log variables
   c_module constant varchar2(100) := 'XXDL_SLA_MAPPINGS_PKG';
-  g_log_level varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
-  --g_log_level    varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
+  --g_log_level varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
+  g_log_level    varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
   g_last_message varchar2(2000);
   g_report_id    number := -1;
 
@@ -40,7 +43,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   begin
     g_last_message := p_text;
     if g_log_level = xxdl_log_pkg.g_level_statement then
-      dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
+      --dbms_output.put_line(to_char(sysdate, 'dd.mm.yyyy hh24:mi:ss') || '| ' || p_text);
       xxdl_log_pkg.log(p_module => c_module, p_log_level => xxdl_log_pkg.g_level_statement, p_message => p_text);
     end if;
   end;
@@ -119,7 +122,7 @@ create or replace package body xxdl_sla_mappings_pkg is
       exception
         when others then
           if (sqlcode = -1007) then
-            xlog('Error code: ' || sqlcode || ' Msg:' || sqlerrm);
+            elog('Error code: ' || sqlcode || ' Msg:' || sqlerrm);
             exit;
           else
             raise;
@@ -271,7 +274,7 @@ create or replace package body xxdl_sla_mappings_pkg is
                 p_wsdl_link   - URL of the web service we are calling, e.g. https://ehaz-test.fa.em2.oraclecloud.com:443/fscmService/ErpIntegrationService
                 p_wsdl_method  - Web service method we are calling, importBulkData, runReport
   ============================================================================+*/
-  procedure send_csv_to_cloud(p_document      in varchar2,
+  procedure send_csv_to_cloud(p_document      in clob,
                               p_doc_name      in varchar2,
                               p_doc_type      in varchar2,
                               p_author        in varchar2,
@@ -290,7 +293,7 @@ create or replace package body xxdl_sla_mappings_pkg is
     l_return_status      varchar2(500);
     l_return_message     varchar2(32000);
     l_soap_env           clob;
-    l_text               varchar2(32000);
+    l_text               clob;
     l_inflated_resp      blob;
     l_result_nr          varchar2(32000);
     l_resp_xml           xmltype;
@@ -334,7 +337,7 @@ create or replace package body xxdl_sla_mappings_pkg is
            </soapenv:Body>
       </soapenv:Envelope>';
   
-    l_soap_env := to_clob(l_text);
+    l_soap_env := l_text;
   
     xxfn_cloud_ws_pkg.ws_call(p_ws_url         => p_wsdl_link,
                               p_soap_env       => l_soap_env,
@@ -358,31 +361,45 @@ create or replace package body xxdl_sla_mappings_pkg is
   /*===========================================================================+
   Function    : base64_encode_file
   Description : Encodes file contents with base64
-  Usage       : called from package XXPO_NCS_FBDI_PKG
+  Usage       : 
   Arguments   : p_dir                - directory where file is stored
                 p_filename           - name of the file
   Returns     : Encoded contents of a file
   ============================================================================+*/
-  procedure base64_encode_file(p_dir in varchar2, p_filename in varchar2, p_encode out varchar2) is
+  procedure base64_encode_file(p_dir in varchar2, p_filename in varchar2, p_encode out clob) is
     l_encoded blob;
     l_b_file  bfile;
     l_step    pls_integer := 12000;
     l_clob    clob;
   begin
   
-    xlog('Starting base64 encoding');
+    xlog('Procedure base64_encode_file started');
   
     xlog('Opening file:' || p_filename);
   
     l_b_file := bfilename(p_dir, p_filename);
+  
+    xlog('l_b_file initialized');
+  
     dbms_lob.fileopen(l_b_file, dbms_lob.file_readonly);
+  
+    xlog('File opened, starting loop');
   
     for i in 0 .. trunc((dbms_lob.getlength(l_b_file) - 1) / l_step) loop
       l_clob := l_clob || utl_raw.cast_to_varchar2(utl_encode.base64_encode(dbms_lob.substr(l_b_file, l_step, i * l_step + 1)));
     end loop;
   
+    xlog('Loop ended');
+  
+    xlog('Clob length: ' || dbms_lob.getlength(l_clob));
+  
+    xlog('Setting p_encode out parameter');
     p_encode := l_clob;
+  
+    xlog('Closing the file');
     dbms_lob.fileclose(l_b_file);
+  
+    xlog('Procedure base64_encode_file ended');
   exception
     when others then
       dbms_lob.fileclose(l_b_file);
@@ -459,6 +476,7 @@ create or replace package body xxdl_sla_mappings_pkg is
     xlog('Purge process finished with status: ' || l_job_status);
   
   end;
+
   /*===========================================================================+
   Procedure   : get_mapping_set_values
   Description : Gets mapping set values from fusion sources into local interface table xxdl_sla_mappings_interface
@@ -491,8 +509,12 @@ create or replace package body xxdl_sla_mappings_pkg is
     l_batch_id number;
     l_prev_coa varchar2(100);
   
-    l_application_name varchar2(100);
-    l_out_segment      varchar2(100);
+    --l_application_name varchar2(100);
+    --l_out_segment      varchar2(100);
+  
+    l_src_value varchar2(2000);
+  
+    l_map_def xxdl_sla_map_set_definition%rowtype;
   
   begin
   
@@ -500,16 +522,14 @@ create or replace package body xxdl_sla_mappings_pkg is
   
     xlog('Getting mapping set definition');
     begin
-      select s.application_name,
-             s.out_segment
-        into l_application_name,
-             l_out_segment
+      select *
+        into l_map_def
         from xxdl_sla_map_set_definition s
        where s.mapping_set_code = p_mapping_set_code
          and s.enabled = 'Y';
     exception
       when no_data_found then
-        xlog('There is no mapping set defined in xxdl_sla_map_set_definition table or it is disabled');
+        elog('There is no mapping set defined in xxdl_sla_map_set_definition table or it is disabled');
         raise e_processing_exception;
     end;
   
@@ -523,10 +543,21 @@ create or replace package body xxdl_sla_mappings_pkg is
                 <pub:attributeFormat>xml</pub:attributeFormat>
                 <pub:attributeLocale></pub:attributeLocale>
                 <pub:attributeTemplate></pub:attributeTemplate>
-                <pub:parameterNameValues>
-                   <!--Zero or more repetitions:-->
-                </pub:parameterNameValues>
-                <pub:reportAbsolutePath>Custom/XXDL_MAPPING_SETS/[MAPPING_SET_CODE]_REP.xdo</pub:reportAbsolutePath>
+                   <pub:parameterNameValues>
+                            <pub:item>
+                                <pub:name>p_mapping_set_code</pub:name>
+                                <pub:values>
+                                    <pub:item>[P_MAPPING_SET_CODE]</pub:item>
+                                </pub:values>
+                            </pub:item>
+                            <pub:item>
+                                <pub:name>p_chart_of_accounts</pub:name>
+                                <pub:values>
+                                    <pub:item>[P_CHART_OF_ACCOUNTS]</pub:item>
+                                </pub:values>
+                            </pub:item>
+                    </pub:parameterNameValues>
+                <pub:reportAbsolutePath>Custom/XXDL_MAPPING_SET/[BI_REPORT_NAME].xdo</pub:reportAbsolutePath>
                 <pub:sizeOfDataChunkDownload>-1</pub:sizeOfDataChunkDownload>
              </pub:reportRequest>
              <pub:appParams></pub:appParams>
@@ -534,7 +565,9 @@ create or replace package body xxdl_sla_mappings_pkg is
        </soap:Body>
     </soap:Envelope>';
   
-    l_text := replace(l_text, '[MAPPING_SET_CODE]', p_mapping_set_code);
+    l_text := replace(l_text, '[BI_REPORT_NAME]', l_map_def.bi_report_name);
+    l_text := replace(l_text, '[P_MAPPING_SET_CODE]', p_mapping_set_code);
+    l_text := replace(l_text, '[P_CHART_OF_ACCOUNTS]', p_chart_of_accounts);
   
     l_soap_env := to_clob(l_text);
   
@@ -554,8 +587,9 @@ create or replace package body xxdl_sla_mappings_pkg is
   
     xlog('x_return_status: ' || l_return_status);
     if (l_return_status != 'S') then
-      xlog('Error getting data from BI report for mapping set ' || p_mapping_set_code);
-      xlog('l_return_message: ' || l_return_message);
+      elog('Error getting data from BI report for mapping set ' || p_mapping_set_code);
+      elog('l_ws_call_id: ' || l_ws_call_id);
+      elog('l_return_message: ' || l_return_message);
       raise e_processing_exception;
     end if;
   
@@ -565,7 +599,8 @@ create or replace package body xxdl_sla_mappings_pkg is
       select response_xml into l_resp_xml from xxfn_ws_call_log_v where ws_call_id = l_ws_call_id;
     exception
       when no_data_found then
-        xlog('Error extracting xml from the response');
+        elog('Error extracting xml from the response');
+        elog('l_ws_call_id: ' || l_ws_call_id);
         raise e_processing_exception;
     end;
   
@@ -582,6 +617,7 @@ create or replace package body xxdl_sla_mappings_pkg is
     exception
       when no_data_found then
         elog('Error getting l_result_clob from xml response');
+        elog('l_ws_call_id: ' || l_ws_call_id);
         raise e_processing_exception;
     end;
   
@@ -600,16 +636,12 @@ create or replace package body xxdl_sla_mappings_pkg is
     xout(' ');
     for c_rec in (select xt.*
                     from xmltable('/DATA_DS/G_1' passing l_resp_xml_id columns source_value_1 varchar2(250) path 'SOURCE_VALUE_1',
+                                  source_value_2 varchar2(250) path 'SOURCE_VALUE_2',
+                                  source_value_3 varchar2(250) path 'SOURCE_VALUE_3',
                                   out_chart_of_accounts varchar2(250) path 'OUT_CHART_OF_ACCOUNTS',
                                   out_value varchar2(250) path 'OUT_VALUE',
                                   source_reference_info varchar2(250) path 'SOURCE_REFERENCE_INFO') xt
                    order by out_chart_of_accounts) loop
-    
-      -- Avoid coa that are not selected
-      -- TODO: Consider moving to report parameter
-      if nvl(p_chart_of_accounts, c_rec.out_chart_of_accounts) != c_rec.out_chart_of_accounts then
-        continue;
-      end if;
     
       -- If coa is changed, new batch is created
       if l_prev_coa != c_rec.out_chart_of_accounts then
@@ -622,18 +654,33 @@ create or replace package body xxdl_sla_mappings_pkg is
     
       l_count := l_count + 1;
     
-      xout(c_rec.out_chart_of_accounts || ', ' || c_rec.source_value_1 || ', ' || c_rec.out_value || ', ' || c_rec.source_reference_info);
+      if l_map_def.bi_src_column = 'SOURCE_VALUE_1' then
+        l_src_value := c_rec.source_value_1;
+      elsif l_map_def.bi_src_column = 'SOURCE_VALUE_2' then
+        l_src_value := c_rec.source_value_2;
+      elsif l_map_def.bi_src_column = 'SOURCE_VALUE_3' then
+        l_src_value := c_rec.source_value_3;
+      else
+        elog('Invalid bi_src_column value: "' || l_map_def.bi_src_column || '" in mapping set definition for mapping set ' || p_mapping_set_code);
+        raise e_processing_exception;
+      end if;
+    
+      if l_count < 10 then
+        xout(c_rec.out_chart_of_accounts || ', ' || c_rec.source_value_1 || ', ' || c_rec.out_value || ', ' || c_rec.source_reference_info);
+      elsif l_count = 10 then
+        xout('... more lines exists but are not being logged');
+      end if;
     
       l_row.batch_id              := l_batch_id;
       l_row.group_id              := x_group_id;
       l_row.line_num              := l_count;
       l_row.status                := 'NEW';
-      l_row.application_name      := l_application_name;
+      l_row.application_name      := l_map_def.application_name;
       l_row.mapping_short_name    := p_mapping_set_code;
       l_row.out_chart_of_accounts := c_rec.out_chart_of_accounts;
-      l_row.out_segment           := l_out_segment;
+      l_row.out_segment           := l_map_def.out_segment;
       l_row.out_value             := c_rec.out_value;
-      l_row.source_value_1        := c_rec.source_value_1;
+      l_row.source_value_1        := l_src_value;
       l_row.source_reference_info := c_rec.source_reference_info;
       l_row.creation_date         := sysdate;
       l_row.last_update_date      := sysdate;
@@ -646,7 +693,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   
   exception
     when e_processing_exception then
-      xlog('e_processing_exception risen');
+      elog('e_processing_exception risen');
   end;
 
   -- Prcedure declaration since it is called from reprocess_records
@@ -701,7 +748,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   procedure process_interface(p_batch_id number, p_reprocess_flag boolean, p_purge_flag boolean) as
   
     l_filename_zip        varchar2(250);
-    l_document            varchar2(30000);
+    l_document            clob;
     l_doc_type            varchar2(100) := '.csv';
     l_app_account         varchar2(300) := 'fin$/fusionAccountingHub$/import';
     l_job_name            varchar2(500) := '/oracle/apps/ess/financials/commonModules/shared/common/interfaceLoader/,InterfaceLoaderController';
@@ -769,7 +816,7 @@ create or replace package body xxdl_sla_mappings_pkg is
       xlog('l_ws_call_id: ' || l_ws_call_id);
     
       l_loadfile_req_id := get_importbulkdata_req_id(l_ws_call_id);
-      xlog('l_loadfile_req_id: ' || l_loadfile_req_id);
+      xout('l_loadfile_req_id: ' || l_loadfile_req_id);
     
       xlog('Updating interface - mark lines as processed');
       update xxdl_sla_mappings_interface i
@@ -1091,6 +1138,8 @@ create or replace package body xxdl_sla_mappings_pkg is
         xlog('New batch id: ' || l_batch_id);
         l_count := 0;
       end if;
+    
+      l_prev_coa := c_wo.company;
     
       l_count := l_count + 1;
     

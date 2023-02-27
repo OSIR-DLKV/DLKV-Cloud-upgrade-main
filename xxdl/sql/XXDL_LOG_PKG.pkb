@@ -25,6 +25,18 @@ create or replace package body xxdl_log_pkg as
     commit;
   end;
 
+  /*===========================================================================+
+  Procedure   : purge_old_log
+  Description : Deletes records older then 30 days
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure purge_old_log as
+    pragma autonomous_transaction;
+  begin
+    delete from xxdl_log where date_created < sysdate - 31;
+    commit;
+  end;
 
 end xxdl_log_pkg;
 /

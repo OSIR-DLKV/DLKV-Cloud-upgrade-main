@@ -14,6 +14,8 @@ create or replace package xxdl_inv_integration_pkg authid definer is
 
   procedure download_transactions;
 
+  procedure download_mig_transactions;
+
   procedure download_avg_item_cst;
 
   procedure download_items;
