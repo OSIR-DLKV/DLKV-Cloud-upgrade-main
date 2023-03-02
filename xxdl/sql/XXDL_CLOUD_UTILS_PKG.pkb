@@ -8,8 +8,8 @@ create or replace package body xxdl_cloud_utils_pkg is
   v1.0 24.06.2022 Marko Sladoljev: Inicijalna verzija
   ============================================================================+*/
 
-  g_log_level varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
-  --g_log_level    varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
+  --g_log_level varchar2(10) := xxdl_log_pkg.g_level_statement; -- Use for detailed logging
+  g_log_level    varchar2(10) := xxdl_log_pkg.g_level_error; -- Regular error only logging
 
   c_module constant varchar2(100) := 'XXDL_CLOUD_UTILS_PKG';
 

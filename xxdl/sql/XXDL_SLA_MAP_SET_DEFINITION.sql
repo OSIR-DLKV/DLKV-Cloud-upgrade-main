@@ -54,3 +54,11 @@ insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out
 values ('XXDL_AR_OM_REC_CC', 'Receivables', 'Mjesto troska', 'Y', 'XXDL_CC_FROM_BILLABLE_PROJECT_REP', 'SOURCE_VALUE_2');
 insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled, bi_report_name, bi_src_column)
 values ('XXDL_CC_FROM_PJC_PROJECT', 'Project Costing', 'Mjesto troska', 'Y', 'XXDL_CC_FROM_BILLABLE_PROJECT_REP', 'SOURCE_VALUE_1');
+-- 20.2.2023
+insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled, bi_report_name, bi_src_column)
+values ('XXDL_AR_OM_KROVNI_NALOG', 'Receivables', 'Nalog prodaje', 'Y', 'XXDL_SO_PARENT_FROM_SALES_ORDER_REP', 'SOURCE_VALUE_1');
+insert into XXDL_SLA_MAP_SET_DEFINITION (mapping_set_code, application_name, out_segment, enabled, bi_report_name, bi_src_column)
+values ('XXDL_AR_OM_CM_KROVNI_NALOG', 'Receivables', 'Nalog prodaje', 'Y', 'XXDL_SO_PARENT_FROM_SALES_ORDER_REP', 'SOURCE_VALUE_1');
+
+
+

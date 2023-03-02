@@ -35,6 +35,8 @@ create or replace package xxdl_inv_integration_pkg authid definer is
   -- Other procedures
 
   procedure process_transactions_interface(p_batch_id number);
+  
+  procedure process_transactions_int_all;
 
 end xxdl_inv_integration_pkg;
 /

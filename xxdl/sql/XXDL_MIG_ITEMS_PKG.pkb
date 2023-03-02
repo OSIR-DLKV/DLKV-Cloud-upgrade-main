@@ -33,7 +33,7 @@ create or replace package body xxdl_mig_items_pkg as
   ============================================================================+*/
   procedure xlog(p_text in varchar2) as
   begin
-    --dbms_output.put_line(p_text); -- TODO: Logging?
+    dbms_output.put_line(p_text); -- TODO: Logging?
     null;
   end;
 
@@ -548,6 +548,25 @@ create or replace package body xxdl_mig_items_pkg as
   end;
 
   --/*-----------------------------------------------------------------------------
+  -- Name    : l_new_asset_category
+  -- Desc    : Translation Asset Category
+  -------------------------------------------------------------------------------*/
+  function get_cost_category(p_old_cost_category varchar2, p_org_code varchar2) return varchar as
+    l_new_cost_category varchar2(100);
+  begin
+    l_new_cost_category := p_old_cost_category;
+  
+    if p_org_code = 'GRA' then
+      if p_old_cost_category like '35%' then
+        l_new_cost_category := '310000';
+      end if;
+    end if;
+  
+    return l_new_cost_category;
+  
+  end;
+
+  --/*-----------------------------------------------------------------------------
   -- Name    : get_asset_category
   -- Desc    : Translation Asset Category
   -------------------------------------------------------------------------------*/
@@ -1007,6 +1026,7 @@ create or replace package body xxdl_mig_items_pkg as
     l_item_org_xml    varchar2(32000);
   
     l_source_organization_name varchar2(200);
+    l_cost_category_code       varchar2(30);
   
     l_purchasable_flag                  varchar2(10);
     l_purchasing_flag                   varchar2(10);
@@ -1406,7 +1426,8 @@ create or replace package body xxdl_mig_items_pkg as
             end if;
           
             if c_i_cat.orig_category_set_name = 'XXDL PLA' then
-              l_item_rec.account := c_i_cat.category_code;
+              l_cost_category_code := get_cost_category(c_i_cat.category_code, l_organization_code);
+              l_item_rec.account   := l_cost_category_code;
             end if;
           
             if l_organization_code = 'DLK' and c_i_cat.orig_category_set_name = 'XXDL kategorizacija' then
@@ -1418,7 +1439,7 @@ create or replace package body xxdl_mig_items_pkg as
             if c_i_cat.orig_category_set_name = 'XXDL PLA' then
               l_text_categories := l_text_categories || l_category_xml;
               l_text_categories := replace(l_text_categories, '[CATEGORY_SET_NAME]', c_i_cat.category_set_name);
-              l_text_categories := replace(l_text_categories, '[CATEGORY_CODE]', c_i_cat.category_code);
+              l_text_categories := replace(l_text_categories, '[CATEGORY_CODE]', l_cost_category_code);
             end if;
           end loop;
         
