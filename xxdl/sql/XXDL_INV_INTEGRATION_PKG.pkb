@@ -10,6 +10,7 @@ create or replace package body xxdl_inv_integration_pkg is
   v1.2 06.01.2022 Marko Sladoljev: Izmjene nakon testiranja s reflection - pragma autonomous removed
   v1.3 17.01.2022 Marko Sladoljev: download_mig_transactions
   v1.4 02.02.2022 Marko Sladoljev: Error logging added
+  v1.5 24.03.2023 Marko Sladoljev: Transaction processing order by batch_id, transaction date
   ============================================================================+*/
 
   -- Log variables
@@ -1161,7 +1162,7 @@ create or replace package body xxdl_inv_integration_pkg is
   ============================================================================+*/
   procedure process_transactions_int_all as
     cursor cur_batch is
-      select distinct batch_id from xxdl_inv_material_txns_int where status = 'NEW';
+      select distinct batch_id from xxdl_inv_material_txns_int where status = 'NEW' order by batch_id;
   begin
     xlog('process_transactions_int_job started');
     for c_batch in cur_batch loop
@@ -1181,9 +1182,10 @@ create or replace package body xxdl_inv_integration_pkg is
   
     cursor cur_transactions is
       select *
-        from xxdl_inv_material_txns_int
+        from xxdl_inv_material_txns_int i
        where status = 'NEW'
-         and batch_id = p_batch_id;
+         and batch_id = p_batch_id
+       order by i.transaction_date;
   
     l_return_status       varchar2(10);
     l_return_message      varchar2(32000);
