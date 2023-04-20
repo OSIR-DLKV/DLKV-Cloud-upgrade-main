@@ -24,7 +24,8 @@ select id,
         work_order_number,
         work_order_description
 from xxdl_wo_cc_integration
-where nvl(status, 'E') != 'S';
+where nvl(status, 'E') != 'S'
+and nvl(message, 'XXX') not like 'The value%already exists. Enter a unique value. (FND-2894)';
 
 x_return_status varchar2(500);
 x_return_message varchar2(32000);
@@ -39,17 +40,42 @@ l_value_set_name varchar2(50);
 l_value_id number;
 
 BEGIN
-
+dbms_output.disable;
 
 select value 
 into l_url
 from xx_configuration
 where name = 'ServiceRootURL'; 
 
+--l_url:= 'https://fa-ewha-test-saasfaprod1.fa.ocs.oraclecloud.com/';
+
 
 for c_main_rec in c_main loop
 
-l_value_set_name := 'Radni%20nalog%20DALEKOVOD%20EUR';
+/*
+if upper(c_main_rec.company) = 'DALEKOVOD' then l_value_set_name := 'Radni%20nalog%20DALEKOVOD';
+elsif upper(c_main_rec.company) = 'DALEKOVOD EUR' then l_value_set_name := 'Radni%20nalog%20DALEKOVOD%20EUR';
+elsif upper(c_main_rec.company) = 'DALEKOVOD NORGE' then l_value_set_name := 'Radni%20nalog%20PODRUZNICE';
+elsif upper(c_main_rec.company) = 'DALEKOVOD NUF' then l_value_set_name := 'Radni%20nalog%20PODRUZNICE';
+elsif upper(c_main_rec.company) = 'EUR TEST' then l_value_set_name := 'Radni%20nalog%20EUR%20TEST';
+elsif upper(c_main_rec.company) = 'PODRUŽNICE' then l_value_set_name := 'Radni%20nalog%20PODRUZNICE';
+elsif upper(c_main_rec.company) = 'PROIZVODNJA MK' then l_value_set_name := 'Radni%20nalog%20PROIZVODNJA%20MK';
+elsif upper(c_main_rec.company) = 'PROIZVODNJA OSO' then l_value_set_name := 'Radni%20nalog%20PROIZVODNJA%20OSO'; */
+if upper(c_main_rec.company) = 'DALEKOVOD' then l_value_set_name := 'Radni%20nalog%20DALEKOVOD';
+elsif upper(c_main_rec.company) = 'DALEKOVOD ADRIA' then l_value_set_name := 'Radni%20nalog%20DALEKOVOD%20ADRIA';
+elsif upper(c_main_rec.company) = 'DALEKOVOD EMU' then l_value_set_name := 'Radni%20nalog%20DALEKOVOD%20EMU';
+elsif upper(c_main_rec.company) = 'DALEKOVOD NORGE' then l_value_set_name := 'Radni%20nalog%20DALEKOVOD%20PODRUZNICE';
+elsif upper(c_main_rec.company) = 'DALEKOVOD NUF' then l_value_set_name := 'Radni%20nalog%20DALEKOVOD%20PODRUZNICE';
+elsif upper(c_main_rec.company) = 'DALEKOVOD PROJEKT' then l_value_set_name := 'Radni%20nalog%20DALEKOVOD%20PROJEKT';
+elsif upper(c_main_rec.company) = 'EL-RA' then l_value_set_name := 'Radni%20nalog%20EL-RA';
+elsif upper(c_main_rec.company) = 'PROIZVODNJA MK' then l_value_set_name := 'Radni%20nalog%20PROIZVODNJA%20MK';
+elsif upper(c_main_rec.company) = 'PROIZVODNJA OSO' then l_value_set_name := 'Radni%20nalog%20PROIZVODNJA%20OSO';
+
+
+--elsif upper(c_main_rec.company) = 'DALEKOVOD EUR' then l_value_set_name := 'Radni%20nalog%20DALEKOVOD%20EUR';
+elsif upper(c_main_rec.company) = 'EUR TEST' then l_value_set_name := 'Radni%20nalog%20EUR%20TEST';
+elsif upper(c_main_rec.company) = 'PODRUŽNICE' then l_value_set_name := 'Radni%20nalog%20DALEKOVOD%20PODRUZNICE';
+end if;
 
 l_text := '	{
     "IndependentValue": null,
@@ -76,14 +102,14 @@ l_text := '	{
     "ExternalDataSource": null
 	}';
 
-    
-    
+
+
     l_rest_env := '';
-    dbms_output.put_line (l_text);
+--    dbms_output.put_line (l_text);
     l_rest_env := to_clob(l_text);
     l_text := '';
-    
-    
+
+
     XXFN_CLOUD_WS_PKG.WS_REST_CALL(
           p_ws_url => l_url||'fscmRestApi/resources/11.13.18.05/valueSets/'||l_value_set_name||'/child/values',
           p_rest_env => l_rest_env,
@@ -93,28 +119,28 @@ l_text := '	{
           x_return_status => x_return_status,
           x_return_message => x_return_message,
           x_ws_call_id => x_ws_call_id);
-    
+
     dbms_lob.freetemporary(l_rest_env);
-    dbms_output.put_line('ws_call_id:'|| x_ws_call_id);
-    dbms_output.put_line('Return status: '||x_return_status);
-    dbms_output.put_line('Return message:'||x_return_message);-- null ako je uspjelo
-    
+ ---   dbms_output.put_line('ws_call_id:'|| x_ws_call_id);
+ --   dbms_output.put_line('Return status: '||x_return_status);
+ --   dbms_output.put_line('Return message:'||x_return_message);-- null ako je uspjelo
+
     /*{
       "result" : "The current action Validate Invoice has completed successfully."
     }*/
-    
-    
+
+
     if(x_return_status = 'S')
     then
     select response_clob
     into l_response_clob
     from xxfn_ws_call_log
     where ws_call_id = x_ws_call_id;
-    
+
     APEX_JSON.parse(l_response_clob);
     l_value_id := apex_json.get_varchar2(p_path=> 'ValueId');
-    dbms_output.put_line('new value_id:'||l_value_id);
-    
+--    dbms_output.put_line('new value_id:'||l_value_id);
+
       UPDATE XXDL_WO_CC_INTEGRATION
       SET 
       last_WS_CALL_ID = x_WS_CALL_ID,
@@ -123,7 +149,7 @@ l_text := '	{
       fusion_value_Set_id = l_value_id,
       LAST_UPDATE_DATE = SYSDATE
       WHERE ID = C_MAIN_REC.ID;
-    
+
       --  if (x_return_message = 'The current action Apply Prepayments has completed successfully.')
       --  then
      --   x_return_Status := 'S';
@@ -132,14 +158,14 @@ l_text := '	{
       --  end if;
     else
        begin
-    
+
       select response_clob
       into l_response_clob
       from xxfn_ws_call_log
       where ws_call_id = x_ws_call_id;
-    
+
        x_return_message := substrb(to_char(l_response_clob), 1, 2000);
-       
+
       UPDATE XXDL_WO_CC_INTEGRATION
       SET 
       last_WS_CALL_ID = X_WS_CALL_ID,
@@ -148,11 +174,11 @@ l_text := '	{
       fusion_value_Set_id = l_value_id,
       LAST_UPDATE_DATE = SYSDATE
       WHERE ID = C_MAIN_REC.ID;
-    
+
        exception when others then 
          x_return_status := 'E';
-         x_return_message := substrb('Exception in XX_AP_PREDUJMOVI_PKG.APPLY_PREPAYMENT, sqlcode:'||SQLCODE||', sqlerrm:'||SQLERRM, 1, 2000);
-         
+         x_return_message := substrb('Exception in XXDL_WO_CC_INTEGRATION_PKG.PROCESS_RECORDS, sqlcode:'||SQLCODE||', sqlerrm:'||SQLERRM, 1, 2000);
+
          UPDATE XXDL_WO_CC_INTEGRATION
           SET 
           last_WS_CALL_ID = X_WS_CALL_ID,
@@ -164,7 +190,7 @@ l_text := '	{
        end;
     end if;
     commit;
-    
+
 end loop;-- end main loop
 
 
