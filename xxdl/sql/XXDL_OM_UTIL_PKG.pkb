@@ -337,7 +337,8 @@ create or replace package body XXDL_OM_UTIL_PKG as
                 ,xx.creation_date = cast(to_timestamp_tz(  cur_rec.creation_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
                 ,xx.last_update_date =cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
                 ,xx.transf_last_update = sysdate
-                where xx.HEADER_ID_EBS = cur_rec.HEADER_ID_EBS;
+                where xx.HEADER_ID_EBS = cur_rec.HEADER_ID_EBS
+                and xx.bugna = cur_rec.bugna;
             end;
         end loop;
 
@@ -356,7 +357,7 @@ create or replace package body XXDL_OM_UTIL_PKG as
                     RBS2 NUMBER PATH 'LINE_NUM',
                     SPROM VARCHAR2(11) PATH 'ORDERED_ITEM',
                     OPPRO1 VARCHAR2(240) PATH 'ITEM_DESCRIPTION',
-                    NARKOL NUMBER PATH 'ORDERED_QTY',
+                    NARKOL VARCHAR2(250) PATH 'ORDERED_QTY',
                     DISP VARCHAR2(35) PATH 'REQUEST_SHIP_DATE',
                     HEADER_ID_EBS NUMBER PATH 'INTERNAL_HEADER_ID',
                     LINE_ID_EBS NUMBER PATH 'INTERNAL_LINE_ID',
@@ -387,7 +388,7 @@ create or replace package body XXDL_OM_UTIL_PKG as
             l_req_line_rec.RBS2 := cur_rec.RBS2;
             l_req_line_rec.SPROM := cur_rec.SPROM;
             l_req_line_rec.OPPRO1 := cur_rec.OPPRO1;
-            l_req_line_rec.NARKOL := cur_rec.NARKOL;
+            l_req_line_rec.NARKOL := replace(cur_rec.NARKOL,'.',',');
             l_req_line_rec.DISP := cast(to_timestamp_tz(  cur_rec.DISP,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
             l_req_line_rec.HEADER_ID_EBS := cur_rec.HEADER_ID_EBS;
             l_req_line_rec.LINE_ID_EBS := cur_rec.LINE_ID_EBS;
@@ -415,7 +416,7 @@ create or replace package body XXDL_OM_UTIL_PKG as
                 ,xx.RBS2 = cur_rec.RBS2
                 ,xx.SPROM = cur_rec.SPROM
                 ,xx.OPPRO1 = cur_rec.OPPRO1
-                ,xx.NARKOL = cur_rec.NARKOL
+                ,xx.NARKOL = replace(cur_rec.NARKOL,'.',',')
                 ,xx.DISP = cast(to_timestamp_tz(  cur_rec.DISP,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
                 ,xx.HEADER_ID_EBS = cur_rec.HEADER_ID_EBS
                 ,xx.LINE_ID_EBS = cur_rec.LINE_ID_EBS

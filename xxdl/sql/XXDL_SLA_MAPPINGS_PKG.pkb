@@ -958,12 +958,14 @@ create or replace package body xxdl_sla_mappings_pkg is
   ============================================================================+*/
   procedure refresh_all_mapping_sets is
     -- List of mapping sets to be refreshed
-    -- There must exist corresponding BI report with mapping set values in folder
-    -- /Shared Folders/Custom/XXDL_MAPPING_SETS
     cursor cur_map_sets is
       select s.mapping_set_code from xxdl_sla_map_set_definition s where enabled = 'Y';
   begin
     xlog('refresh_all_mapping_sets started');
+    
+    -- Delete errors from previous refresh 
+    purge_mappings_interface;
+    
     for c_set in cur_map_sets loop
       refresh_mapping_set(c_set.mapping_set_code);
     end loop;

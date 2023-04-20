@@ -33,49 +33,59 @@ if (orderTypeCode == null) {
 }
 else
 {
-  billingTxnTypeName = getBillingTxnTypeName("XXDL_OM_ORDER_BILLLIN_MAP",orderTypeCode);
-  //varMessage = "Billing Txn Type: " + billingTxnTypeName;
-  //messages.add(new Message( Message.MessageType.ERROR, varMessage));
-  
-  if(billingTxnTypeName == null){
-    varMessage = "Billing Txn Type not found for order type => " + orderTypeCode + ". You need to set the mapping in common lookup XXDL_OM_ORDER_BILLLIN_MAP!";
-    messages.add(new Message( Message.MessageType.ERROR, varMessage));
-  }
-  
-  if(billingTxnTypeName!=null)
+  if(orderTypeCode!='XXDL_INO_UZORAK_TEST' && orderTypeCode != 'XXDL_DOM_UZORAK_TEST')
   {
-    billingTxnTypeId = getBillingTxnTypeId(billingTxnTypeName);
-
-    //varMessage = "Billing Txn Type Id: " + billingTxnTypeId;
+    billingTxnTypeName = getBillingTxnTypeName("XXDL_OM_ORDER_BILLLIN_MAP",orderTypeCode);
+    //varMessage = "Billing Txn Type: " + billingTxnTypeName;
     //messages.add(new Message( Message.MessageType.ERROR, varMessage));
-    if(billingTxnTypeId == null)
-    {
-      varMessage = "Billing Txn Type Id not found for Billing Trx name => " + billingTxnTypeName;
+    
+    if(billingTxnTypeName == null){
+      varMessage = "Billing Txn Type not found for order type => " + orderTypeCode + ". You need to set the mapping in common lookup XXDL_OM_ORDER_BILLLIN_MAP!";
       messages.add(new Message( Message.MessageType.ERROR, varMessage));
     }
-    if(billingTxnTypeId != null)
+    
+    if(billingTxnTypeName!=null)
     {
-      def lines = header.getAttribute("Lines");// get the lines row set
-      //varMessage = "ABOUT TO LOOP through lines";
-      //messages.add(new Message( Message.MessageType.ERROR,varMessage));
-      while(lines.hasNext())
+      billingTxnTypeId = getBillingTxnTypeId(billingTxnTypeName);
+
+      //varMessage = "Billing Txn Type Id: " + billingTxnTypeId;
+      //messages.add(new Message( Message.MessageType.ERROR, varMessage));
+      if(billingTxnTypeId == null)
       {
-        // if there are more order lines
-        def line = lines.next();
-        
-        //varMessage = "IN LINES - here we go";
+        varMessage = "Billing Txn Type Id not found for Billing Trx name => " + billingTxnTypeName;
+        messages.add(new Message( Message.MessageType.ERROR, varMessage));
+      }
+      if(billingTxnTypeId != null)
+      {
+        def lines = header.getAttribute("Lines");// get the lines row set
+        //varMessage = "ABOUT TO LOOP through lines";
         //messages.add(new Message( Message.MessageType.ERROR,varMessage));
-        //varMessage = "Line type: " +line.getAttribute("TransactionLineTypeCode");
-        //messages.add(new Message(Message.MessageType.ERROR,varMessage));
-        if ("ORA_RETURN" == line.getAttribute("TransactionLineTypeCode")){
-          billingTxnTypeId = getCreditMemoTxnTypeId(billingTxnTypeName);
+        while(lines.hasNext())
+        {
+          // if there are more order lines
+          def line = lines.next();
+          
+          //varMessage = "IN LINES - here we go";
+          //messages.add(new Message( Message.MessageType.ERROR,varMessage));
+          //varMessage = "Line type: " +line.getAttribute("TransactionLineTypeCode");
+          //messages.add(new Message(Message.MessageType.ERROR,varMessage));
+          if ("ORA_RETURN" == line.getAttribute("TransactionLineTypeCode")){
+            billingTxnTypeId = getCreditMemoTxnTypeId(billingTxnTypeName);
+          }
+          if ("ORA_CANCEL" == line.getAttribute("TransactionLineTypeCode")){
+            billingTxnTypeId = getCreditMemoTxnTypeId(billingTxnTypeName);
+          }
+          if ("ORA_CREDIT_ONLY" == line.getAttribute("TransactionLineTypeCode")){
+            billingTxnTypeId = getCreditMemoTxnTypeId(billingTxnTypeName);
+          }
+          line.setAttribute("BillingTransactionTypeIdentifier",billingTxnTypeId);
+          //varMessage = "Billing Transaction Type ID is set to: " + billingTxnTypeId;
+          //messages.add(new Message( Message.MessageType.ERROR,varMessage));
         }
-        line.setAttribute("BillingTransactionTypeIdentifier",billingTxnTypeId);
-        //varMessage = "Billing Transaction Type ID is set to: " + billingTxnTypeId;
-        //messages.add(new Message( Message.MessageType.ERROR,varMessage));
       }
     }
   }
+
 }
 
 //varMessage = "EXITING ";
@@ -108,7 +118,7 @@ Long getBillingTxnTypeId(String billingTxnTypeName) {
   //Only return Billing Transaction Type for the - Common Set - to be changed as required
 
   vcrow.setAttribute("Name", billingTxnTypeName);
-  vcrow.setAttribute("SetName", "Common Set");
+  //vcrow.setAttribute("SetName", "Common Set");  //zasad radi probleme na HR jeziku pa isključujem
 
   //Execute the view object query to find a matching row
   def rowset = txnTypePVO.findByViewCriteriaWithBindVars(vc, 1, new String[0], new Object[0]);

@@ -12,19 +12,19 @@ create or replace package xxdl_inv_integration_pkg authid definer is
 
   procedure download_inv_orgs;
 
-  procedure download_transactions;
+  procedure download_transaction_types;
 
   procedure download_mig_transactions;
 
-  procedure download_avg_item_cst;
+  procedure download_transactions(p_from_timestamp timestamp default null);
 
-  procedure download_items;
+  procedure download_avg_item_cst(p_from_timestamp timestamp default null);
 
-  procedure download_item_relations;
+  procedure download_items(p_from_timestamp timestamp default null);
 
-  procedure download_transaction_types;
+  procedure download_item_relations(p_from_timestamp timestamp default null);
 
-  procedure download_cst_accounting;
+  procedure download_cst_accounting(p_from_timestamp timestamp default null);
 
   -- Download procedures - grouping entities - for usage in jobs
 
@@ -35,6 +35,8 @@ create or replace package xxdl_inv_integration_pkg authid definer is
   -- Other procedures
 
   procedure process_transactions_interface(p_batch_id number);
+
+  procedure process_transactions_int_all;
 
 end xxdl_inv_integration_pkg;
 /

@@ -10,6 +10,8 @@ create or replace package body xxdl_inv_integration_pkg is
   v1.2 06.01.2022 Marko Sladoljev: Izmjene nakon testiranja s reflection - pragma autonomous removed
   v1.3 17.01.2022 Marko Sladoljev: download_mig_transactions
   v1.4 02.02.2022 Marko Sladoljev: Error logging added
+  v1.5 24.03.2023 Marko Sladoljev: Transaction processing order by batch_id, transaction date
+  v1.6 06.04.2023 Marko Sladoljev: Download entiteta po datumu u natrag
   ============================================================================+*/
 
   -- Log variables
@@ -125,7 +127,7 @@ create or replace package body xxdl_inv_integration_pkg is
   Usage       : 
   Arguments   : 
   ============================================================================+*/
-  procedure download_avg_item_cst is
+  procedure download_avg_item_cst(p_from_timestamp timestamp default null) is
   
     l_body           varchar2(30000);
     l_result         varchar2(500);
@@ -164,6 +166,10 @@ create or replace package body xxdl_inv_integration_pkg is
   
     if l_last_update_date is null then
       l_last_update_date := to_timestamp('1-1-1900', 'dd-mm-yyyy');
+    end if;
+  
+    if p_from_timestamp is not null then
+      l_last_update_date := p_from_timestamp;
     end if;
   
     l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
@@ -519,13 +525,13 @@ create or replace package body xxdl_inv_integration_pkg is
       if l_count = 0 then
         insert into xxdl_mig_material_check values l_row;
       end if;
+      xout('Transactions downloaded: ' || l_count);
     
     end loop;
   
     -- Delete lobs after successful call
     xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
   
-    xout('Transactions downloaded: ' || l_count);
     xout('*** End of report ***');
   
     xlog('Procedure download_mig_transactions ended');
@@ -548,7 +554,7 @@ create or replace package body xxdl_inv_integration_pkg is
   Usage       : 
   Arguments   : 
   ============================================================================+*/
-  procedure download_transactions is
+  procedure download_transactions(p_from_timestamp timestamp default null) is
   
     l_body           varchar2(30000);
     l_result         varchar2(500);
@@ -591,8 +597,9 @@ create or replace package body xxdl_inv_integration_pkg is
       l_last_creation_date := to_timestamp('1-1-1900', 'dd-mm-yyyy');
     end if;
   
-    -- To force dowbnloading all transactions
-    --l_last_creation_date := to_timestamp('1-1-1900', 'dd-mm-yyyy');
+    if p_from_timestamp is not null then
+      l_last_creation_date := p_from_timestamp;
+    end if;
   
     l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
             <soap:Header/>
@@ -713,7 +720,13 @@ create or replace package body xxdl_inv_integration_pkg is
     
       l_count := l_count + 1;
     
-      xout(c_rec.transaction_id || ', ' || c_rec.transaction_quantity || ' ' || c_rec.transaction_uom);
+      if l_count < 10 then
+        xout(c_rec.transaction_id || ', ' || c_rec.transaction_quantity || ' ' || c_rec.transaction_uom);
+      elsif l_count = 10 then
+        xout('More records exists...');
+      else
+        null;
+      end if;
     
       l_row.transaction_id             := c_rec.transaction_id;
       l_row.inventory_item_id          := c_rec.inventory_item_id;
@@ -955,7 +968,7 @@ create or replace package body xxdl_inv_integration_pkg is
   Usage       : 
   Arguments   : 
   ============================================================================+*/
-  procedure download_items is
+  procedure download_items(p_from_timestamp timestamp default null) is
   
     l_body           varchar2(30000);
     l_result         varchar2(500);
@@ -994,6 +1007,10 @@ create or replace package body xxdl_inv_integration_pkg is
       l_last_update_date := to_timestamp('01-01-1900', 'DD-MM-RRRR');
     end if;
     xlog('last_update_date:' || l_last_update_date);
+  
+    if p_from_timestamp is not null then
+      l_last_update_date := p_from_timestamp;
+    end if;
   
     l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
             <soap:Header/>
@@ -1099,9 +1116,13 @@ create or replace package body xxdl_inv_integration_pkg is
     
       l_count := l_count + 1;
     
-      xout(c_rec.item_number || ', ' || c_rec.organization_id);
-    
-      xlog('c_rec.last_update_date_char: ' || c_rec.last_update_date_char);
+      if l_count < 10 then
+        xout(c_rec.item_number || ', ' || c_rec.organization_id);
+      elsif l_count = 10 then
+        xout('More records exists...');
+      else
+        null;
+      end if;
     
       l_row.organization_id     := c_rec.organization_id;
       l_row.inventory_item_id   := c_rec.inventory_item_id;
@@ -1144,6 +1165,24 @@ create or replace package body xxdl_inv_integration_pkg is
   end;
 
   /*===========================================================================+
+  Procedure   : process_transactions_int_job
+  Description : Processes all transactions interface batches
+  Usage       : 
+  Arguments   : 
+  ============================================================================+*/
+  procedure process_transactions_int_all as
+    cursor cur_batch is
+      select distinct batch_id from xxdl_inv_material_txns_int where status = 'NEW' order by batch_id;
+  begin
+    xlog('process_transactions_int_job started');
+    for c_batch in cur_batch loop
+      process_transactions_interface(p_batch_id => c_batch.batch_id);
+    end loop;
+    xlog('process_transactions_int_job ended');
+  
+  end;
+
+  /*===========================================================================+
   Procedure   : process_transactions_interface
   Description : Processes Transactions interface
   Usage       : 
@@ -1153,9 +1192,10 @@ create or replace package body xxdl_inv_integration_pkg is
   
     cursor cur_transactions is
       select *
-        from xxdl_inv_material_txns_int
+        from xxdl_inv_material_txns_int i
        where status = 'NEW'
-         and batch_id = p_batch_id;
+         and batch_id = p_batch_id
+       order by i.transaction_date;
   
     l_return_status       varchar2(10);
     l_return_message      varchar2(32000);
@@ -1229,12 +1269,22 @@ create or replace package body xxdl_inv_integration_pkg is
     
       begin
       
+        xlog('c_trans.transaction_interface_id: ' || c_trans.transaction_interface_id);
+      
         --Lock the record by setting the status
         update xxdl_inv_material_txns_int i
            set i.status = 'IN_PROGRESS', i.last_update_date = sysdate
-         where i.transaction_interface_id = c_trans.transaction_interface_id;
+         where i.transaction_interface_id = c_trans.transaction_interface_id
+           and status = 'NEW';
       
-        -- Default Transaction status is PORCESSED
+        if sql%rowcount = 0 then
+          xlog('Transaction processed already');
+          continue;
+        end if;
+      
+        commit;
+      
+        -- Default Transaction status is PROCESSED
         -- If error appeares it would change status end error message
         l_trans_status        := 'PROCESSED';
         l_trans_error_message := null;
@@ -1336,7 +1386,7 @@ create or replace package body xxdl_inv_integration_pkg is
         l_trans_status := 'PROCESSED';
       
         -- Delete lobs after successful call
-        xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id); 
+        xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
       
       exception
         when e_processing_exception then
@@ -1362,6 +1412,8 @@ create or replace package body xxdl_inv_integration_pkg is
       update xxdl_inv_material_txns_int i
          set i.status = l_trans_status, i.error_message = l_trans_error_message, i.last_update_date = sysdate
        where i.transaction_interface_id = c_trans.transaction_interface_id;
+    
+      commit;
     
     end loop;
     xout('*** End of report ***');
@@ -1565,7 +1617,7 @@ create or replace package body xxdl_inv_integration_pkg is
   Usage       : 
   Arguments   : 
   ============================================================================+*/
-  procedure download_item_relations is
+  procedure download_item_relations(p_from_timestamp timestamp default null) is
   
     l_body           varchar2(30000);
     l_result         varchar2(500);
@@ -1606,6 +1658,10 @@ create or replace package body xxdl_inv_integration_pkg is
       l_last_update_date := to_timestamp('01-01-1900', 'DD-MM-RRRR');
     end if;
     xlog('last_update_date:' || l_last_update_date);
+  
+    if p_from_timestamp is not null then
+      l_last_update_date := p_from_timestamp;
+    end if;
   
     l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
             <soap:Header/>
@@ -1711,7 +1767,13 @@ create or replace package body xxdl_inv_integration_pkg is
     
       l_count := l_count + 1;
     
-      xout(c_rec.item_relationship_id || ', ' || c_rec.cross_reference);
+      if l_count < 10 then
+        xout(c_rec.item_relationship_id || ', ' || c_rec.cross_reference);
+      elsif l_count = 10 then
+        xout('More records exists...');
+      else
+        null;
+      end if;
     
       l_row.item_relationship_id   := c_rec.item_relationship_id;
       l_row.item_relationship_type := c_rec.item_relationship_type;
@@ -1755,7 +1817,7 @@ create or replace package body xxdl_inv_integration_pkg is
   Usage       : 
   Arguments   : 
   ============================================================================+*/
-  procedure download_cst_accounting is
+  procedure download_cst_accounting(p_from_timestamp timestamp default null) is
   
     l_body           varchar2(30000);
     l_result         varchar2(500);
@@ -1794,6 +1856,10 @@ create or replace package body xxdl_inv_integration_pkg is
       l_last_update_date := to_timestamp('01-01-1900', 'DD-MM-RRRR');
     end if;
     xlog('last_update_date:' || l_last_update_date);
+  
+    if p_from_timestamp is not null then
+      l_last_update_date := p_from_timestamp;
+    end if;
   
     l_text := '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:pub="http://xmlns.oracle.com/oxp/service/PublicReportService">
             <soap:Header/>
@@ -1912,7 +1978,13 @@ create or replace package body xxdl_inv_integration_pkg is
     
       l_count := l_count + 1;
     
-      xout(c_rec.distribution_line_id || ', ' || c_rec.distribution_line_id);
+      if l_count < 10 then
+        xout(c_rec.distribution_line_id || ', ' || c_rec.distribution_line_id);
+      elsif l_count = 10 then
+        xout('More records exists...');
+      else
+        null;
+      end if;
     
       l_row.distribution_line_id  := c_rec.distribution_line_id;
       l_row.inv_transaction_id    := c_rec.inv_transaction_id;

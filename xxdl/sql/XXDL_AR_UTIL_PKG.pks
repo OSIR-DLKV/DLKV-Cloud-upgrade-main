@@ -151,6 +151,16 @@ procedure migrate_suppliers_cloud(
       p_party_number in varchar2);
 
 /*===========================================================================+
+  -- Name    : migrate_nuf_suppliers_cloud
+  -- Desc    : Migrate supppliers only for NUF and SVENSKA
+  -- Usage   : 
+  -- Parameters
+============================================================================+*/
+procedure migrate_nuf_suppliers_cloud(
+      p_party_number in varchar2);
+
+
+/*===========================================================================+
 -- Name    : reset_cust_mig
 -- Desc    : Update customer acct profile
 -- Usage   : 
@@ -165,6 +175,17 @@ procedure reset_cust_mig(p_party_number in varchar2);
 -- Parameters
 ============================================================================+*/
 procedure reset_sup_mig(p_supplier_number in varchar2);      
+
+
+/*===========================================================================+
+   -- Name    : update_sup_routing
+   -- Desc    : Update supplier routing ids
+   -- Usage   : 
+   -- Parameters
+============================================================================+*/
+procedure update_sup_routing(
+        p_vendor_id in number,
+        p_vendor_site_id in number);
 
 
 function parse_cs_response(p_ws_call_id in number) return varchar2;

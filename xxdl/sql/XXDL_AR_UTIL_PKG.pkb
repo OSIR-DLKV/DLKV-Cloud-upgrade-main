@@ -5231,7 +5231,8 @@
                     INACTIVE_DATE  VARCHAR2(35) PATH 'INACTIVE_DATE',
                     CREATION_DATE VARCHAR2(35) PATH 'CREATION_DATE',
                     LAST_UPDATE_DATE VARCHAR2(35) PATH 'LAST_UPDATE_DATE',
-                    BU_NAME VARCHAR2(100) PATH 'BU_NAME'
+                    BU_NAME VARCHAR2(100) PATH 'BU_NAME',
+                    ASSIGNMENT VARCHAR2(10) PATH 'ASSIGNMENT'
                 ) xt
                 --where vendor_site_code = 'RAVONA D.O.O.'
                 )
@@ -5242,6 +5243,7 @@
             log('Vendor site Id:'||cur_rec.VENDOR_SITE_ID);
             log('Vendor site code:'||cur_rec.VENDOR_SITE_CODE);
             log('BU Namee:'||cur_rec.bu_name);
+            log('Site assign:'||cur_rec.assignment);
             log('==============================');
             
             
@@ -5255,6 +5257,8 @@
             l_sup_site_rec.last_update_date := cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone);
             l_sup_site_rec.transf_creation_date := sysdate;
             l_sup_site_rec.bu_name := cur_rec.bu_name;
+            l_sup_site_rec.cloud_imported := 'S';
+            l_sup_site_rec.cloud_site_assignment := cur_rec.assignment;
             
             begin
             
@@ -5273,9 +5277,13 @@
                 ,xx.last_update_date =cast(to_timestamp_tz(  cur_rec.last_update_date,'YYYY-MM-DD"T"HH24:MI:SS.FF3TZH:TZM' ) as timestamp with local time zone)
                 ,xx.transf_last_update = sysdate
                 ,xx.bu_name = cur_rec.bu_name
+                ,xx.cloud_imported = 'S'
+                ,xx.cloud_site_assignment = cur_rec.assignment
                 where xx.vendor_site_id = cur_rec.vendor_site_id
                 and xx.bu_name = cur_rec.bu_name;
             end;
+
+            l_sup_site_rec := l_sup_site_rec_empty;
         end loop;
         
         log('End of suppliers sites download');
@@ -7764,6 +7772,901 @@
             log('   Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
     end migrate_suppliers_cloud;
 
+     /*===========================================================================+
+    -- Name    : migrate_nuf_suppliers_cloud
+    -- Desc    : Migrate supppliers based on imported customers
+    -- Usage   : 
+    -- Parameters
+    ============================================================================+*/
+    procedure migrate_nuf_suppliers_cloud(
+        p_party_number in varchar2) is
+
+        l_fault_code          varchar2(4000);
+        l_fault_string        varchar2(4000); 
+        l_soap_env clob;
+        l_empty_clob clob;
+        l_text varchar2(32000);
+        l_find_text varchar2(32000);
+        x_return_status varchar2(500);
+        x_return_message varchar2(32000);
+        x_ws_call_id number;
+        xs_ws_call_id number;
+        xsa_ws_call_id number;    
+        xc_ws_call_id number;    
+        xca_ws_call_id number;
+        xb_ws_call_id number;
+        xbo_ws_call_id number;
+        xba_ws_call_id number;
+        xp_ws_call_id number;
+        xpa_ws_call_id number;
+        xt_ws_call_id number;
+        xf_ws_call_id number;
+        xsdff_ws_call_id number;
+        l_cnt number := 0;
+        l_cloud_party_id number:=0;     
+        l_app_url varchar2(300);
+
+        l_existing_site varchar2(1) := 'N';
+        l_existing_site_assign varchar2(1) := 'N';
+        l_existing_site_contact varchar2(1) := 'N';
+        l_existing_site_bank varchar2(1) := 'N';
+
+        l_site_rec xxdl_poz_supplier_sites%ROWTYPE;
+        l_site_rec_empty xxdl_poz_supplier_sites%ROWTYPE;
+        l_contact_rec xxdl_poz_supplier_contacts%ROWTYPE;
+        l_contact_rec_empty xxdl_poz_supplier_contacts%ROWTYPE;
+        l_bank_acc_rec XXDL_POZ_SUPPLIER_BANK_ACC%ROWTYPE;
+        l_bank_acc_rec_empty XXDL_POZ_SUPPLIER_BANK_ACC%ROWTYPE;
+        l_instrument_assign_rec XXDL_POZ_INSTRUMENT_ASSIGN%ROWTYPE;
+        l_instrument_assign_rec_empty XXDL_POZ_INSTRUMENT_ASSIGN%ROWTYPE;
+
+        l_site_nuf_rec xxdl_poz_supplier_sites%rowtype;
+        l_site_nuf_rec_empty xxdl_poz_supplier_sites%rowtype;
+
+        l_liability_acc varchar2(1000);
+        l_prepay_acc varchar2(1000);
+
+        l_prepay_dff varchar2(10);
+
+        cursor c_supplier_address is
+        select distinct
+        xx_psa.*,xx_hp.taxpayer_id,xx_hp.party_id,xx_hp.cloud_party_id,xx_cust_site.party_site_id party_site_id_orig,xx_cust_site.cloud_party_site_id
+        ,xx_hp.party_name vendor_name
+        ,xx_hp.party_number
+        ,xx_ps.supplier_number
+        ,case 
+          when pvs.country = 'HR' then 
+            nvl(initcap(pvs.language),'Croatian')
+          when (pvs.country = 'DE' or pvs.country = 'AT') then
+            'German'
+          else 'American English'  
+        end language
+        ,pv.vendor_type_lookup_code
+        ,pvs.phone
+        ,pvs.fax
+        from
+        XXDL_POZ_SUPPLIER_ADDRESSES XX_PSA
+        ,xxdl_hz_cust_acct_sites xx_cust_site
+        ,xxdl_hz_cust_accounts xx_hca
+        ,xxdl_hz_parties xx_hp 
+        ,xxdl_poz_suppliers xx_ps
+        ,apps.hz_party_sites@ebsprod hps
+        ,apps.po_vendor_sites_all@ebsprod pvs
+        ,xxdl_cloud_reference_sets xx_set
+        ,apps.po_vendors@ebsprod pv
+        WHERE
+        xx_psa.party_site_id = xx_cust_site.cloud_party_site_id
+        and xx_cust_site.cust_account_id = xx_hca.cust_account_id
+        and xx_hca.party_id = xx_hp.party_id
+        and xx_psa.vendor_id = xx_ps.vendor_id
+        and xx_cust_site.party_site_id = hps.party_site_id
+        and to_char(hps.party_site_number) = pvs.attribute3
+        and xx_cust_site.org_id = pvs.org_id
+        and pvs.org_id = 102
+        and pvs.vendor_id = pv.vendor_id
+        and xx_cust_site.cloud_set_id =  xx_set.reference_data_set_id(+)
+        and xx_hp.party_number like nvl(p_party_number,'%')
+        --and xx_psa.address_name = 'HEP-OP DS ISTRA'
+        and not exists (select 1 from xxdl_poz_supplier_sites xpss
+                        where xpss.party_site_id = xx_psa.party_site_id
+                        and xpss.bu_name in ('Dalekovod NUF', 'DV Svenska Filial')
+                          and nvl(xpss.cloud_site_assignment,'X') = 'Y')
+        and rownum <= 500                 
+        order by xx_psa.vendor_id
+        ;
+        
+
+        cursor c_supplier_sites(c_party_site_id in number) is
+        select distinct
+        substr(xx_cust_site.party_site_name,1,15) vendor_site_code
+        ,xx_set.business_unit_name
+        ,xx_cust_site.party_site_name address_name
+        ,case
+            when pvs.PRIMARY_PAY_SITE_FLAG = 'Y' then
+                'true'
+            else
+                'false'
+            end PRIMARY_PAY_SITE_FLAG
+        ,'NONE'  communication_method_code
+        ,pvs.email_address email_address
+        ,null fax_number  
+        ,pvs.FOB_LOOKUP_CODE                            --,FOB_LOOKUP_CODE (FOB)
+        ,pvs.COUNTRY_OF_ORIGIN_CODE
+        ,case
+            when pvs.create_debit_memo_flag = 'Y' then
+                'true'
+            else
+                'false'
+            end create_debit_memo_flag                   --,CREATE_DEBIT_MEMO_FLAG (Create debit memo from return)
+        ,case 
+            when (xx_set.business_unit_name = 'Proizvodnja MK' or xx_set.business_unit_name = 'Proizvodnja OSO') then
+                2
+            else 
+                3
+            end RECEIVING_ROUTING_ID                         --,RECEIVING_ROUTING_ID (Receipt Routing )
+        ,pv.QTY_RCV_TOLERANCE                            --,QTY_RCV_TOLERANCE    (Over-receipt Tolerance)
+        ,pv.QTY_RCV_EXCEPTION_CODE                       --,QTY_RCV_EXCEPTION_CODE  (Over-receipt Action)
+        ,pv.DAYS_EARLY_RECEIPT_ALLOWED                   --,DAYS_EARLY_RECEIPT_ALLOWED (Early Receipt Tolerance in Days)
+        ,pv.DAYS_LATE_RECEIPT_ALLOWED                    --,DAYS_LATE_RECEIPT_ALLOWED (Late Receipt Tolerance in Days)
+        ,nvl(pv.ALLOW_SUBSTITUTE_RECEIPTS_FLAG,'N') ALLOW_SUBSTITUTE_RECEIPTS_FLAG               --,ALLOW_SUBSTITUTE_RECEIPTS_FLAG (Allow Substitute Receipts)
+        ,nvl(pv.ALLOW_UNORDERED_RECEIPTS_FLAG,'N') ALLOW_UNORDERED_RECEIPTS_FLAG                 --,ALLOW_UNORDERED_RECEIPTS_FLAG (Allow unordered receipts)
+        ,nvl(pv.RECEIPT_DAYS_EXCEPTION_CODE,'WARNING') RECEIPT_DAYS_EXCEPTION_CODE                  --,RECEIPT_DAYS_EXCEPTION_CODE (Receipt Date Exception)
+        ,case
+            when pv.INVOICE_CURRENCY_CODE = 'HRK' then
+                'EUR'   
+            when pv.INVOICE_CURRENCY_CODE = 'CSD' then
+                'RSD'
+            else
+            pv.INVOICE_CURRENCY_CODE
+            end INVOICE_CURRENCY_CODE --,INVOICE_CURRENCY_CODE (Invoice Currency)
+        ,pvs.INVOICE_AMOUNT_LIMIT                        --,INVOICE_AMOUNT_LIMIT (Invoice Amount Limit)
+        ,case
+            when xx_set.business_unit_name = 'Dalekovod Projekt' then
+                'P'
+            else
+                'R'
+            end MATCH_OPTION--pvs.MATCH_OPTION                                --, MATCH_OPTION Invoice Match Option)
+        ,case 
+            when xx_set.business_unit_name = 'Dalekovod Projekt' then
+                'TWO'
+            else 
+                'THREE'
+            end MATCH_APPROVAL_LEVEL -- (Match Approval Level)
+        ,case
+            when pvs.PAYMENT_CURRENCY_CODE = 'HRK' then
+                'EUR'
+            when pvs.PAYMENT_CURRENCY_CODE = 'CSD' then
+                'RSD'
+            else
+            pvs.PAYMENT_CURRENCY_CODE
+            end PAYMENT_CURRENCY_CODE --,PAYMENT_CURRENCY_CODE (Payment Currency)
+        ,pvs.PAYMENT_PRIORITY                                    --,PAYMENT_PRIORITY (Payment Priority)
+        ,'Standard' PAY_GROUP_LOOKUP_CODE --pvs.PAY_GROUP_LOOKUP_CODE                               --,PAY_GROUP_LOOKUP_CODE (Pay Group)
+        ,pvs.HOLD_ALL_PAYMENTS_FLAG/*case
+            when pvs.HOLD_ALL_PAYMENTS_FLAG = 'Y' then
+                'true'
+            else
+                'false'
+            end*/ HOLD_ALL_PAYMENTS_FLAG                              --,HOLD_ALL_PAYMENTS_FLAG (Hold All Invoices)
+        ,'D' HOLD_UNMATCHED_INVOICES_FLAG                       --, pvs.HOLD_UNMATCHED_INVOICES_FLAG    (Hold Unmatched Invoices)                    
+        ,case
+            when pvs.HOLD_ALL_PAYMENTS_FLAG = 'Y' then
+            'Hold All Invoices'
+            when pvs.HOLD_UNMATCHED_INVOICES_FLAG = 'Y' then
+            'Hold Unmatched Invoices'
+            when pvs.HOLD_FUTURE_PAYMENTS_FLAG = 'Y' then
+            'Hold Unvalidated Invoices'
+            else pv.HOLD_REASON     end hold_reason
+        ,apt.name term_name --terms_name
+        ,pv.TERMS_DATE_BASIS                                      --TERMS_DATE_BASIS (Terms Date Basis)
+        ,pv.PAY_DATE_BASIS_LOOKUP_CODE
+        ,xx_set.business_unit_id                
+        ,pvs.VAT_CODE 
+        ,pvs.accts_pay_code_combination_id   
+        ,pvs.prepay_code_combination_id
+        ,pvs.vendor_site_id
+        ,pvs.vendor_id              
+        from
+        xxdl_poz_supplier_sites xpss
+        ,xxdl_cloud_reference_sets xx_set  
+        ,xxdl_hz_cust_acct_sites xx_cust_site      
+        ,xxdl_cloud_reference_sets xx_set_cust       
+        ,apps.hz_party_sites@ebsprod hps      
+        ,apps.po_vendor_sites_all@ebsprod pvs
+        ,apps.po_vendors@ebsprod pv
+        ,(select * from apps.ap_terms_tl@ebsprod
+        where language = 'US') apt
+        ,apps.po_vendor_contacts@ebsprod pvc              
+        where xpss.party_site_id = xx_cust_site.cloud_party_site_id
+        and xpss.bu_name = 'Dalekovod'
+        and decode(xpss.bu_name,'Dalekovod','Dalekovod NUF',xpss.bu_name) = xx_set.business_unit_name
+        and xx_cust_site.cloud_party_site_id = c_party_site_id   
+        and xx_cust_site.party_site_id = hps.party_site_id(+)
+        and xx_cust_site.cloud_set_id = xx_set_cust.reference_data_set_id
+        and xx_set_cust.business_unit_name = 'Dalekovod'
+        --and xpss.vendor_id = 300000006302793
+        and to_char(hps.party_site_number) = pvs.attribute3(+)
+        and xx_cust_site.org_id = pvs.org_id
+        and xx_set_cust.ebs_org_id = pvs.org_id
+        and pvs.terms_id = apt.term_id(+)
+        and pvs.vendor_id = pv.vendor_id
+        and pvs.vendor_site_id = pvc.vendor_site_id(+)
+        and not exists (select 1 
+                        from xxdl_poz_supplier_sites_nuf xx
+                        where xx.vendor_site_id = xpss.vendor_site_id)
+        union
+        select distinct
+        substr(xx_cust_site.party_site_name,1,15) vendor_site_code
+        ,xx_set.business_unit_name
+        ,xx_cust_site.party_site_name address_name
+        ,case
+            when pvs.PRIMARY_PAY_SITE_FLAG = 'Y' then
+                'true'
+            else
+                'false'
+            end PRIMARY_PAY_SITE_FLAG
+        ,'NONE'  communication_method_code
+        ,pvs.email_address email_address
+        ,null fax_number  
+        ,pvs.FOB_LOOKUP_CODE                            --,FOB_LOOKUP_CODE (FOB)
+        ,pvs.COUNTRY_OF_ORIGIN_CODE
+        ,case
+            when pvs.create_debit_memo_flag = 'Y' then
+                'true'
+            else
+                'false'
+            end create_debit_memo_flag                   --,CREATE_DEBIT_MEMO_FLAG (Create debit memo from return)
+        ,case 
+            when (xx_set.business_unit_name = 'Proizvodnja MK' or xx_set.business_unit_name = 'Proizvodnja OSO') then
+                2
+            else 
+                3
+            end RECEIVING_ROUTING_ID                         --,RECEIVING_ROUTING_ID (Receipt Routing )
+        ,pv.QTY_RCV_TOLERANCE                            --,QTY_RCV_TOLERANCE    (Over-receipt Tolerance)
+        ,pv.QTY_RCV_EXCEPTION_CODE                       --,QTY_RCV_EXCEPTION_CODE  (Over-receipt Action)
+        ,pv.DAYS_EARLY_RECEIPT_ALLOWED                   --,DAYS_EARLY_RECEIPT_ALLOWED (Early Receipt Tolerance in Days)
+        ,pv.DAYS_LATE_RECEIPT_ALLOWED                    --,DAYS_LATE_RECEIPT_ALLOWED (Late Receipt Tolerance in Days)
+        ,nvl(pv.ALLOW_SUBSTITUTE_RECEIPTS_FLAG,'N') ALLOW_SUBSTITUTE_RECEIPTS_FLAG               --,ALLOW_SUBSTITUTE_RECEIPTS_FLAG (Allow Substitute Receipts)
+        ,nvl(pv.ALLOW_UNORDERED_RECEIPTS_FLAG,'N') ALLOW_UNORDERED_RECEIPTS_FLAG                 --,ALLOW_UNORDERED_RECEIPTS_FLAG (Allow unordered receipts)
+        ,nvl(pv.RECEIPT_DAYS_EXCEPTION_CODE,'WARNING') RECEIPT_DAYS_EXCEPTION_CODE                  --,RECEIPT_DAYS_EXCEPTION_CODE (Receipt Date Exception)
+        ,case
+            when pv.INVOICE_CURRENCY_CODE = 'HRK' then
+                'EUR'
+            when pv.INVOICE_CURRENCY_CODE = 'CSD' then
+                'RSD'
+            else
+            pv.INVOICE_CURRENCY_CODE
+            end INVOICE_CURRENCY_CODE --,INVOICE_CURRENCY_CODE (Invoice Currency)
+        ,pvs.INVOICE_AMOUNT_LIMIT                        --,INVOICE_AMOUNT_LIMIT (Invoice Amount Limit)
+        ,case
+            when xx_set.business_unit_name = 'Dalekovod Projekt' then
+                'P'
+            else
+                'R'
+            end MATCH_OPTION--pvs.MATCH_OPTION                                --, MATCH_OPTION Invoice Match Option)
+        ,case 
+            when xx_set.business_unit_name = 'Dalekovod Projekt' then
+                'TWO'
+            else 
+                'THREE'
+            end MATCH_APPROVAL_LEVEL -- (Match Approval Level)
+        ,case
+            when pvs.PAYMENT_CURRENCY_CODE = 'HRK' then
+                'EUR'
+            when pvs.PAYMENT_CURRENCY_CODE = 'CSD' then
+                'RSD'
+            else
+            pvs.PAYMENT_CURRENCY_CODE
+            end PAYMENT_CURRENCY_CODE --,PAYMENT_CURRENCY_CODE (Payment Currency)
+        ,pvs.PAYMENT_PRIORITY                                    --,PAYMENT_PRIORITY (Payment Priority)
+        ,'Standard' PAY_GROUP_LOOKUP_CODE --pvs.PAY_GROUP_LOOKUP_CODE                               --,PAY_GROUP_LOOKUP_CODE (Pay Group)
+        ,pvs.HOLD_ALL_PAYMENTS_FLAG/*case
+            when pvs.HOLD_ALL_PAYMENTS_FLAG = 'Y' then
+                'true'
+            else
+                'false'
+            end*/ HOLD_ALL_PAYMENTS_FLAG                              --,HOLD_ALL_PAYMENTS_FLAG (Hold All Invoices)
+        ,'D' HOLD_UNMATCHED_INVOICES_FLAG                       --, pvs.HOLD_UNMATCHED_INVOICES_FLAG    (Hold Unmatched Invoices)                    
+        ,case
+            when pvs.HOLD_ALL_PAYMENTS_FLAG = 'Y' then
+            'Hold All Invoices'
+            when pvs.HOLD_UNMATCHED_INVOICES_FLAG = 'Y' then
+            'Hold Unmatched Invoices'
+            when pvs.HOLD_FUTURE_PAYMENTS_FLAG = 'Y' then
+            'Hold Unvalidated Invoices'
+            else pv.HOLD_REASON     end hold_reason
+        ,apt.name term_name --terms_name
+        ,pv.TERMS_DATE_BASIS                                      --TERMS_DATE_BASIS (Terms Date Basis)
+        ,pv.PAY_DATE_BASIS_LOOKUP_CODE
+        ,xx_set.business_unit_id                
+        ,pvs.VAT_CODE 
+        ,pvs.accts_pay_code_combination_id   
+        ,pvs.prepay_code_combination_id
+        ,pvs.vendor_site_id
+        ,pvs.vendor_id              
+        from
+        xxdl_poz_supplier_sites xpss
+        ,xxdl_cloud_reference_sets xx_set  
+        ,xxdl_hz_cust_acct_sites xx_cust_site      
+        ,xxdl_cloud_reference_sets xx_set_cust       
+        ,apps.hz_party_sites@ebsprod hps      
+        ,apps.po_vendor_sites_all@ebsprod pvs
+        ,apps.po_vendors@ebsprod pv
+        ,(select * from apps.ap_terms_tl@ebsprod
+        where language = 'US') apt
+        ,apps.po_vendor_contacts@ebsprod pvc              
+        where xpss.party_site_id = xx_cust_site.cloud_party_site_id
+        and xpss.bu_name = 'Dalekovod'
+        and decode(xpss.bu_name,'Dalekovod','DV Svenska Filial',xpss.bu_name) = xx_set.business_unit_name
+        and xx_cust_site.cloud_party_site_id = c_party_site_id   
+        and xx_cust_site.party_site_id = hps.party_site_id(+)
+        and xx_cust_site.cloud_set_id = xx_set_cust.reference_data_set_id
+        and xx_set_cust.business_unit_name = 'Dalekovod'
+        --and xpss.vendor_id = 300000006302793
+        and to_char(hps.party_site_number) = pvs.attribute3(+)
+        and xx_cust_site.org_id = pvs.org_id
+        and xx_set_cust.ebs_org_id = pvs.org_id
+        and pvs.terms_id = apt.term_id(+)
+        and pvs.vendor_id = pv.vendor_id
+        and pvs.vendor_site_id = pvc.vendor_site_id(+)
+        and not exists (select 1 
+                        from xxdl_poz_supplier_sites_nuf xx
+                        where xx.vendor_site_id = xpss.vendor_site_id)
+        order by 1,2
+        ;
+
+        c_a c_supplier_sites%rowtype;        
+
+        cursor c_supplier_contacts(c_vendor_site_id in number) is 
+        select 
+        *
+        from
+        apps.po_vendor_contacts@ebsprod pvc 
+        where pvc.vendor_site_id = c_vendor_site_id;
+
+
+    begin
+
+
+    l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
+
+    log('Starting import!');
+
+
+    for c_sa in c_supplier_address loop
+    
+    --log(' Found supplier address:'||c_sa.address);
+
+
+
+
+    --if x_return_status = 'S' then
+
+        --for c_a in c_supplier_sites(c_sa.party_site_id) loop
+
+        open c_supplier_sites(c_sa.party_site_id);
+        loop
+            fetch c_supplier_sites into c_a;
+            exit when c_supplier_sites%notfound;
+
+                log('	        Found address name:'||c_a.address_name);
+
+                l_existing_site := 'N';
+                l_existing_site_assign := 'N';
+                l_existing_site_contact := 'N';
+
+                if find_existing_supplier_site(c_a.business_unit_name,c_sa.party_site_id) > 0 then
+
+                    log('           Supplier site already exists! Going to create assignment and setting status to success!');
+                    l_existing_site := 'Y';
+                    xs_ws_call_id := x_ws_call_id;
+                    x_return_status := 'S';
+                    GOTO create_assignment;
+                end if;    
+
+
+
+                l_soap_env := l_empty_clob;
+                dbms_lob.createtemporary(l_soap_env, TRUE);
+
+                l_text := '{
+                    "SupplierSite": "'||apex_escape.json(c_a.vendor_site_code)||'",
+                    "ProcurementBU": "'||c_a.business_unit_name||'",
+                    "SupplierAddressName": "'||apex_escape.json(c_a.address_name)||'",
+                    "InactiveDate": null,
+                    "SitePurposeSourcingOnlyFlag": false,
+                    "SitePurposePurchasingFlag": true,
+                    "SitePurposeProcurementCardFlag": false,
+                    "SitePurposePayFlag": true,
+                    "SitePurposePrimaryPayFlag": '||c_a.PRIMARY_PAY_SITE_FLAG||',
+                    "CommunicationMethodCode": "'||c_a.communication_method_code||'",
+                    "Email": "'||c_a.email_address||'",
+                    "FaxNumber": "'||c_a.fax_number ||'",
+                    "FOBCode": "'||c_a.FOB_LOOKUP_CODE||'",
+                    "HoldAllNewPurchasingDocumentsFlag": false,
+                    "PurchasingHoldReason": null,
+                    "RequiredAcknowledgmentCode": "N", 
+                    "AcknowledgmentWithinDays": null,
+                    "PayOnReceiptFlag": false, 
+                    "CountryOfOriginCode": "'||c_a.country_of_origin_code||'",
+                    "BuyerManagedTransportationCode": "N",
+                    "CreateDebitMemoFromReturnFlag": '||c_a.create_debit_memo_flag||',
+                    "ReceiptRoutingId": "'||c_a.RECEIVING_ROUTING_ID||'",
+                    "OverReceiptTolerance": "'||c_a.qty_rcv_tolerance||'",
+                    "OverReceiptActionCode": "'||c_a.QTY_RCV_EXCEPTION_CODE||'",
+                    "EarlyReceiptToleranceInDays": "'||c_a.days_early_receipt_allowed||'",
+                    "LateReceiptToleranceInDays": "'||c_a.days_late_receipt_allowed||'",
+                    "AllowSubstituteReceiptsCode": "'||c_a.allow_substitute_receipts_flag||'",
+                    "AllowUnorderedReceiptsFlag": "'||c_a.allow_unordered_receipts_flag||'",
+                    "ReceiptDateExceptionCode": "'||c_a.RECEIPT_DAYS_EXCEPTION_CODE||'",
+                    "InvoiceCurrencyCode": "'||c_a.invoice_currency_code||'",
+                    "InvoiceAmountLimit": "'||c_a.invoice_amount_limit||'",
+                    "InvoiceMatchOptionCode": "'||c_a.match_option||'",
+                    "MatchApprovalLevelCode": "'||c_a.MATCH_APPROVAL_LEVEL||'",
+                    "PaymentCurrencyCode": "'||c_a.payment_currency_code||'",
+                    "PaymentPriority": "'||c_a.PAYMENT_PRIORITY||'",
+                    "PayGroupCode": "'||c_a.PAY_GROUP_LOOKUP_CODE||'",
+                    "HoldAllInvoicesFlag": "'||c_a.HOLD_ALL_PAYMENTS_FLAG||'",
+                    "HoldUnmatchedInvoicesCode": "'||c_a.HOLD_UNMATCHED_INVOICES_FLAG||'",
+                    "PaymentHoldReason": "'||c_a.hold_reason||'",
+                    "PaymentTerms": "'||c_a.term_name||'",
+                    "PaymentTermsDateBasisCode": "'||c_a.TERMS_DATE_BASIS||'",
+                    "PayDateBasisCode": "'||c_a.PAY_DATE_BASIS_LOOKUP_CODE||'",
+                    "BankChargeDeductionTypeCode": "D",
+                    "AlwaysTakeDiscountCode": "D",
+                    "ExcludeFreightFromDiscountCode": "D",
+                    "ExcludeTaxFromDiscountCode": "D",
+                    "CreateInterestInvoicesCode": "D"            
+                }';
+
+                l_soap_env := l_soap_env||to_clob(l_text);       
+
+                log('       Calling web service to create supplier site');
+
+                XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+                    p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/suppliers/'||c_sa.vendor_id||'/child/sites',
+                    p_rest_env => l_soap_env,
+                    p_rest_act => 'POST',
+                    p_content_type => 'application/json;charset="UTF-8"',
+                    x_return_status => x_return_status,
+                    x_return_message => x_return_message,
+                    x_ws_call_id => xs_ws_call_id);         
+                
+                log('       Web service status:'||x_return_status);
+                if x_return_status = 'E' then
+                    x_return_message := get_ws_err_msg(xs_ws_call_id);
+                    log('     Web service message:'||x_return_message);
+                end if;
+                log('       Web service call:'||xs_ws_call_id);
+
+                dbms_lob.freetemporary(l_soap_env);   
+
+                l_text:=l_text; 
+
+                <<create_assignment>>
+
+
+                if x_return_status = 'S' then
+                    
+                    log('           Supplier site created!');
+                    log('           Previous web service call:'||xt_ws_call_id);
+                    log('           existing site flag:'||l_existing_site);
+                    log('           Business unit:'||c_a.business_unit_name);
+                    log('           Vendor site code:'||c_a.vendor_site_code);
+                    l_site_rec.vendor_id := c_sa.vendor_id;
+                    l_site_rec.cloud_imported := 'Y';
+                    
+                    l_liability_acc := '11.220000.000000.000000.000000.0000000.000000.00.000000.000000';
+                    l_prepay_acc := '11.130000.000000.000000.000000.0000000.000000.00.000000.000000';
+
+
+                    begin
+                        with json_response as
+                            (
+                            (
+                                select
+                                supplier_site_id
+                                ,supplier_site
+                                ,address_id
+                                ,address_name
+                                ,bu_name
+                                from
+                                xxfn_ws_call_log xx,
+                                json_table(xx.response_json,'$'
+                                    columns(
+                                                    supplier_site_id number path '$.SupplierSiteId',
+                                                    supplier_site varchar2(100) path '$.SupplierSite',
+                                                    address_id number path '$.SupplierAddressId',
+                                                    address_name varchar2(140) path '$.SupplierAddressName',
+                                                    bu_name varchar2(240) path '$.ProcurementBU'))
+                                where xx.ws_call_id = xs_ws_call_id
+                                and l_existing_site = 'N' --when supplier site is freshly created
+                                union                       
+                                select 
+                                xx.vendor_site_id
+                                ,xx.vendor_site_code
+                                ,xx.party_site_id address_id
+                                ,'' address_name
+                                ,xx.bu_name
+                                from
+                                xxdl_poz_supplier_sites xx
+                                ,xxdl_cloud_reference_sets xx_set
+                                ,xxdl_poz_supplier_addresses xx_adr
+                                where xx.bu_name = c_a.business_unit_name
+                                --and xx.vendor_site_code = c_a.vendor_site_code
+                                and xx.party_site_id = c_sa.party_site_id
+                                and xx.bu_name = xx_set.business_unit_name
+                                and xx.party_site_id = xx_adr.party_site_id
+                                and l_existing_site = 'Y'
+                                )
+                            )
+                            select
+                            nvl(jt.supplier_site_id,0)
+                            ,jt.supplier_site
+                            ,jt.address_id
+                            ,sysdate
+                            ,jt.bu_name
+                            into l_site_rec.vendor_site_id
+                            ,l_site_rec.vendor_site_code
+                            ,l_site_rec.party_site_id
+                            ,l_site_rec.creation_date
+                            ,l_site_rec.bu_name
+                            from
+                            json_response jt
+                            where rownum = 1
+                            and jt.supplier_site_id is not null;
+
+                            exception
+                            when no_data_found then
+                                l_site_rec.vendor_site_id := 0;
+
+                        end;
+
+                        log('           Cloud supplier site id:'||l_site_rec.vendor_site_id);
+                        log('           Cloud supplier address id:'||l_site_rec.party_site_id);
+                        log('           EBS supplier site id:'||c_a.vendor_site_id);
+
+                        if nvl(l_site_rec.vendor_site_id,0) != 0 then
+                        begin
+                            insert into xxdl_poz_supplier_sites xx values l_site_rec;
+                            exception
+                            when dup_val_on_index then
+                                update xxdl_poz_supplier_sites xx
+                                set xx.vendor_site_id = l_site_rec.vendor_site_id
+                                ,xx.party_site_id = c_sa.party_site_id
+                                ,xx.bu_name = l_site_rec.bu_name
+                                ,xx.last_update_date = sysdate
+                                where xx.vendor_site_id = l_site_rec.vendor_site_id
+                                ;
+                        end;
+                        end if;
+
+                        if find_site_suplier_assign(c_a.business_unit_name,l_site_rec.vendor_site_id) > 0 then
+                            log('           Site assignment already exists in cloud! Skiping to contact creation and setting success status!');
+                            l_existing_site_assign := 'Y';
+                            GOTO create_contact;
+                        end if;
+
+                        l_text := '';
+                        log('       Creating site assignment!');
+
+                        l_soap_env := l_empty_clob;
+                        dbms_lob.createtemporary(l_soap_env, TRUE);
+
+                        l_text := '{
+                            "ClientBUId" : '||c_a.business_unit_id||',
+                            "BillToBU" : "'||c_a.business_unit_name||'",
+                            "ShipToLocationId": null,
+                            "BillToLocationCode": null,
+                            "LiabilityDistribution": "'||l_liability_acc||'",
+                            "PrepaymentDistribution": "'||l_prepay_acc||'",
+                            "InactiveDate": ""
+                        }';
+                        
+                        l_soap_env := l_soap_env||to_clob(l_text);       
+
+                        log('       Calling web service to create site assignment');
+
+                        XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+                            p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/suppliers/'||c_sa.vendor_id||'/child/sites/'||l_site_rec.vendor_site_id||'/child/assignments',
+                            p_rest_env => l_soap_env,
+                            p_rest_act => 'POST',
+                            p_content_type => 'application/json;charset="UTF-8"',
+                            x_return_status => x_return_status,
+                            x_return_message => x_return_message,
+                            x_ws_call_id => xsa_ws_call_id);         
+                        
+                        log('       Web service status:'||x_return_status);
+                        if x_return_status = 'E' then
+                            x_return_message := get_ws_err_msg(xsa_ws_call_id);
+                            log('       Web service message:'||x_return_message);
+                        end if;
+                        log('       Web service call:'||xsa_ws_call_id);
+
+                        dbms_lob.freetemporary(l_soap_env);   
+
+                        if x_return_status = 'S' then
+                            log('       Assignment creation success!');
+
+                            update xxdl_poz_supplier_sites xx
+                            set xx.CLOUD_SITE_ASSIGNMENT = 'Y'
+                            ,xx.cloud_import_message = x_return_message
+                            where xx.party_site_id = c_sa.party_site_id
+                            and xx.bu_name = c_a.business_unit_name;
+
+                            log('           Assign konto to supplier site DFF');
+
+                            select substr(l_prepay_acc,instr(l_prepay_acc,'.',1,1)+1,instr(l_prepay_acc,'.',1,2)-4)   --pazi na ovo, uvijek na kraju mora biti -4 to mozes zeznut ako ponavljaš migracije i pokusavas kratit party_numbere
+                              into l_prepay_dff
+                              from dual;
+                            l_text := '';
+
+                            l_soap_env := l_empty_clob;
+                            dbms_lob.createtemporary(l_soap_env, TRUE);  
+
+                            l_text := '{
+                                    "xxPrepaymentAccount": "'||l_prepay_dff||'"
+                                }';
+
+                            l_soap_env := l_soap_env||to_clob(l_text);      
+
+                            log('           Calling web service to create site dff');
+
+                            XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+                                p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/suppliers/'||c_sa.vendor_id||'/child/sites/'||l_site_rec.vendor_site_id||'/child/DFF',
+                                p_rest_env => l_soap_env,
+                                p_rest_act => 'POST',
+                                p_content_type => 'application/json;charset="UTF-8"',
+                                x_return_status => x_return_status,
+                                x_return_message => x_return_message,
+                                x_ws_call_id => xsdff_ws_call_id);         
+                            
+                            log('               Web service status:'||x_return_status);
+                            if x_return_status = 'E' then
+                                x_return_message := get_ws_err_msg(xsdff_ws_call_id);
+                                log('               Web service message:'||x_return_message);
+                            end if;
+                            log('               Web service call:'||xsdff_ws_call_id);
+                            dbms_lob.freetemporary(l_soap_env);   
+
+                        else
+                            log('       Assignment creation failed!');
+                            --log('       Message:'||x_return_message);
+                            update xxdl_poz_supplier_sites xx
+                            set xx.cloud_imported = 'S'
+                            ,xx.CLOUD_SITE_ASSIGNMENT = 'E'
+                            ,xx.cloud_import_message = x_return_message
+                            where xx.party_site_id = c_sa.party_site_id
+                            and xx.bu_name = c_a.business_unit_name;
+                        end if;
+
+                        <<create_contact>>
+
+                        log('               Start of creating contacts!');
+
+                        for c_va in c_supplier_contacts(c_a.vendor_site_id) loop
+                            log('           Found contact:'||c_va.first_name||' '||c_va.last_name);
+                            log('           Finding by first name:'||nvl(c_va.first_name,c_va.last_name));
+                            log('           Finding by last name:'||c_va.last_name);
+                            log('           Finding vendor address id:'||l_site_rec.party_site_id);
+
+
+                            l_contact_rec.PERSON_FIRST_NAME := nvl(c_va.first_name,c_va.last_name);
+                            l_contact_rec.PERSON_LAST_NAME := c_va.last_name;
+                            l_contact_rec.EMAIL_ADDRESS := c_va.email_address;
+                            l_contact_rec.CREATION_DATE := sysdate;
+                            l_contact_rec.PARTY_SITE_ID := l_site_rec.party_site_id;
+                            l_contact_rec.vendor_id := c_sa.vendor_id;
+                            l_contact_rec.cloud_imported := 'Y';
+                            
+                            if find_supplier_contact(nvl(c_va.first_name,c_va.last_name),c_va.last_name,l_site_rec.party_site_id) > 0 then
+                                log('           Contact already exists!Skipping to contact assign!');
+                                GOTO contact_assign; 
+                            end if;
+
+                            l_soap_env := l_empty_clob;
+                            dbms_lob.createtemporary(l_soap_env, TRUE);
+
+                            l_text := '{ 
+                                "FirstName": "'||apex_escape.json(nvl(c_va.first_name,c_va.last_name))||'",
+                                "LastName": "'||apex_escape.json(c_va.last_name)||'",
+                                "Email": "'||c_va.email_address||'",
+                                "PhoneAreaCode": "'||c_va.area_code||'",
+                                "PhoneNumber": "'||c_va.phone||'"                            
+                            }';
+                            
+                            l_soap_env := l_soap_env||to_clob(l_text);       
+
+                            log('           Calling web service to create contact');
+
+                            XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+                                p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/suppliers/'||c_sa.vendor_id||'/child/contacts',
+                                p_rest_env => l_soap_env,
+                                p_rest_act => 'POST',
+                                p_content_type => 'application/json;charset="UTF-8"',
+                                x_return_status => x_return_status,
+                                x_return_message => x_return_message,
+                                x_ws_call_id => xc_ws_call_id);         
+                            
+                            log('           Web service status:'||x_return_status);
+                            if x_return_status = 'E' then
+                                x_return_message := get_ws_err_msg(xc_ws_call_id);
+                                log('           Web service message:'||x_return_message);
+                            end if;
+                            log('           Web service call:'||xc_ws_call_id);
+
+                            dbms_lob.freetemporary(l_soap_env);   
+
+                            <<contact_assign>>
+
+                            if x_return_status = 'S' then
+                                log('           Contact creation success!');
+
+                                if find_supplier_contact_address(nvl(c_va.first_name,c_va.last_name),c_va.last_name,l_site_rec.party_site_id) > 0 then
+                                    log('           Contact assign already exists!Skipping!');
+                                    GOTO no_contact_assign; 
+                                end if;
+
+                                begin
+                                    with json_response as
+                                        (
+                                        (
+                                            select
+                                            supplier_contact_id
+                                            from
+                                            xxfn_ws_call_log xx,
+                                            json_table(xx.response_json,'$'
+                                                columns(
+                                                                supplier_contact_id number path '$.SupplierContactId'))
+                                            where xx.ws_call_id = xc_ws_call_id
+                                            and xc_ws_call_id is not null --when supplier site is freshly created
+                                            union                       
+                                            select 
+                                            xx_con.vendor_contact_id
+                                            from
+                                            xxdl_poz_supplier_sites xx
+                                            ,xxdl_cloud_reference_sets xx_set
+                                            ,xxdl_poz_supplier_addresses xx_adr
+                                            ,xxdl_poz_supplier_contacts xx_con
+                                            where xx.bu_name = c_a.business_unit_name
+                                            and xx.vendor_site_code = c_a.vendor_site_code
+                                            and xx.bu_name = xx_set.business_unit_name
+                                            and xx.party_site_id = xx_adr.party_site_id
+                                            and xx.party_site_id = xx_con.party_site_id
+                                            and xc_ws_call_id is null
+                                            )
+                                        )
+                                        select
+                                        nvl(jt.supplier_contact_id,0)
+                                        into l_contact_rec.vendor_contact_id
+                                        from
+                                        json_response jt
+                                        where rownum = 1
+                                        and jt.supplier_contact_id is not null;
+
+                                        exception
+                                        when no_data_found then
+                                            l_contact_rec.vendor_contact_id := 0;
+
+                                    end;
+
+                                log('               Supplier Contact Id:'||l_contact_rec.vendor_contact_id);
+
+                                begin
+                                    insert into xxdl_poz_supplier_contacts xx values l_contact_rec;
+                                    exception
+                                    when dup_val_on_index then
+                                        update xxdl_poz_supplier_contacts xx
+                                        set xx.vendor_contact_id = l_contact_rec.vendor_contact_id
+                                        ,xx.last_update_date = sysdate
+                                        where xx.vendor_contact_id = l_contact_rec.vendor_contact_id
+                                        ;
+                                end;    
+
+
+                                log('               Now we need to assign contact to an address!');
+
+                                l_text := '';
+                                l_soap_env := l_empty_clob;
+                                dbms_lob.createtemporary(l_soap_env, TRUE);
+
+                                l_text := '{
+                                "SupplierAddressId" : '||l_site_rec.party_site_id||'
+                                }';
+                            
+                                l_soap_env := l_soap_env||to_clob(l_text);       
+
+                                log('               Calling web service to create contact address!');
+
+                                XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+                                p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/suppliers/'||c_sa.vendor_id||'/child/contacts/'||l_contact_rec.vendor_contact_id||'/child/addresses',
+                                p_rest_env => l_soap_env,
+                                p_rest_act => 'POST',
+                                p_content_type => 'application/json;charset="UTF-8"',
+                                x_return_status => x_return_status,
+                                x_return_message => x_return_message,
+                                x_ws_call_id => xca_ws_call_id);         
+                            
+                                log('               Web service status:'||x_return_status);
+                                if x_return_status = 'E' then
+                                    x_return_message := get_ws_err_msg(xca_ws_call_id);
+                                    log('           Web service message:'||x_return_message);
+                                end if;
+                                log('               Web service call:'||xca_ws_call_id);
+
+                                dbms_lob.freetemporary(l_soap_env);  
+
+                                
+                                if x_return_status = 'S' then
+
+                                    log('               Contact succesfully assigned to address!');
+
+                                    
+                                    update xxdl_poz_supplier_contacts xx
+                                    set xx.CLOUD_ADDRESS_ASSIGN = 'Y'
+                                    ,xx.last_update_date = sysdate
+                                    where xx.vendor_contact_id = l_contact_rec.vendor_contact_id;
+
+                                else
+                                    log('               Contact failed assign address!');
+
+                                    
+                                    update xxdl_poz_supplier_contacts xx
+                                    set xx.CLOUD_ADDRESS_ASSIGN = 'E'
+                                    ,xx.last_update_date = sysdate
+                                    where xx.vendor_contact_id = l_contact_rec.vendor_contact_id;
+
+                                end if;
+
+                                <<no_contact_assign>>
+
+                                log('               Continue..');
+
+
+                            else
+
+                                log('               Contact creation failed!');
+                                --log('               Message:'||x_return_message);
+                                update xxdl_poz_supplier_contacts xx
+                                set xx.cloud_imported = 'E'
+                                ,xx.cloud_import_message = x_return_message
+                                where xx.party_site_id = l_contact_rec.party_site_id;
+
+                            end if;          
+
+                    end loop;               
+                        
+
+
+            else
+                log('   Supplier site not created!');
+                --log('   Message:'||x_return_message);
+                
+                update xxdl_poz_supplier_sites xx
+                    set xx.cloud_imported = 'E'
+                    ,xx.cloud_import_message = x_return_message
+                    where xx.party_site_id = c_sa.party_site_id;
+            end if;
+
+            l_text := '';
+            
+        end loop;
+        close c_supplier_sites;
+
+        --update_supplier_tax_ref(c_sa.supplier_number);
+        update_supplier_payment_method(c_sa.supplier_number);
+
+
+        l_find_text:='';
+    end loop; --end supplier main loop
+
+    exception
+        when others then
+            log('   Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
+            log('   Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
+    end migrate_nuf_suppliers_cloud;
+
 /*===========================================================================+
     -- Name    : reset_cust_mig
     -- Desc    : Update customer acct profile
@@ -7855,6 +8758,110 @@
             log('   Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
             log('   Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
     end reset_cust_mig;
+
+
+    /*===========================================================================+
+    -- Name    : update_sup_routing
+    -- Desc    : Update supplier routing ids
+    -- Usage   : 
+    -- Parameters
+    ============================================================================+*/
+    procedure update_sup_routing(
+        p_vendor_id in number,
+        p_vendor_site_id in number) is
+
+        l_fault_code          varchar2(4000);
+        l_fault_string        varchar2(4000); 
+        l_soap_env clob;
+        l_empty_clob clob;
+        l_text varchar2(32000);
+        l_find_text varchar2(32000);
+        x_return_status varchar2(500);
+        x_return_message varchar2(32000);
+        l_error_message varchar2(32000);
+        x_ws_call_id number;
+        xt_ws_call_id number;
+        xf_ws_call_id number;
+        l_cnt number := 0;
+        l_cloud_party_id number:=0;     
+        l_app_url varchar2(300);
+        
+        cursor c_sup is 
+        select
+        xps.vendor_id
+        ,xps.supplier_number
+        ,xpss.vendor_site_id
+        from
+        xxdl_poz_suppliers xps
+        ,xxdl_poz_supplier_sites xpss
+        where 1=1
+        and xps.vendor_id = xpss.vendor_id
+        and xpss.vendor_id = p_vendor_id
+        and xpss.vendor_site_id = p_vendor_site_id
+        and xps.vendor_id > 0 
+        ;
+
+
+    begin
+
+
+    l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
+
+
+    for c_s in c_sup loop
+    
+    log(' Found supplier number:'||c_s.supplier_number);
+
+    log(' Building soap call!');
+
+    l_soap_env := l_empty_clob;
+
+    dbms_lob.createtemporary(l_soap_env, TRUE);
+
+    l_find_text := '{
+        "ReceiptRoutingId": 3
+    }'; 
+
+    l_soap_env := l_soap_env||to_clob(l_find_text);
+
+    log ('    Calling web service:');
+
+    XXFN_CLOUD_WS_PKG.WS_REST_CALL(
+        p_ws_url => l_app_url||'fscmRestApi/resources/11.13.18.05/suppliers/'||c_s.vendor_id||'/child/sites/'||c_s.vendor_site_id,
+        p_rest_env => l_soap_env,
+        p_rest_act => 'PATCH',
+        p_content_type => 'application/json;charset="UTF-8"',
+        x_return_status => x_return_status,
+        x_return_message => x_return_message,
+        x_ws_call_id => x_ws_call_id);
+        
+    log('     Web service status:'||x_return_status);
+    log('     Web service call:'||x_ws_call_id);
+
+    dbms_lob.freetemporary(l_soap_env);
+
+    if x_return_status = 'S' then
+
+        log('       Supplier site receiving routing updated!');
+        
+            
+    else
+        log('       Supplier site receiving routing update error!');
+        log('       Err:'||x_return_message);
+       
+    end if;
+
+        l_find_text:='';
+    end loop;
+
+    exception
+        when others then
+            log('   Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
+            log('   Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
+    end update_sup_routing;
+
+
 
     /*===========================================================================+
     -- Name    : reset_cust_mig

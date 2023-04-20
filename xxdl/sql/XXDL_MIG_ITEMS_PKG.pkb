@@ -33,7 +33,7 @@ create or replace package body xxdl_mig_items_pkg as
   ============================================================================+*/
   procedure xlog(p_text in varchar2) as
   begin
-    --dbms_output.put_line(p_text); -- TODO: Logging?
+    dbms_output.put_line(p_text); -- TODO: Logging?
     null;
   end;
 
@@ -197,7 +197,8 @@ create or replace package body xxdl_mig_items_pkg as
     cursor cur_itm is
       select msi.segment1,
              msi.item_type,
-             msi.purchasing_item_flag
+             msi.purchasing_item_flag,
+             mtp.organization_code
         from apps.mtl_system_items_b@ebsprod msi,
              apps.mtl_parameters@ebsprod     mtp
        where mtp.organization_id = msi.organization_id
@@ -287,6 +288,14 @@ create or replace package body xxdl_mig_items_pkg as
       
       else
         l_template := null;
+      end if;
+    
+      if c_itm.organization_code in ('MP1', 'MPR') and c_itm.item_type = 'P' then
+        l_template := 'XXDL_Proizvod';
+      end if;
+    
+      if c_itm.organization_code in ('I02') and c_itm.item_type in ('XXDL_PROIZVOD', 'XXDL_SI_ALAT_PRO') then
+        l_template := 'XXDL_Roba';
       end if;
     
     end if; -- End if materijal
@@ -535,7 +544,7 @@ create or replace package body xxdl_mig_items_pkg as
   -- Name    :get_item_type
   -- Desc    :Translation for item type
   -------------------------------------------------------------------------------*/
-  function get_item_type(p_old_item_type varchar2) return varchar as
+  function get_item_type(p_old_item_type varchar2, p_org_code varchar2) return varchar as
     l_new_item_type varchar2(100);
   begin
     if p_old_item_type = 'XXDL_GORIVOXXDL_GORIVO' then
@@ -543,7 +552,35 @@ create or replace package body xxdl_mig_items_pkg as
     else
       l_new_item_type := p_old_item_type;
     end if;
+  
+    if p_org_code in ('MP1', 'MPR') and p_old_item_type = 'P' then
+      l_new_item_type := 'XXDL_PROIZVOD';
+    end if;
+  
+    if p_org_code in ('I02') and p_old_item_type in ('XXDL_PROIZVOD', 'XXDL_SI_ALAT_PRO') then
+      l_new_item_type := 'P';
+    end if;
+  
     return l_new_item_type;
+  
+  end;
+
+  --/*-----------------------------------------------------------------------------
+  -- Name    : l_new_asset_category
+  -- Desc    : Translation Asset Category
+  -------------------------------------------------------------------------------*/
+  function get_cost_category(p_old_cost_category varchar2, p_org_code varchar2) return varchar as
+    l_new_cost_category varchar2(100);
+  begin
+    l_new_cost_category := p_old_cost_category;
+  
+    if p_org_code = 'GRA' then
+      if p_old_cost_category like '35%' then
+        l_new_cost_category := '310000';
+      end if;
+    end if;
+  
+    return l_new_cost_category;
   
   end;
 
@@ -1007,6 +1044,7 @@ create or replace package body xxdl_mig_items_pkg as
     l_item_org_xml    varchar2(32000);
   
     l_source_organization_name varchar2(200);
+    l_cost_category_code       varchar2(30);
   
     l_purchasable_flag                  varchar2(10);
     l_purchasing_flag                   varchar2(10);
@@ -1351,7 +1389,7 @@ create or replace package body xxdl_mig_items_pkg as
           l_text := replace(l_text, '[ORGANIZATION_CODE]', l_organization_code);
           l_text := replace(l_text, '[TEMPLATE]', l_template);
           l_text := replace(l_text, '[ITEM_NUMBER]', l_segment1);
-          l_text := replace(l_text, '[ITEM_TYPE]', cdata(get_item_type(c_i.item_type)));
+          l_text := replace(l_text, '[ITEM_TYPE]', cdata(get_item_type(c_i.item_type, l_organization_code)));
           l_text := replace(l_text, '[DESCRIPTION]', cdata(c_i.description));
           l_text := replace(l_text, '[LONG_DESCRIPTION]', cdata(c_i.long_description));
           l_text := replace(l_text, '[PRIMARY_UOM_VALUE]', c_i.primary_uom_code);
@@ -1406,7 +1444,8 @@ create or replace package body xxdl_mig_items_pkg as
             end if;
           
             if c_i_cat.orig_category_set_name = 'XXDL PLA' then
-              l_item_rec.account := c_i_cat.category_code;
+              l_cost_category_code := get_cost_category(c_i_cat.category_code, l_organization_code);
+              l_item_rec.account   := l_cost_category_code;
             end if;
           
             if l_organization_code = 'DLK' and c_i_cat.orig_category_set_name = 'XXDL kategorizacija' then
@@ -1418,7 +1457,7 @@ create or replace package body xxdl_mig_items_pkg as
             if c_i_cat.orig_category_set_name = 'XXDL PLA' then
               l_text_categories := l_text_categories || l_category_xml;
               l_text_categories := replace(l_text_categories, '[CATEGORY_SET_NAME]', c_i_cat.category_set_name);
-              l_text_categories := replace(l_text_categories, '[CATEGORY_CODE]', c_i_cat.category_code);
+              l_text_categories := replace(l_text_categories, '[CATEGORY_CODE]', l_cost_category_code);
             end if;
           end loop;
         
