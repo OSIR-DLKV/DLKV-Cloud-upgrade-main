@@ -197,7 +197,8 @@ create or replace package body xxdl_mig_items_pkg as
     cursor cur_itm is
       select msi.segment1,
              msi.item_type,
-             msi.purchasing_item_flag
+             msi.purchasing_item_flag,
+             mtp.organization_code
         from apps.mtl_system_items_b@ebsprod msi,
              apps.mtl_parameters@ebsprod     mtp
        where mtp.organization_id = msi.organization_id
@@ -287,6 +288,14 @@ create or replace package body xxdl_mig_items_pkg as
       
       else
         l_template := null;
+      end if;
+    
+      if c_itm.organization_code in ('MP1', 'MPR') and c_itm.item_type = 'P' then
+        l_template := 'XXDL_Proizvod';
+      end if;
+    
+      if c_itm.organization_code in ('I02') and c_itm.item_type in ('XXDL_PROIZVOD', 'XXDL_SI_ALAT_PRO') then
+        l_template := 'XXDL_Roba';
       end if;
     
     end if; -- End if materijal
@@ -535,7 +544,7 @@ create or replace package body xxdl_mig_items_pkg as
   -- Name    :get_item_type
   -- Desc    :Translation for item type
   -------------------------------------------------------------------------------*/
-  function get_item_type(p_old_item_type varchar2) return varchar as
+  function get_item_type(p_old_item_type varchar2, p_org_code varchar2) return varchar as
     l_new_item_type varchar2(100);
   begin
     if p_old_item_type = 'XXDL_GORIVOXXDL_GORIVO' then
@@ -543,6 +552,15 @@ create or replace package body xxdl_mig_items_pkg as
     else
       l_new_item_type := p_old_item_type;
     end if;
+  
+    if p_org_code in ('MP1', 'MPR') and p_old_item_type = 'P' then
+      l_new_item_type := 'XXDL_PROIZVOD';
+    end if;
+  
+    if p_org_code in ('I02') and p_old_item_type in ('XXDL_PROIZVOD', 'XXDL_SI_ALAT_PRO') then
+      l_new_item_type := 'P';
+    end if;
+  
     return l_new_item_type;
   
   end;
@@ -1371,7 +1389,7 @@ create or replace package body xxdl_mig_items_pkg as
           l_text := replace(l_text, '[ORGANIZATION_CODE]', l_organization_code);
           l_text := replace(l_text, '[TEMPLATE]', l_template);
           l_text := replace(l_text, '[ITEM_NUMBER]', l_segment1);
-          l_text := replace(l_text, '[ITEM_TYPE]', cdata(get_item_type(c_i.item_type)));
+          l_text := replace(l_text, '[ITEM_TYPE]', cdata(get_item_type(c_i.item_type, l_organization_code)));
           l_text := replace(l_text, '[DESCRIPTION]', cdata(c_i.description));
           l_text := replace(l_text, '[LONG_DESCRIPTION]', cdata(c_i.long_description));
           l_text := replace(l_text, '[PRIMARY_UOM_VALUE]', c_i.primary_uom_code);

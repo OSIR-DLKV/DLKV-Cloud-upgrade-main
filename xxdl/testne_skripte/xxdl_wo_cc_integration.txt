@@ -1,0 +1,31 @@
+/* $Header $
+============================================================================+
+File Name   : Test_XXDL_WO_CC_INTEGRATION.tst
+Description : Primjer za testiranje kreiranja vrijednosti value seta za radni nalog iz Reflexiona u Fusion
+History     :
+v1.0 21.07.2022 Marko Matanovic: Inicijalna verzija
+============================================================================+*/
+declare
+  l_row      XXDL_WO_CC_INTEGRATION%rowtype;
+  l_id number;
+begin
+
+  l_id := XXDL_WO_CC_INTEGRATION_S.nextval;
+
+  l_row.id := l_id;
+  l_row.COMPANY := 'DALEKOVOD EUR';
+  l_row.WORK_ORDER_NUMBER := 'TEST3';
+  l_row.WORK_ORDER_DESCRIPTION := 'TEST3 description';
+  l_row.COST_CENTER := '000000';
+  L_ROW.COST_CENTER_DESCRIPTION := NULL;
+  l_row.FUSION_VALUE_SET_ID := null;
+  l_row.STATUS := null;
+  l_row.message := null;
+  l_row.LAST_WS_CALL_ID := null;
+  l_row.creation_date := sysdate;
+  l_row.last_update_date := sysdate;
+  
+  insert into XXDL_WO_CC_INTEGRATION values l_row;
+  
+  xxdl_wo_cc_integration_pkg.process_records;
+end;
