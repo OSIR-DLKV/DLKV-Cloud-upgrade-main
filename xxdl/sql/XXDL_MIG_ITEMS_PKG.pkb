@@ -19,6 +19,7 @@ create or replace package body xxdl_mig_items_pkg as
    -- 27-01-22 1.4    msladoljev   Update items
    -- 13-02-23 1.5    msladoljev   SVE, GDS
    -- 13-02-23 1.6    msladoljev   Verzija za migraciju bez SVE, GDS
+   -- 24-05-23 1.7    msladoljev   Provjera kategorije na skladistima
   =============================================================================*/
   --c_log_module constant varchar2(300) := $$plsql_unit;
   e_processing_exception exception;
@@ -663,6 +664,8 @@ create or replace package body xxdl_mig_items_pkg as
   
     l_result varchar2(1);
   
+    l_costing_cat varchar2(10);
+  
     cursor cur_itm is
       select msi.segment1,
              mtp.organization_code organization_code_ebs,
@@ -690,6 +693,32 @@ create or replace package body xxdl_mig_items_pkg as
     
       if l_count = 0 then
         -- xlog('Org ' || l_organization_code || ' not exists in xxdl_inv_organizations');
+        return 'N';
+      end if;
+    
+      -- Check if costing category exists
+      l_costing_cat := null;
+      begin
+        select mcb.segment1
+          into l_costing_cat
+          from apps.mtl_system_items_b@ebsprod  msi,
+               apps.mtl_parameters@ebsprod      mtp,
+               apps.mtl_categories_vl@ebsprod   mcb,
+               apps.mtl_item_categories@ebsprod mic
+         where mic.category_id = mcb.category_id
+           and mic.inventory_item_id = msi.inventory_item_id
+           and mic.organization_id = msi.organization_id
+           and mic.organization_id = mtp.organization_id
+           and mcb.structure_id = 1
+           and msi.inventory_item_id = p_inventory_item_id
+           and msi.organization_id = p_organization_id;
+      exception
+        when no_data_found then
+          null;
+      end;
+    
+      if l_organization_code not in ('GDP', 'DLK', 'EMU', 'GDN', 'GRA', 'NUF', 'PMK', 'POS') and l_costing_cat is null then
+        --xlog('Item has not assigned costing category at asset subinventory');
         return 'N';
       end if;
     

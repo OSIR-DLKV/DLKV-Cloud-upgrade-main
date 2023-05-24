@@ -7,6 +7,7 @@
   v1.0 15.07.2022 Marko Sladoljev: Inicijalna verzija
   v1.1 02.09.2022 Marko Sladoljev: New columns
   v1.2 03.11.2022 Marko Sladoljev: New columns
+  v1.3 05.05.2023 Marko Sladoljev: New columns: source_header_number, source_line_number
   ============================================================================+*/
 
 drop table xxdl_inv_material_txns;
@@ -35,6 +36,8 @@ CREATE TABLE xxdl_inv_material_txns(
      po_approved_date           DATE,
      po_unit_price              NUMBER,
      po_party_site_number       VARCHAR2(100),
+     source_header_number       VARCHAR2(150),
+     source_line_number         VARCHAR2(150),
      creation_date              TIMESTAMP,
      created_by                 VARCHAR2(64) NOT NULL,
      downloaded_date            DATE NOT NULL,

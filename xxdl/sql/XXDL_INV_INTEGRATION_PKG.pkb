@@ -12,6 +12,7 @@ create or replace package body xxdl_inv_integration_pkg is
   v1.4 02.02.2022 Marko Sladoljev: Error logging added
   v1.5 24.03.2023 Marko Sladoljev: Transaction processing order by batch_id, transaction date
   v1.6 06.04.2023 Marko Sladoljev: Download entiteta po datumu u natrag
+  v1.7 05.05.2023 Marko Sladoljev: New columns: source_header_number, source_line_number
   ============================================================================+*/
 
   -- Log variables
@@ -277,7 +278,13 @@ create or replace package body xxdl_inv_integration_pkg is
     
       l_count := l_count + 1;
     
-      xout(c_rec.inventory_item_id || ', ' || c_rec.val_unit_code);
+      if l_count < 10 then
+        xout(c_rec.inventory_item_id || ', ' || c_rec.val_unit_code);
+      elsif l_count = 10 then
+        xout('More records exists...');
+      else
+        null;
+      end if;
     
       l_row.inventory_item_id   := c_rec.inventory_item_id;
       l_row.val_unit_code       := c_rec.val_unit_code;
@@ -714,6 +721,8 @@ create or replace package body xxdl_inv_integration_pkg is
                                   po_approved_date varchar2(100) path 'PO_APPROVED_DATE',
                                   po_unit_price number path 'PO_UNIT_PRICE',
                                   po_party_site_number varchar2(100) path 'PO_PARTY_SITE_NUMBER',
+                                  source_header_number varchar2(150) path 'SOURCE_HEADER_NUMBER',
+                                  source_line_number varchar2(150) path 'SOURCE_LINE_NUMBER',
                                   creation_date_char varchar2(100) path 'CREATION_DATE_CHAR',
                                   created_by varchar2(64) path 'CREATED_BY') xt
                    order by transaction_id) loop
@@ -751,6 +760,8 @@ create or replace package body xxdl_inv_integration_pkg is
       l_row.po_approved_date           := xml_char_to_date(c_rec.po_approved_date);
       l_row.po_unit_price              := c_rec.po_unit_price;
       l_row.po_party_site_number       := c_rec.po_party_site_number;
+      l_row.source_header_number       := c_rec.source_header_number;
+      l_row.source_line_number         := c_rec.source_line_number;
       l_row.creation_date              := char_to_timestamp(c_rec.creation_date_char);
       l_row.created_by                 := c_rec.created_by;
       l_row.downloaded_date            := sysdate;
