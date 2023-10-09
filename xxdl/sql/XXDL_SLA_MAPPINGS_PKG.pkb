@@ -9,6 +9,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   v1.1 07.01.2023 Marko Sladoljev: varchar/clob zamjena radi velicine zapisa
   v1.2 12.01.2023 Marko Sladoljev: referesh_cc_from_wo_mapping - single csv file supported
   v1.3 11.02.2023 Marko Sladoljev: New refresh procedure
+  v1.4 09.10.2023 Marko Sladoljev: purge_local_map_interface dodan  
   ============================================================================+*/
 
   -- File names
@@ -674,7 +675,7 @@ create or replace package body xxdl_sla_mappings_pkg is
       l_row.batch_id              := l_batch_id;
       l_row.group_id              := x_group_id;
       l_row.line_num              := l_count;
-      l_row.status                := 'NEW';
+      l_row.status                := g_stat_new;
       l_row.application_name      := l_map_def.application_name;
       l_row.mapping_short_name    := p_mapping_set_code;
       l_row.out_chart_of_accounts := c_rec.out_chart_of_accounts;
@@ -962,10 +963,10 @@ create or replace package body xxdl_sla_mappings_pkg is
       select s.mapping_set_code from xxdl_sla_map_set_definition s where enabled = 'Y';
   begin
     xlog('refresh_all_mapping_sets started');
-    
+  
     -- Delete errors from previous refresh 
     purge_mappings_interface;
-    
+  
     for c_set in cur_map_sets loop
       refresh_mapping_set(c_set.mapping_set_code);
     end loop;
@@ -1043,7 +1044,7 @@ create or replace package body xxdl_sla_mappings_pkg is
       l_int_row.batch_id              := l_batch_id;
       l_int_row.group_id              := l_group_id;
       l_int_row.line_num              := l_count;
-      l_int_row.status                := 'NEW';
+      l_int_row.status                := g_stat_new;
       l_int_row.application_name      := 'Purchasing';
       l_int_row.mapping_short_name    := 'XXDL_SO_FROM_REQ_WO';
       l_int_row.out_chart_of_accounts := c_wo.company;
@@ -1150,7 +1151,7 @@ create or replace package body xxdl_sla_mappings_pkg is
       l_int_row.batch_id              := l_batch_id;
       l_int_row.group_id              := l_group_id;
       l_int_row.line_num              := l_count;
-      l_int_row.status                := 'NEW';
+      l_int_row.status                := g_stat_new;
       l_int_row.application_name      := 'Purchasing';
       l_int_row.mapping_short_name    := 'XXDL_CC_FROM_REQ_WO';
       l_int_row.out_chart_of_accounts := c_wo.company;
@@ -1205,6 +1206,26 @@ create or replace package body xxdl_sla_mappings_pkg is
     referesh_so_from_wo_mapping;
     referesh_cc_from_wo_mapping;
   
+  end;
+
+  /*===========================================================================+
+  Procedure   : purge_local_map_interface
+  Description : Purges local mapping interface records from table xxdl_sla_mappings_interface
+  Usage       :
+  Arguments   : 
+  Remarks     :
+  ============================================================================+*/
+  procedure purge_local_map_interface as
+  begin
+    xlog('purge_local_map_interface started');
+  
+    delete from xxdl_sla_mappings_interface i
+     where status = g_stat_processed
+       and i.creation_date < sysdate - 30;
+  
+    xlog('Records purged: ' || sql%rowcount);
+  
+    xlog('purge_local_map_interface ended');
   end;
 
 end;
