@@ -20,6 +20,7 @@ create or replace package body xxdl_mig_items_pkg as
    -- 13-02-23 1.5    msladoljev   SVE, GDS
    -- 13-02-23 1.6    msladoljev   Verzija za migraciju bez SVE, GDS
    -- 24-05-23 1.7    msladoljev   Provjera kategorije na skladistima
+   -- 19-07-23 1.8    msladoljev   AG org migration
   =============================================================================*/
   --c_log_module constant varchar2(300) := $$plsql_unit;
   e_processing_exception exception;
@@ -34,8 +35,9 @@ create or replace package body xxdl_mig_items_pkg as
   ============================================================================+*/
   procedure xlog(p_text in varchar2) as
   begin
-    dbms_output.put_line(p_text); -- TODO: Logging?
     null;
+    --dbms_output.put_line(p_text); -- TODO: Logging?
+    --xxdl_log_pkg.log(p_module => 'XXDL_MIG_ITEMS_PKG', p_log_level => xxdl_log_pkg.g_level_statement, p_message => p_text);
   end;
 
   /*===========================================================================+
@@ -52,14 +54,11 @@ create or replace package body xxdl_mig_items_pkg as
       l_organization_code := 'PMK';
     end if;
   
-    -- This part should be only for SVE and GDS
-    /*
-        if p_organization_code_ebs = 'NUF' then
-          l_organization_code := 'SVE';
-        elsif p_organization_code_ebs = 'GDN' then
-          l_organization_code := 'GDS';
-        end if;
-    */
+    -- This part should be only for AG
+  
+    if p_organization_code_ebs = 'NUF' then
+      l_organization_code := 'AG';
+    end if;
   
     return l_organization_code;
   
@@ -67,19 +66,17 @@ create or replace package body xxdl_mig_items_pkg as
 
   /*===========================================================================+
       Procedure   : get_organization_id
-      Description : Dummy org id for SVE, GDS
+      Description : Dummy org id for AG
   ============================================================================+*/
   function get_organization_id(p_organization_code in varchar2) return varchar2 as
     l_organization_id number;
   begin
     xlog('p_organization_code: ' || p_organization_code);
   
-    -- This part should be only for SVE and GDS
+    -- This part should be only for AG
   
-    if p_organization_code = 'SVE' then
-      l_organization_id := -1;
-    elsif p_organization_code = 'GDS' then
-      l_organization_id := -2;
+    if p_organization_code = 'AG' then
+      l_organization_id := -3;
     else
       select organization_id into l_organization_id from apps.mtl_parameters@ebsprod where organization_code = p_organization_code;
     end if;
@@ -179,7 +176,7 @@ create or replace package body xxdl_mig_items_pkg as
   function is_expense_org(p_org_code varchar2) return boolean as
   
   begin
-    if p_org_code in ('DLK', 'PMK', 'POS', 'NUF', 'SVE', 'PRO', 'EMU') then
+    if p_org_code in ('DLK', 'PMK', 'POS', 'NUF', 'SVE', 'PRO', 'EMU', 'AG') then
       return true;
     else
       return false;
@@ -692,7 +689,7 @@ create or replace package body xxdl_mig_items_pkg as
          and rownum = 1;
     
       if l_count = 0 then
-        -- xlog('Org ' || l_organization_code || ' not exists in xxdl_inv_organizations');
+        --xlog('Org ' || l_organization_code || ' not exists in xxdl_inv_organizations');
         return 'N';
       end if;
     
@@ -717,12 +714,30 @@ create or replace package body xxdl_mig_items_pkg as
           null;
       end;
     
-      if l_organization_code not in ('GDP', 'DLK', 'EMU', 'GDN', 'GRA', 'NUF', 'PMK', 'POS') and l_costing_cat is null then
+      if l_organization_code not in ('GDP', 'DLK', 'EMU', 'GDN', 'GRA', 'NUF', 'PMK', 'POS', 'AG') and l_costing_cat is null then
         --xlog('Item has not assigned costing category at asset subinventory');
         return 'N';
       end if;
     
-      -- First chek xxdl_migracija_artikala for master item
+      -- for AG is same rule as for NUF
+      if l_organization_code = 'AG' then
+      
+        select count(1)
+          into l_count
+          from xxdl_mtl_system_items_mig
+         where organization_code = 'NUF'
+           and process_flag = 'S'
+           and inventory_item_id = p_inventory_item_id;
+      
+        if l_count > 0 then
+          return 'Y';
+        else
+          return 'N';
+        end if;
+      
+      end if;
+    
+      -- First check xxdl_migracija_artikala for master item
       if p_organization_id = l_dlk_org_id then
         select count(1) into l_count from xxdl.xxdl_migracija_artikala@ebsprod where sprom = c_itm.segment1;
       
@@ -758,37 +773,6 @@ create or replace package body xxdl_mig_items_pkg as
     
       if l_count > 0 then
         return 'Y';
-      end if;
-    
-      -- for SVE, GDS is same rule as for NUF, GDN
-      if l_organization_code = 'SVE' then
-      
-        select count(1)
-          into l_count
-          from xxdl_mtl_system_items_mig
-         where organization_code = 'NUF'
-           and process_flag = 'S'
-           and inventory_item_id = p_inventory_item_id;
-      
-        if l_count > 0 then
-          return 'Y';
-        end if;
-      
-      end if;
-    
-      if l_organization_code = 'GDS' then
-      
-        select count(1)
-          into l_count
-          from xxdl_mtl_system_items_mig
-         where organization_code = 'GDN'
-           and process_flag = 'S'
-           and inventory_item_id = p_inventory_item_id;
-      
-        if l_count > 0 then
-          return 'Y';
-        end if;
-      
       end if;
     
       if c_itm.segment1 like 'U%' or c_itm.segment1 like 'IU%' or c_itm.segment1 like '1USLUGA%' then
@@ -954,18 +938,18 @@ create or replace package body xxdl_mig_items_pkg as
          and msi.item_type = typ.lookup_code
          and typ.lookup_type = 'ITEM_TYPE'
          and typ.language = 'US'
-            --and mp.organization_code in ('NUF', 'GDN')
+         and mp.organization_code in ('NUF') -- for AG only
          and not exists (select 1
                 from xxdl_mtl_system_items_mig xx
                where xx.inventory_item_id = msi.inventory_item_id
-                 and xx.organization_id = msi.organization_id
-                    --and get_organization_code(mp.organization_code) = xx.organization_code
+                    --and xx.organization_id = msi.organization_id
+                 and get_organization_code(mp.organization_code) = xx.organization_code
                  and xx.process_flag in ('S', 'X')) -- Ne postoje uspjesno procesirani
          and not exists (select 1
                 from xxdl_mtl_system_items_mig xx
                where xx.inventory_item_id = msi.inventory_item_id
-                 and xx.organization_id = msi.organization_id
-                    --and get_organization_code(mp.organization_code) = xx.organization_code
+                    --and xx.organization_id = msi.organization_id
+                 and get_organization_code(mp.organization_code) = xx.organization_code
                  and xx.process_flag = 'E'
                  and p_retry_error = 'N') -- error recordi se procesiraju ako je trazeno 
        order by segment1,
@@ -1057,8 +1041,6 @@ create or replace package body xxdl_mig_items_pkg as
     l_list_price        number;
     l_weight_uom        varchar2(10);
     l_unit_weight       number;
-  
-    --l_ITEM_TYPE varchar2(100);
   
     l_app_url varchar2(100);
   
@@ -1224,8 +1206,8 @@ create or replace package body xxdl_mig_items_pkg as
       l_organization_code := get_organization_code(c_i.organization_code_ebs);
     
       l_item_rec.inventory_item_id := c_i.inventory_item_id;
-      l_item_rec.organization_id   := c_i.organization_id;
-      --l_item_rec.organization_id   := get_organization_id(l_organization_code);
+      --      l_item_rec.organization_id   := c_i.organization_id;
+      l_item_rec.organization_id   := get_organization_id(l_organization_code); -- For AG
       l_item_rec.segment1          := l_segment1;
       l_item_rec.organization_code := l_organization_code;
       l_item_rec.description       := c_i.description;
@@ -1739,7 +1721,10 @@ create or replace package body xxdl_mig_items_pkg as
   -------------------------------------------------------------------------------*/
   procedure migrate_item_all as
   begin
-    migrate_item_batch(p_batch_size => 999999999, p_retry_error => 'Y'); -- TODO : Prvi put s 'N' pokrenuti, kasnije s 'Y'
+    --migrate_item_batch(p_batch_size => 99999999, p_retry_error => 'N'); -- TODO : Prvi put s 'N' pokrenuti, kasnije s 'Y'
+    
+    xxdl_mig_items_pkg.migrate_items_cloud(p_item_seg => null, p_rows => 99999999, p_retry_error => 'N', p_suffix => '');
+    
   end;
 
   --/*-----------------------------------------------------------------------------
