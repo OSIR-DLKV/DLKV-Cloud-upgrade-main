@@ -7860,7 +7860,7 @@
         and xx_hca.party_id = xx_hp.party_id
         and xx_psa.vendor_id = xx_ps.vendor_id
         and xx_cust_site.party_site_id = hps.party_site_id
-        and to_char(hps.party_site_number) = pvs.attribute3
+        --and to_char(hps.party_site_number) = pvs.attribute3
         and xx_cust_site.org_id = pvs.org_id
         and pvs.org_id = 102
         and pvs.vendor_id = pv.vendor_id
@@ -7868,10 +7868,48 @@
         and xx_hp.party_number like nvl(p_party_number,'%')
         --and xx_psa.address_name = 'HEP-OP DS ISTRA'
         and not exists (select 1 from xxdl_poz_supplier_sites xpss
-                        where xpss.party_site_id = xx_psa.party_site_id
-                        and xpss.bu_name in ('Dalekovod NUF', 'DV Svenska Filial')
-                          and nvl(xpss.cloud_site_assignment,'X') = 'Y')
-        and rownum <= 500                 
+                        where --xpss.party_site_id = xx_psa.party_site_id  --for NUF
+                        xpss.vendor_site_code = pvs.vendor_site_code  --for SVENSKA
+                        --and xpss.bu_name in ('Dalekovod NUF', 'DV Svenska Filial')  --for NUF
+                        and xpss.bu_name in ('DV Svenska Filial')  --for NUF
+                        and nvl(xpss.cloud_site_assignment,'X') = 'Y')
+        and pv.vendor_name in (
+            'BEIJER BYGGMATERIAL AB',
+            'ViaCon AB',
+            'NTEX AB',
+            'NEXANS FRANCE',
+            'Melbye Skandinavia Sverige AB',
+            'AHLSELL SVERIGE AB',
+            'CELSA STEEL SERVICE AB',
+            'Herz International GmbH',
+            'THOMAS BETONG AB',
+            'E.ON ENERGIDISTRIBUTION AB',
+            'PFISTERER INSULATORS WUNSIEDEL GMBH',
+            'KRONENBERG FREILEITUNGSARMATUREN GmbH',
+            'RUDUS OY',
+            'CRAMO AB',
+            'Biltema Sweden AB',
+            'Lillevra Sag AB',
+            'Swedol AB',
+            'METALOGALVA IRMAOS SILVAS S.A.',
+            'DFDS Logistics Karlshamn AB',
+            'BOTNIA BOLT OY AB',
+            'Intertek s.r.o.',
+            'Finja Prefab AB',
+            'HP-TEC GmbH',
+            'SEDIVER',
+            'MITAS CIVATA',
+            'RIPRESA INTERNATIONALE SPEDITION&LOGISTIK GMBH',
+            'PALAB',
+            'ARENTO AB',
+            'Doka Sverige AB',
+            'Swerock AB',
+            'MATECO GMBH',
+            'Swebolt Jarfalla AB',
+            'Hewall Safety Sweden AB',
+            'EESTI TRAAT OÜ'
+
+        )    
         order by xx_psa.vendor_id
         ;
         
@@ -7995,6 +8033,7 @@
                         from xxdl_poz_supplier_sites_nuf xx
                         where xx.vendor_site_id = xpss.vendor_site_id)
         union
+        /*
         select distinct
         substr(xx_cust_site.party_site_name,1,15) vendor_site_code
         ,xx_set.business_unit_name
@@ -8060,12 +8099,7 @@
             end PAYMENT_CURRENCY_CODE --,PAYMENT_CURRENCY_CODE (Payment Currency)
         ,pvs.PAYMENT_PRIORITY                                    --,PAYMENT_PRIORITY (Payment Priority)
         ,'Standard' PAY_GROUP_LOOKUP_CODE --pvs.PAY_GROUP_LOOKUP_CODE                               --,PAY_GROUP_LOOKUP_CODE (Pay Group)
-        ,pvs.HOLD_ALL_PAYMENTS_FLAG/*case
-            when pvs.HOLD_ALL_PAYMENTS_FLAG = 'Y' then
-                'true'
-            else
-                'false'
-            end*/ HOLD_ALL_PAYMENTS_FLAG                              --,HOLD_ALL_PAYMENTS_FLAG (Hold All Invoices)
+        ,pvs.HOLD_ALL_PAYMENTS_FLAG HOLD_ALL_PAYMENTS_FLAG                              --,HOLD_ALL_PAYMENTS_FLAG (Hold All Invoices)
         ,'D' HOLD_UNMATCHED_INVOICES_FLAG                       --, pvs.HOLD_UNMATCHED_INVOICES_FLAG    (Hold Unmatched Invoices)                    
         ,case
             when pvs.HOLD_ALL_PAYMENTS_FLAG = 'Y' then
@@ -8096,12 +8130,159 @@
         where language = 'US') apt
         ,apps.po_vendor_contacts@ebsprod pvc              
         where xpss.party_site_id = xx_cust_site.cloud_party_site_id
-        and xpss.bu_name = 'Dalekovod'
-        and decode(xpss.bu_name,'Dalekovod','DV Svenska Filial',xpss.bu_name) = xx_set.business_unit_name
+        -- and xpss.bu_name = 'Dalekovod' --for NUF
+        and xpss.bu_name = 'Dalekovod NUF' --for SVenska
+        -- and decode(xpss.bu_name,'Dalekovod','DV Svenska Filial',xpss.bu_name) = xx_set.business_unit_name  --for NUF, Svenska
+        and decode(xpss.bu_name,'Dalekovod NUF','DV Svenska Filial',xpss.bu_name) = xx_set.business_unit_name --for Svenska
         and xx_cust_site.cloud_party_site_id = c_party_site_id   
         and xx_cust_site.party_site_id = hps.party_site_id(+)
         and xx_cust_site.cloud_set_id = xx_set_cust.reference_data_set_id
-        and xx_set_cust.business_unit_name = 'Dalekovod'
+        -- and xx_set_cust.business_unit_name = 'Dalekovod' --for NUF, Svenska
+        and xx_set_cust.business_unit_name = 'Dalekovod NUF' --for Svenska
+        --and xpss.vendor_id = 300000006302793
+        and to_char(hps.party_site_number) = pvs.attribute3(+)
+        and xx_cust_site.org_id = pvs.org_id
+        and xx_set_cust.ebs_org_id = pvs.org_id
+        and pvs.terms_id = apt.term_id(+)
+        and pvs.vendor_id = pv.vendor_id
+        and pvs.vendor_site_id = pvc.vendor_site_id(+)
+        and not exists (select 1 
+                        from xxdl_poz_supplier_sites_nuf xx
+                        where xx.vendor_site_id = xpss.vendor_site_id)
+        order by 1,2
+        */
+
+        select distinct
+        substr(xx_cust_site.party_site_name,1,15) vendor_site_code
+        ,xx_set.business_unit_name
+        ,xx_cust_site.party_site_name address_name
+        ,case
+            when pvs.PRIMARY_PAY_SITE_FLAG = 'Y' then
+                'true'
+            else
+                'false'
+            end PRIMARY_PAY_SITE_FLAG
+        ,'NONE'  communication_method_code
+        ,pvs.email_address email_address
+        ,null fax_number  
+        ,pvs.FOB_LOOKUP_CODE                            --,FOB_LOOKUP_CODE (FOB)
+        ,pvs.COUNTRY_OF_ORIGIN_CODE
+        ,case
+            when pvs.create_debit_memo_flag = 'Y' then
+                'true'
+            else
+                'false'
+            end create_debit_memo_flag                   --,CREATE_DEBIT_MEMO_FLAG (Create debit memo from return)
+        ,case 
+            when (xx_set.business_unit_name = 'Proizvodnja MK' or xx_set.business_unit_name = 'Proizvodnja OSO') then
+                2
+            else 
+                3
+            end RECEIVING_ROUTING_ID                         --,RECEIVING_ROUTING_ID (Receipt Routing )
+        ,pv.QTY_RCV_TOLERANCE                            --,QTY_RCV_TOLERANCE    (Over-receipt Tolerance)
+        ,pv.QTY_RCV_EXCEPTION_CODE                       --,QTY_RCV_EXCEPTION_CODE  (Over-receipt Action)
+        ,pv.DAYS_EARLY_RECEIPT_ALLOWED                   --,DAYS_EARLY_RECEIPT_ALLOWED (Early Receipt Tolerance in Days)
+        ,pv.DAYS_LATE_RECEIPT_ALLOWED                    --,DAYS_LATE_RECEIPT_ALLOWED (Late Receipt Tolerance in Days)
+        ,nvl(pv.ALLOW_SUBSTITUTE_RECEIPTS_FLAG,'N') ALLOW_SUBSTITUTE_RECEIPTS_FLAG               --,ALLOW_SUBSTITUTE_RECEIPTS_FLAG (Allow Substitute Receipts)
+        ,nvl(pv.ALLOW_UNORDERED_RECEIPTS_FLAG,'N') ALLOW_UNORDERED_RECEIPTS_FLAG                 --,ALLOW_UNORDERED_RECEIPTS_FLAG (Allow unordered receipts)
+        ,nvl(pv.RECEIPT_DAYS_EXCEPTION_CODE,'WARNING') RECEIPT_DAYS_EXCEPTION_CODE                  --,RECEIPT_DAYS_EXCEPTION_CODE (Receipt Date Exception)
+        ,case
+            when pv.vendor_name in (
+                'NEXANS FRANCE',
+                'Herz International GmbH',
+                'PFISTERER INSULATORS WUNSIEDEL GMBH',
+                'KRONENBERG FREILEITUNGSARMATUREN GmbH',
+                'RUDUS OY',
+                'METALOGALVA IRMAOS SILVAS S.A.',
+                'BOTNIA BOLT OY AB',
+                'Intertek s.r.o.',
+                'HP-TEC GmbH',
+                'SEDIVER',
+                'MITAS CIVATA',
+                'RIPRESA INTERNATIONALE SPEDITION&LOGISTIK GMBH',
+                'MATECO GMBH',
+                'EESTI TRAAT OÜ'
+            ) then
+                'EUR'
+            else
+            'SEK'
+            end INVOICE_CURRENCY_CODE --,INVOICE_CURRENCY_CODE (Invoice Currency)
+        ,pvs.INVOICE_AMOUNT_LIMIT                        --,INVOICE_AMOUNT_LIMIT (Invoice Amount Limit)
+        ,case
+            when xx_set.business_unit_name = 'Dalekovod Projekt' then
+                'P'
+            else
+                'R'
+            end MATCH_OPTION--pvs.MATCH_OPTION                                --, MATCH_OPTION Invoice Match Option)
+        ,case 
+            when xx_set.business_unit_name = 'Dalekovod Projekt' then
+                'TWO'
+            else 
+                'THREE'
+            end MATCH_APPROVAL_LEVEL -- (Match Approval Level)
+        ,case
+            when pv.vendor_name in (
+                'NEXANS FRANCE',
+                'Herz International GmbH',
+                'PFISTERER INSULATORS WUNSIEDEL GMBH',
+                'KRONENBERG FREILEITUNGSARMATUREN GmbH',
+                'RUDUS OY',
+                'METALOGALVA IRMAOS SILVAS S.A.',
+                'BOTNIA BOLT OY AB',
+                'Intertek s.r.o.',
+                'HP-TEC GmbH',
+                'SEDIVER',
+                'MITAS CIVATA',
+                'RIPRESA INTERNATIONALE SPEDITION&LOGISTIK GMBH',
+                'MATECO GMBH',
+                'EESTI TRAAT OÜ'
+            ) then
+                'EUR'
+            else
+            'SEK'
+            end PAYMENT_CURRENCY_CODE --,PAYMENT_CURRENCY_CODE (Payment Currency)
+        ,pvs.PAYMENT_PRIORITY                                    --,PAYMENT_PRIORITY (Payment Priority)
+        ,'Standard' PAY_GROUP_LOOKUP_CODE --pvs.PAY_GROUP_LOOKUP_CODE                               --,PAY_GROUP_LOOKUP_CODE (Pay Group)
+        ,pvs.HOLD_ALL_PAYMENTS_FLAG HOLD_ALL_PAYMENTS_FLAG                              --,HOLD_ALL_PAYMENTS_FLAG (Hold All Invoices)
+        ,'D' HOLD_UNMATCHED_INVOICES_FLAG                       --, pvs.HOLD_UNMATCHED_INVOICES_FLAG    (Hold Unmatched Invoices)                    
+        ,case
+            when pvs.HOLD_ALL_PAYMENTS_FLAG = 'Y' then
+            'Hold All Invoices'
+            when pvs.HOLD_UNMATCHED_INVOICES_FLAG = 'Y' then
+            'Hold Unmatched Invoices'
+            when pvs.HOLD_FUTURE_PAYMENTS_FLAG = 'Y' then
+            'Hold Unvalidated Invoices'
+            else pv.HOLD_REASON     end hold_reason
+        ,'30 days' term_name --terms_name
+        ,pv.TERMS_DATE_BASIS                                      --TERMS_DATE_BASIS (Terms Date Basis)
+        ,pv.PAY_DATE_BASIS_LOOKUP_CODE
+        ,xx_set.business_unit_id                
+        ,pvs.VAT_CODE 
+        ,pvs.accts_pay_code_combination_id   
+        ,pvs.prepay_code_combination_id
+        ,pvs.vendor_site_id
+        ,pvs.vendor_id              
+        from
+        xxdl_poz_supplier_sites xpss
+        ,xxdl_cloud_reference_sets xx_set  
+        ,xxdl_hz_cust_acct_sites xx_cust_site      
+        ,xxdl_cloud_reference_sets xx_set_cust       
+        ,apps.hz_party_sites@ebsprod hps      
+        ,apps.po_vendor_sites_all@ebsprod pvs
+        ,apps.po_vendors@ebsprod pv
+        ,(select * from apps.ap_terms_tl@ebsprod
+        where language = 'US') apt
+        ,apps.po_vendor_contacts@ebsprod pvc              
+        where xpss.party_site_id = xx_cust_site.cloud_party_site_id
+        -- and xpss.bu_name = 'Dalekovod' --for NUF
+        and xpss.bu_name = 'Dalekovod NUF' --for SVenska
+        -- and decode(xpss.bu_name,'Dalekovod','DV Svenska Filial',xpss.bu_name) = xx_set.business_unit_name  --for NUF, Svenska
+        and decode(xpss.bu_name,'Dalekovod NUF','DV Svenska Filial',xpss.bu_name) = xx_set.business_unit_name --for Svenska
+        and xx_cust_site.cloud_party_site_id = c_party_site_id   
+        and xx_cust_site.party_site_id = hps.party_site_id(+)
+        and xx_cust_site.cloud_set_id = xx_set_cust.reference_data_set_id
+        -- and xx_set_cust.business_unit_name = 'Dalekovod' --for NUF, Svenska
+        and xx_set_cust.business_unit_name = 'Dalekovod NUF' --for Svenska
         --and xpss.vendor_id = 300000006302793
         and to_char(hps.party_site_number) = pvs.attribute3(+)
         and xx_cust_site.org_id = pvs.org_id
@@ -8169,7 +8350,7 @@
 
                 l_soap_env := l_empty_clob;
                 dbms_lob.createtemporary(l_soap_env, TRUE);
-
+                /*    
                 l_text := '{
                     "SupplierSite": "'||apex_escape.json(c_a.vendor_site_code)||'",
                     "ProcurementBU": "'||c_a.business_unit_name||'",
@@ -8219,6 +8400,7 @@
                     "ExcludeTaxFromDiscountCode": "D",
                     "CreateInterestInvoicesCode": "D"            
                 }';
+                */  --for NUF Svenska
 
                 l_soap_env := l_soap_env||to_clob(l_text);       
 
