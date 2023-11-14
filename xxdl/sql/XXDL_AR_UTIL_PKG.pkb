@@ -9211,6 +9211,163 @@
     return l_msg_body;
     end;
 
+
+    /*===========================================================================+
+    -- Name    : deactivate_cust_acct
+    -- Desc    : Update customer acct profile
+    -- Usage   : 
+    -- Parameters - cust_account_id - customer account id in cloud
+    ============================================================================+*/
+    procedure deactivate_cust_acct(p_account_number in varchar2) is 
+    
+   
+        l_fault_code          varchar2(4000);
+        l_fault_string        varchar2(4000); 
+        l_soap_env clob;
+        l_empty_clob clob;
+        l_text varchar2(32000);
+        l_find_text varchar2(32000);
+        x_return_status varchar2(500);
+        x_return_message varchar2(32000);
+        l_error_message varchar2(32000);
+        x_ws_call_id number;
+        xt_ws_call_id number;
+        xf_ws_call_id number;
+        l_cnt number := 0;
+        l_cloud_party_id number:=0;     
+        l_app_url varchar2(300);
+        
+        cursor c_cust_accounts is 
+        select
+        xhca.*
+        from
+        xxdl_hz_cust_accounts xhca
+        ,xxdl_hz_parties xhp
+        where nvl(xhca.process_flag,'X') = 'S'
+        and nvl(xhca.deactivated,'X') != 'S'
+        and xhca.party_id = xhp.party_id
+        and xhca.account_number = p_account_number
+        ;
+
+
+    begin
+
+
+    l_app_url := get_config('ServiceRootURL');
+    --l_app_url := get_config('EwhaTestServiceRootURL');
+
+
+    for c_ca in c_cust_accounts loop
+    
+    log(' Found cust account number:'||c_ca.account_number);
+
+    log(' Building soap call!');
+
+    l_find_text := '<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:typ="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/applicationModule/types/" xmlns:cus="http://xmlns.oracle.com/apps/cdm/foundation/parties/customerAccountService/" xmlns:cus1="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContactRole/" xmlns:par="http://xmlns.oracle.com/apps/cdm/foundation/parties/partyService/" xmlns:sour="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/sourceSystemRef/" xmlns:cus2="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountContact/" xmlns:cus3="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountRel/" xmlns:cus4="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSiteUse/" xmlns:cus5="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccountSite/" xmlns:cus6="http://xmlns.oracle.com/apps/cdm/foundation/parties/flex/custAccount/">
+    <soapenv:Header/>
+    <soapenv:Body>
+        <typ:updateCustomerAccount>
+            <typ:customerAccount>            
+                <cus:AccountNumber>'||c_ca.account_number||'</cus:AccountNumber>            
+                <cus:PartyId>'||c_ca.cloud_party_id||'</cus:PartyId>
+                <cus:CustomerAccountId>'||c_ca.CLOUD_CUST_ACCOUNT_ID||'</cus:CustomerAccountId>            
+                <cus:AccountTerminationDate>2023-11-14</cus:AccountTerminationDate>    
+                <cus:Status>I</cus:Status>
+            </typ:customerAccount>
+        </typ:updateCustomerAccount>
+    </soapenv:Body>
+    </soapenv:Envelope>'; 
+
+    l_soap_env := l_soap_env||to_clob(l_find_text);
+
+    log ('    Calling web service:');
+
+    XXFN_CLOUD_WS_PKG.WS_CALL(
+        p_ws_url => l_app_url||'crmService/CustomerAccountService?WSDL',
+        p_soap_env => l_soap_env,
+        p_soap_act => 'updateCustomerAccount',
+        p_content_type => 'text/xml;charset="UTF-8"',
+        x_return_status => x_return_status,
+        x_return_message => x_return_message,
+        x_ws_call_id => x_ws_call_id);
+        
+    log('     Web service status:'||x_return_status);
+    log('     Web service call:'||x_ws_call_id);
+
+    dbms_lob.freetemporary(l_soap_env);
+
+    if x_return_status = 'S' then
+
+        log('       Account updated!');
+
+        update xxdl_hz_cust_accounts xhca
+        set xhca.deactivated = x_return_status
+        ,xhca.ERROR_MSG = null
+        where xhca.CLOUD_CUST_ACCOUNT_ID = c_ca.CLOUD_CUST_ACCOUNT_ID;
+
+        
+            
+    else
+        log('       Account update error!');
+        BEGIN
+
+            SELECT
+                xt.faultcode,
+                xt.faultstring
+            INTO
+                l_fault_code,
+                l_fault_string
+            FROM
+                xxfn_ws_call_log x,
+                XMLTABLE ( XMLNAMESPACES ( 'http://schemas.xmlsoap.org/soap/envelope/' AS "env" ), './/env:Fault' PASSING x.response_xml COLUMNS
+                faultcode VARCHAR2(4000) PATH '.', faultstring VARCHAR2(4000) PATH '.' ) xt
+            WHERE
+                x.ws_call_id = x_ws_call_id;
+
+            EXCEPTION
+                WHEN no_data_found THEN
+                    BEGIN
+                        SELECT
+                            nvl(x.response_status_code, 'ERROR'),
+                            x.response_reason_phrase
+                        INTO
+                            l_fault_code,
+                            l_fault_string
+                        FROM
+                            xxfn_ws_call_log x
+                        WHERE
+                            x.ws_call_id = x_ws_call_id;
+            EXCEPTION
+                        WHEN OTHERS THEN
+                            l_error_message := 'Cannot find env:Fault in ws call results.';
+                    END;
+            END;             
+
+            if l_fault_code is not null or l_fault_string is not null then
+                l_error_message := substr( '   Greska => Code:'||l_fault_code||' Text:'||l_fault_string,1,1000);        
+            end if;
+            log('   '||l_error_message);
+
+            update xxdl_hz_cust_accounts xhca
+            set xhca.deactivated = x_return_status
+            ,xhca.ERROR_MSG = l_error_message
+            where xhca.CLOUD_CUST_ACCOUNT_ID = c_ca.CLOUD_CUST_ACCOUNT_ID;
+
+    end if;
+
+        l_find_text:='';
+    end loop;
+
+    exception
+        when others then
+            log('   Unexpected error! SQLCODE:'||SQLCODE||' SQLERRM:'||SQLERRM);
+            log('   Error_Stack...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_STACK()||' Error_Backtrace...' || Chr(10) || DBMS_UTILITY.FORMAT_ERROR_BACKTRACE());
+
+
+
+      
+    end;
+
     end XXDL_AR_UTIL_PKG;
     /
     exit;

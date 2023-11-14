@@ -190,6 +190,14 @@ procedure update_sup_routing(
 
 function parse_cs_response(p_ws_call_id in number) return varchar2;
 
+/*===========================================================================+
+-- Name    : deactivate_cust_acct
+-- Desc    : Update customer acct profile
+-- Usage   : 
+-- Parameters - cust_account_id - customer account id in cloud
+============================================================================+*/
+procedure deactivate_cust_acct(p_account_number in varchar2);
+
 
 
 
