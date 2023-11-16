@@ -9243,7 +9243,8 @@
         from
         xxdl_hz_cust_accounts xhca
         ,xxdl_hz_parties xhp
-        where nvl(xhca.process_flag,'X') = 'S'
+        where 1=1
+        and nvl(xhca.process_flag,'X') = 'S'
         and nvl(xhca.deactivated,'X') != 'S'
         and xhca.party_id = xhp.party_id
         and xhca.account_number = p_account_number
