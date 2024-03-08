@@ -863,6 +863,8 @@ create or replace package body xxdl_sla_mappings_pkg is
       xlog('l_ws_call_id: ' || l_ws_call_id);
     
       l_purge_req_id := get_essjob_req_id(l_ws_call_id);
+      
+      xlog('l_purge_req_id: ' || l_purge_req_id);
     
       xxdl_cloud_utils_pkg.wait_for_ess_job(l_purge_req_id, l_job_status, 20);
     
