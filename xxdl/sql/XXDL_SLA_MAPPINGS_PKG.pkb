@@ -10,6 +10,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   v1.2 12.01.2023 Marko Sladoljev: referesh_cc_from_wo_mapping - single csv file supported
   v1.3 11.02.2023 Marko Sladoljev: New refresh procedure
   v1.4 09.10.2023 Marko Sladoljev: purge_local_map_interface dodan  
+  v1.5 08.03.2024 Marko Sladoljev: query_dump_to_csv - escape double quotes in string
   ============================================================================+*/
 
   -- File names
@@ -133,9 +134,6 @@ create or replace package body xxdl_sla_mappings_pkg is
   
     xlog('SQL Query parsed.');
   
-    --  xlog('Defining SQL columns.');
-    --  dbms_sql.define_column(l_theCursor, 1, l_columnValue, 2000);
-  
     xlog('Executing SQL command.');
     l_status := dbms_sql.execute(l_thecursor);
   
@@ -145,7 +143,8 @@ create or replace package body xxdl_sla_mappings_pkg is
       l_separator := '';
       for i in 1 .. l_colcnt loop
         dbms_sql.column_value(l_thecursor, i, l_columnvalue);
-        utl_file.put(l_output, l_separator || '"' || l_columnvalue || '"');
+        -- put the value in CSV, with escaping double quotes, E.g. Club "Adriatic" would be ,"Club""Adriatic"""
+        utl_file.put(l_output, l_separator || '"' || replace(l_columnvalue, '"', '""') || '"');
         l_separator := p_separator;
       end loop;
       utl_file.new_line(l_output);
