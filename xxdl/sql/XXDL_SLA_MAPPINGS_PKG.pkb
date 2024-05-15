@@ -11,6 +11,7 @@ create or replace package body xxdl_sla_mappings_pkg is
   v1.3 11.02.2023 Marko Sladoljev: New refresh procedure
   v1.4 09.10.2023 Marko Sladoljev: purge_local_map_interface dodan  
   v1.5 08.03.2024 Marko Sladoljev: query_dump_to_csv - escape double quotes in string
+  v1.2 15.05.2024 Marko Sladoljev: refresh_maps_freq1 dodan  
   ============================================================================+*/
 
   -- File names
@@ -862,7 +863,7 @@ create or replace package body xxdl_sla_mappings_pkg is
       xlog('l_ws_call_id: ' || l_ws_call_id);
     
       l_purge_req_id := get_essjob_req_id(l_ws_call_id);
-      
+    
       xlog('l_purge_req_id: ' || l_purge_req_id);
     
       xxdl_cloud_utils_pkg.wait_for_ess_job(l_purge_req_id, l_job_status, 20);
@@ -975,6 +976,39 @@ create or replace package body xxdl_sla_mappings_pkg is
     referesh_work_orders_mappings;
   
     xlog('refresh_all_mapping_sets ended');
+  exception
+    when others then
+      elog('SQLERRM: ' || sqlerrm);
+      elog('BACKTRACE: ' || dbms_utility.format_error_backtrace);
+      raise;
+  end;
+
+  /*===========================================================================+
+  Procedure   : refresh_maps_freq1
+  Description : Refreshes all mapping sets having requirement to refresh more frequently
+  Usage       :
+  Arguments   : 
+  Remarks     :
+  ============================================================================+*/
+  procedure refresh_maps_freq1 is
+  
+  begin
+    xlog('refresh_maps_freq1 started');
+  
+    -- Receivabes mapping sets  
+    refresh_mapping_set('XXDL_AR_OM_CM_KROVNI_NALOG');
+    refresh_mapping_set('XXDL_AR_OM_CM_REC_CC');
+    refresh_mapping_set('XXDL_AR_OM_CM_REC_PROJ');
+    refresh_mapping_set('XXDL_AR_OM_KROVNI_NALOG');
+    refresh_mapping_set('XXDL_AR_OM_REC_CC');
+    refresh_mapping_set('XXDL_AR_OM_REC_PROJ');
+    refresh_mapping_set('XXDL_CC_FROM_AR_CM_PROJ');
+    refresh_mapping_set('XXDL_CC_FROM_AR_INVOICE_PROJ');
+    refresh_mapping_set('XXDL_CC_FROM_AR_INV_LINE_PJB');
+    refresh_mapping_set('XXDL_CC_FROM_AR_INV_PJB');
+    refresh_mapping_set('XXDL_PROJ_FROM_AR_INV_LINE_PJB');
+  
+    xlog('refresh_maps_freq1 ended');
   exception
     when others then
       elog('SQLERRM: ' || sqlerrm);

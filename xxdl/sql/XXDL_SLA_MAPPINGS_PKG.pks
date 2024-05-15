@@ -12,11 +12,13 @@ create or replace package xxdl_sla_mappings_pkg authid definer is
   procedure refresh_mapping_set(p_mapping_set_code varchar2);
 
   procedure refresh_all_mapping_sets;
-  
+
+  procedure refresh_maps_freq1;
+
   procedure referesh_work_orders_mappings;
-  
+
   procedure purge_mappings_interface;
-  
+
   procedure purge_local_map_interface;
 
 end xxdl_sla_mappings_pkg;
