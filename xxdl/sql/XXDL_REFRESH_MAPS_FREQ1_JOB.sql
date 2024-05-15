@@ -15,6 +15,6 @@ dbms_scheduler.create_job (
    job_type           =>  'STORED_PROCEDURE',
    job_action         =>  'XXDL_SLA_MAPPINGS_PKG.refresh_maps_freq1',
    start_date         =>  systimestamp,
-   repeat_interval    =>  'freq=hourly; byhour=8,10,12,14,16,18,20; byminute=0; bysecond=0;',
+   repeat_interval    =>  'freq=hourly; byhour=8,10,12,14,16,18; byminute=0; bysecond=0;',
    enabled            =>  TRUE);
 end;

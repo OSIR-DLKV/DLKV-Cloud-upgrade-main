@@ -995,6 +995,9 @@ create or replace package body xxdl_sla_mappings_pkg is
   begin
     xlog('refresh_maps_freq1 started');
   
+    -- Delete errors from previous refresh 
+    purge_mappings_interface;
+  
     -- Receivabes mapping sets  
     refresh_mapping_set('XXDL_AR_OM_CM_KROVNI_NALOG');
     refresh_mapping_set('XXDL_AR_OM_CM_REC_CC');
