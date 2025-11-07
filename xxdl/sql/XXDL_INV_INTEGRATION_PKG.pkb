@@ -1397,7 +1397,7 @@ create or replace package body xxdl_inv_integration_pkg is
         l_trans_status := 'PROCESSED';
       
         -- Delete lobs after successful call
-        xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
+       xxfn_cloud_ws_pkg.delete_lobs_from_log(l_ws_call_id);
       
       exception
         when e_processing_exception then
